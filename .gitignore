@@ -1,0 +1,16 @@
+node_modules
+.next
+out
+dist
+.env
+.env.local
+.env.*.local
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+coverage
+.prisma
