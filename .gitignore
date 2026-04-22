@@ -14,3 +14,4 @@ yarn-error.log*
 Thumbs.db
 coverage
 .prisma
+.git.worktree.bak
