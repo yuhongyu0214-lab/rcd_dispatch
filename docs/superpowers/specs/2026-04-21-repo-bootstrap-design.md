@@ -144,7 +144,7 @@ The repository should evolve into a minimal but expandable application with four
 ### 6.4 Data layer
 
 - `prisma/schema.prisma`
-- `prisma/seed.ts`
+- `prisma/seed.js`
 
 This keeps framework concerns, infrastructure concerns, and persistence concerns separated from the start.
 
@@ -267,6 +267,31 @@ Constraints:
 - do not introduce an oversized component architecture
 - only add abstractions that are already justified by current code
 
+Approved implementation direction for Stage 4 on 2026-04-25:
+
+- keep Stage 4 as a lightweight boundary-setting pass rather than a broad refactor
+- add only the shared files that already solve visible duplication or drift in the current repository
+- use the new shared pieces immediately in existing pages and route handlers so the structure is proven, not theoretical
+- keep README structure and stage documentation aligned with the landed repository state
+
+Stage 4 file contracts:
+
+- `src/lib/logger.ts`: single logging entry point backed by pino, configured via `LOG_LEVEL` environment variable
+- `src/lib/api-response.ts`: helpers for the stable `{ success, data, error, traceId }` response envelope
+- `src/lib/utils.ts`: small non-domain helpers only; start with class name composition and avoid generic utility dumping
+- `src/types/index.ts`: shared transport and infrastructure-facing types only, not business-domain modeling
+- `src/components/layout/page-shell.tsx`: reusable page-level shell for repeated width, spacing, and viewport layout
+- `src/components/layout/section-card.tsx`: reusable content card for repeated bordered sections
+- `src/components/ui/status-badge.tsx`: one minimal presentational primitive used by the bootstrap pages
+
+Stage 4 integration rules:
+
+- `src/app/page.tsx` and `src/app/admin/page.tsx` should consume the shared layout components
+- `src/app/api/health/route.ts` should consume the API response helper and shared error logging entry point
+- the sign-in page may stay specialized, but should remain compatible with the shared layout direction
+- do not add a barrel-export layer during bootstrap
+- do not add `shadcn/ui` or other new UI frameworks in this stage
+
 ### 7.5 Stage 5: Stable conventions
 
 Objective:
@@ -290,6 +315,35 @@ Constraints:
 
 - keep rules minimal and stable
 - avoid style rules that create friction without immediate value
+
+Approved implementation direction for Stage 5 on 2026-04-25:
+
+- treat Stage 5 as a documentation and rules consolidation pass only
+- align the written instructions with the repository exactly as landed after Stages 1 through 4
+- keep the current ESLint and Prettier setup, but do not expand it with more tooling in this phase
+- document the real bootstrap flow for a new developer from install through login verification
+
+Stage 5 scope rules:
+
+- allowed: clarifying `README.md`, refining `.env.example`, and tightening the wording in this main spec
+- allowed: documenting the exact commands already present in `package.json`
+- allowed: clarifying what is intentionally deferred to later branches
+- not allowed: adding new lint scripts, format scripts, commit hooks, staged-file automation, or new dependencies
+- not allowed: using Stage 5 as a reason to add more abstractions or refactor active application code
+
+Stage 5 documentation contract:
+
+- `README.md` must document the bootstrap steps in the same order as the staged implementation
+- `README.md` must describe the actual default admin credentials, including both email and phone login
+- `README.md` must describe the current repository structure without referencing files or tools that are not present
+- `.env.example` must list the bootstrap baseline variables and remain safe to copy into `.env.local`
+- `.eslintrc.json` and `.prettierrc` should remain intentionally small; their role should be explained rather than expanded
+
+Stage 5 acceptance refinement:
+
+- `pnpm lint` passes without requiring additional scripts
+- a developer can follow `README.md` to install dependencies, configure `.env.local`, run migrations, seed the database, start the app, and verify the login flow
+- Stage 5 documentation does not promise tooling that is not yet in the repository
 
 ## 8. Data Design for Bootstrap
 
@@ -383,6 +437,31 @@ The checklist explicitly expects:
 - `AMAP_SERVER_KEY`
 
 To reduce integration risk, the auth implementation should keep `NEXTAUTH_SECRET` as a documented requirement for this bootstrap. If runtime compatibility requires aliasing or dual support later, that can be added without changing the documented baseline.
+
+### 10.4 Stage 3 refinement approved on 2026-04-25
+
+The Stage 3 login flow has the following confirmed implementation details:
+
+- one identifier field must accept either email or phone
+- the seeded admin account must support both login modes
+- the minimum bootstrap `User` model must include `phone` as a required unique string field
+- `/admin` is the only route protected by middleware in this stage
+- plaintext password comparison remains acceptable for bootstrap validation
+- logout UX, password reset, and broader account management remain out of scope
+
+The bootstrap admin seed contract for Stage 3 is:
+
+- email: `admin@dispatch.dev`
+- phone: `13800000000`
+- password: `admin123`
+
+Stage 3 validation must confirm all of the following:
+
+- `/auth/signin` renders successfully
+- sign-in works with `admin@dispatch.dev` and `admin123`
+- sign-in also works with `13800000000` and `admin123`
+- successful sign-in reaches `/admin`
+- unauthenticated access to `/admin` redirects to `/auth/signin`
 
 ## 11. Dependency Flow
 
@@ -480,10 +559,19 @@ Each stage should be validated before moving to the next one.
 - verify redirect to `/admin`
 - verify middleware protection when signed out
 
-### 14.4 Stage 5 validation
+### 14.4 Stage 4 validation
+
+- verify the new shared files compile and are imported by active application code
+- confirm homepage and admin page render correctly after extracting shared layout primitives
+- confirm `/api/health` still returns the stable response contract through the shared helper
+- confirm README directory structure matches the repository after the Stage 4 scaffold lands
+
+### 14.5 Stage 5 validation
 
 - run lint
+- review `.env.example` against the variables actually documented for bootstrap
 - confirm README matches real commands and files
+- confirm README describes the dual-login bootstrap account and current scope limits
 
 ## 15. Final Implementation Rules
 

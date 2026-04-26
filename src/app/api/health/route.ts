@@ -1,30 +1,27 @@
-import { NextResponse } from "next/server";
-
+import { fail, ok } from "@/lib/api-response";
+import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
+  const traceId = crypto.randomUUID();
+
   try {
     await prisma.$queryRaw`SELECT 1`;
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        status: "ok",
-        db: "connected"
-      },
-      error: null
-    });
+    return ok({
+      status: "ok",
+      db: "connected"
+    }, { traceId });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Database health check failed";
+      error instanceof Error ? error.message : "Database connection failed";
 
-    return NextResponse.json(
-      {
-        success: false,
-        data: null,
-        error: message
-      },
-      { status: 500 }
-    );
+    logger.error("Health check failed", {
+      traceId,
+      outcome: "FAILED",
+      message
+    });
+
+    return fail(message, { status: 500, traceId });
   }
 }

@@ -1,3 +1,7 @@
+import { PageShell } from "@/components/layout/page-shell";
+import { SectionCard } from "@/components/layout/section-card";
+import { StatusBadge } from "@/components/ui/status-badge";
+
 const stageItems = [
   "第 1 阶段：项目可启动",
   "第 2 阶段：数据库连通",
@@ -8,32 +12,25 @@ const stageItems = [
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-background px-6 py-16 text-foreground">
-      <div className="mx-auto flex max-w-4xl flex-col gap-10">
-        <section className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+    <PageShell>
+      <SectionCard>
           <p className="text-sm font-medium uppercase tracking-[0.3em] text-primary">
             feature/repo-bootstrap
           </p>
           <h1 className="mt-4 text-4xl font-semibold tracking-tight">
-            人车单调度系统已完成第一阶段启动骨架
+            人车单调度系统 Bootstrap 骨架已建立
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-muted">
-            当前目标是先把工程底座搭稳，确保开发服务器、首页入口和基础配置可以稳定工作，再继续进入连库与登录阶段。
+            当前目标是先把工程底座搭稳，确保开发服务器、首页入口、统一响应和共享骨架可以稳定工作，再继续进入后续业务分支。
           </p>
           <div className="mt-8 flex flex-wrap gap-3 text-sm">
-            <span className="rounded-full bg-blue-50 px-4 py-2 text-primary">
-              App Router
-            </span>
-            <span className="rounded-full bg-slate-100 px-4 py-2 text-slate-700">
-              TypeScript
-            </span>
-            <span className="rounded-full bg-slate-100 px-4 py-2 text-slate-700">
-              Tailwind CSS
-            </span>
+            <StatusBadge tone="primary">App Router</StatusBadge>
+            <StatusBadge>TypeScript</StatusBadge>
+            <StatusBadge>Tailwind CSS</StatusBadge>
           </div>
-        </section>
+      </SectionCard>
 
-        <section className="grid gap-4 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm md:grid-cols-2">
+      <SectionCard className="grid gap-4 md:grid-cols-2">
           <div>
             <h2 className="text-xl font-semibold">当前验收目标</h2>
             <ul className="mt-4 space-y-3 text-sm leading-6 text-muted">
@@ -50,8 +47,7 @@ export default function HomePage() {
               ))}
             </ul>
           </div>
-        </section>
-      </div>
-    </main>
+      </SectionCard>
+    </PageShell>
   );
 }
