@@ -1,4 +1,3 @@
-# docs/import-template.md
 # 订单导入模板说明
 
 ---
@@ -132,6 +131,6 @@
 
 ## 8. 相关文档
 
-- 订单状态机：`docs/order-lifecycle.md`
-- 调度规则：`docs/dispatch-rules-v1.md`
-- 领域术语：`docs/domain-glossary.md`
+- 订单状态机：`./order-lifecycle.md`
+- 调度规则：`./dispatch-rules-v1.md`（待创建）
+- 领域术语：`./domain-glossary.md`
