@@ -1,4 +1,3 @@
-# docs/order-lifecycle.md
 # 订单生命周期
 
 ---
@@ -221,6 +220,6 @@ enum OrderStatus {
 
 ## 7. 相关文档
 
-- 调度规则：`docs/dispatch-rules-v1.md`
-- 导入模板：`docs/import-template.md`
-- 领域术语：`docs/domain-glossary.md`
+- 调度规则：`./dispatch-rules-v1.md`（待创建）
+- 导入模板：`./import-template.md`
+- 领域术语：`./domain-glossary.md`

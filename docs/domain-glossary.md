@@ -1,4 +1,3 @@
-# docs/domain-glossary.md
 # 领域术语表
 
 ---
@@ -58,7 +57,7 @@ PRD（第 9.2 节）与 dispatch-rules-v1.md（第二节）对司机状态使用
 
 > 判断是否为上门类：`type === 'DOOR_DELIVERY' || type === 'DOOR_PICKUP'`
 
-**参考**：`docs/order-lifecycle.md`、`docs/import-template.md`
+**参考**：`./order-lifecycle.md`、`./import-template.md`
 
 ---
 
@@ -244,6 +243,6 @@ PRD（第 9.2 节）与 dispatch-rules-v1.md（第二节）对司机状态使用
 
 ## 相关文档
 
-- 订单生命周期：`docs/order-lifecycle.md`
-- 调度规则：`docs/dispatch-rules-v1.md`
-- 导入模板：`docs/import-template.md`
+- 订单生命周期：`./order-lifecycle.md`
+- 调度规则：`./dispatch-rules-v1.md`（待创建）
+- 导入模板：`./import-template.md`
