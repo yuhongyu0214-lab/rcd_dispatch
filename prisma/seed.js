@@ -101,6 +101,8 @@ async function main() {
     update: {
       storeId: shanghaiStore.id,
       vehicleType: "SUV",
+      gpsLat: 31.1977,
+      gpsLng: 121.3275,
       status: "AVAILABLE",
       isActive: true
     },
@@ -108,6 +110,8 @@ async function main() {
       storeId: shanghaiStore.id,
       licensePlate: "沪A12345",
       vehicleType: "SUV",
+      gpsLat: 31.1977,
+      gpsLng: 121.3275,
       status: "AVAILABLE"
     }
   });
@@ -117,6 +121,8 @@ async function main() {
     update: {
       storeId: hangzhouStore.id,
       vehicleType: "SEDAN",
+      gpsLat: 30.27415,
+      gpsLng: 120.15515,
       status: "AVAILABLE",
       isActive: true
     },
@@ -124,7 +130,94 @@ async function main() {
       storeId: hangzhouStore.id,
       licensePlate: "浙A67890",
       vehicleType: "SEDAN",
+      gpsLat: 30.27415,
+      gpsLng: 120.15515,
       status: "AVAILABLE"
+    }
+  });
+
+  const shanghaiVehicle = await prisma.vehicle.findUnique({
+    where: { licensePlate: "沪A12345" },
+    select: { id: true, licensePlate: true }
+  });
+
+  const hangzhouVehicle = await prisma.vehicle.findUnique({
+    where: { licensePlate: "浙A67890" },
+    select: { id: true, licensePlate: true }
+  });
+
+  await prisma.order.upsert({
+    where: { orderNo: "ORD-20260508-001" },
+    update: {
+      type: "STORE_PICKUP",
+      status: "PENDING",
+      storeId: shanghaiStore.id,
+      vehicleId: shanghaiVehicle?.id ?? null,
+      licensePlateSnapshot: shanghaiVehicle?.licensePlate ?? null,
+      pickupAddress: "上海虹桥店取车区",
+      returnAddress: "上海浦东新区张江路 100 号",
+      scheduledAt: new Date("2026-05-08T09:00:00+08:00")
+    },
+    create: {
+      orderNo: "ORD-20260508-001",
+      type: "STORE_PICKUP",
+      status: "PENDING",
+      storeId: shanghaiStore.id,
+      vehicleId: shanghaiVehicle?.id ?? null,
+      licensePlateSnapshot: shanghaiVehicle?.licensePlate ?? null,
+      pickupAddress: "上海虹桥店取车区",
+      returnAddress: "上海浦东新区张江路 100 号",
+      scheduledAt: new Date("2026-05-08T09:00:00+08:00")
+    }
+  });
+
+  await prisma.order.upsert({
+    where: { orderNo: "ORD-20260508-002" },
+    update: {
+      type: "DOOR_DELIVERY",
+      status: "PENDING",
+      storeId: shanghaiStore.id,
+      vehicleId: shanghaiVehicle?.id ?? null,
+      licensePlateSnapshot: shanghaiVehicle?.licensePlate ?? null,
+      pickupAddress: "上海虹桥店停车场",
+      returnAddress: "上海市闵行区申长路 888 号",
+      scheduledAt: new Date("2026-05-08T13:30:00+08:00")
+    },
+    create: {
+      orderNo: "ORD-20260508-002",
+      type: "DOOR_DELIVERY",
+      status: "PENDING",
+      storeId: shanghaiStore.id,
+      vehicleId: shanghaiVehicle?.id ?? null,
+      licensePlateSnapshot: shanghaiVehicle?.licensePlate ?? null,
+      pickupAddress: "上海虹桥店停车场",
+      returnAddress: "上海市闵行区申长路 888 号",
+      scheduledAt: new Date("2026-05-08T13:30:00+08:00")
+    }
+  });
+
+  await prisma.order.upsert({
+    where: { orderNo: "ORD-20260508-003" },
+    update: {
+      type: "STORE_RETURN",
+      status: "PENDING",
+      storeId: hangzhouStore.id,
+      vehicleId: hangzhouVehicle?.id ?? null,
+      licensePlateSnapshot: hangzhouVehicle?.licensePlate ?? null,
+      pickupAddress: "杭州市西湖区文三路 90 号",
+      returnAddress: "杭州西湖店还车区",
+      scheduledAt: new Date("2026-05-09T10:00:00+08:00")
+    },
+    create: {
+      orderNo: "ORD-20260508-003",
+      type: "STORE_RETURN",
+      status: "PENDING",
+      storeId: hangzhouStore.id,
+      vehicleId: hangzhouVehicle?.id ?? null,
+      licensePlateSnapshot: hangzhouVehicle?.licensePlate ?? null,
+      pickupAddress: "杭州市西湖区文三路 90 号",
+      returnAddress: "杭州西湖店还车区",
+      scheduledAt: new Date("2026-05-09T10:00:00+08:00")
     }
   });
 }

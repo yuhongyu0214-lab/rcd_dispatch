@@ -1,0 +1,7 @@
+-- AlterEnum
+ALTER TYPE "OrderStatus" ADD VALUE 'UNIMPORTED';
+
+-- AlterTable
+ALTER TABLE "Vehicle"
+ADD COLUMN "gpsLat" DOUBLE PRECISION,
+ADD COLUMN "gpsLng" DOUBLE PRECISION;

@@ -32,6 +32,7 @@ enum OrderType {
 }
 
 enum OrderStatus {
+  UNIMPORTED
   PENDING
   RECOMMENDING
   ASSIGNED
@@ -120,6 +121,8 @@ model Vehicle {
   storeId      String
   licensePlate String        @unique
   vehicleType  String
+  gpsLat       Float?
+  gpsLng       Float?
   status       VehicleStatus @default(AVAILABLE)
   isActive     Boolean       @default(true)
   createdAt    DateTime      @default(now())
