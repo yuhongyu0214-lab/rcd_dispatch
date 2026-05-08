@@ -2,6 +2,8 @@
 
 汽车租赁可视化调度平台 MVP
 
+当前工作目录聚焦 `feature/data-model` 阶段，优先完成核心业务数据模型、迁移、回滚脚本与最小种子数据。
+
 ---
 
 ## 快速启动
@@ -22,9 +24,16 @@ cp .env.example .env.local
 
 ```
 DATABASE_URL="postgresql://..."
+SHADOW_DATABASE_URL="postgresql://..."
 NEXTAUTH_SECRET="..."       # openssl rand -base64 32
 AMAP_SERVER_KEY="..."
 ```
+
+注意：
+
+- `.env.local` 必须真实存在于项目根目录，否则 `pnpm db:migrate`、`pnpm db:seed` 和 `/api/health` 都会因为缺少 `DATABASE_URL` 失败
+- `DATABASE_URL` 必须替换成可连接的 PostgreSQL 连接串，模板占位值不能直接使用
+- 如果当前数据库用户没有 `CREATEDB` 权限，需额外提供 `SHADOW_DATABASE_URL`，指向一个可用的 shadow 库，供 `prisma migrate dev` 使用
 
 ### 3. 初始化数据库
 
@@ -32,9 +41,16 @@ AMAP_SERVER_KEY="..."
 # 执行迁移
 pnpm db:migrate
 
-# 写入种子数据（调度员账号）
+# 写入种子数据（管理员 + 最小业务主数据）
 pnpm db:seed
 ```
+
+当前种子内容包括：
+
+- 默认管理员账号
+- 2 个门店
+- 3 个司机
+- 2 台车辆
 
 ### 4. 启动开发服务器
 
@@ -46,47 +62,56 @@ pnpm dev
 
 默认账号：`admin@dispatch.dev` / `admin123`
 
+说明：
+
+- 当前 `seed.js` 已将默认密码改为 `bcrypt` 哈希存储
+- 账号的输入方式仍保持 `admin@dispatch.dev` / `admin123`
+
 ---
 
-## 验收检查清单（feature/repo-bootstrap）
+## 验收检查清单（feature/data-model）
 
+- [ ] `.env.local` 已创建，且 `DATABASE_URL` 为真实可用的 PostgreSQL 连接串
+- [ ] `pnpm prisma validate` 通过
+- [ ] `pnpm build` 通过
 - [ ] `pnpm dev` 无报错，localhost:3000 可访问
-- [ ] `/auth/signin` 登录页正常显示
-- [ ] 使用种子账号可成功登录，跳转到 `/admin`
-- [ ] `npx prisma studio` 可连接数据库，User 表有种子数据
+- [ ] `pnpm db:migrate` 成功执行
+- [ ] `pnpm db:seed` 成功执行
+- [ ] `pnpm db:studio` 可连接数据库，能看到 `User`、`Store`、`Driver`、`Vehicle`、`Order`、`Assignment`、`OperationLog`
 - [ ] `GET /api/health` 返回 `{ success: true, data: { status: "ok", db: "connected" } }`
+- [ ] `prisma/migrations/20260502120000_data_model_core/rollback.sql` 已落盘
 - [ ] `.env.example` 包含 `DATABASE_URL`、`NEXTAUTH_SECRET`、`AMAP_SERVER_KEY`
+- `.env.example` 包含 `DATABASE_URL`、`SHADOW_DATABASE_URL`、`NEXTAUTH_SECRET`、`AMAP_SERVER_KEY`
 
 ---
+
+## 当前阶段说明
+
+- 当前仓库已经完成核心 Prisma 数据模型落地
+- 当前仓库仍未补登录页面、认证路由与后台页面，这些旧 README 描述不再适用于此工作目录
+- 首页和开发服务器可正常启动
+- `/api/health` 是否成功取决于 `DATABASE_URL` 是否真实可用
 
 ## 目录结构
 
 ```
 dispatch-system/
 ├── prisma/
-│   ├── schema.prisma       # 数据模型（占位，data-model 阶段完整填充）
-│   └── seed.ts             # 种子数据
+│   ├── schema.prisma       # 核心业务数据模型
+│   ├── seed.js             # 管理员与最小业务主数据种子
+│   └── migrations/         # 含 data_model_core 迁移与 rollback.sql
 ├── src/
 │   ├── app/
 │   │   ├── api/
-│   │   │   ├── auth/[...nextauth]/  # Auth.js 路由
 │   │   │   └── health/              # 健康检查
-│   │   ├── auth/signin/             # 登录页
-│   │   ├── admin/                   # 调度员后台（后续 feature 填充）
 │   │   ├── layout.tsx
 │   │   └── globals.css
 │   ├── lib/
-│   │   ├── auth.ts                  # Auth.js 配置
 │   │   ├── prisma.ts                # Prisma 单例
-│   │   ├── logger.ts                # Pino 日志封装
-│   │   ├── api-response.ts          # 统一响应格式
-│   │   └── utils.ts                 # 工具函数
 │   ├── types/
-│   │   └── index.ts                 # 全局类型（枚举对齐 domain-glossary.md）
-│   ├── components/
-│   │   ├── ui/                      # shadcn/ui 组件（按需添加）
-│   │   └── layout/                  # 布局组件
-│   └── middleware.ts                # 路由保护
+│   │   ├── driver.ts                # 司机 / 车辆 / 门店类型
+│   │   ├── order.ts                 # 订单 / 派单 / 操作日志类型
+│   │   └── index.ts                 # 聚合导出
 ├── docs/                            # 业务文档（不在此分支修改）
 ├── .env.example
 ├── .eslintrc.json
@@ -100,11 +125,11 @@ dispatch-system/
 
 ## 分支规范
 
-当前分支：`feature/repo-bootstrap`
+当前工作目录：`feature-data-model`
 
 合并目标：`develop`（退出条件满足后合并，develop 稳定后合 main）
 
-下一个分支：`feature/data-model`
+当前目标：完成数据模型阶段落地与验证
 
 参考：`docs/人车单项目_V1_Worktree_执行蓝图_final.md`
 
@@ -112,7 +137,8 @@ dispatch-system/
 
 ## 注意事项
 
-- 当前密码为明文对比，`feature/data-model` 阶段接入 bcrypt
-- `prisma/schema.prisma` 业务表为占位结构，`feature/data-model` 完整填充
+- 当前 `seed.js` 已切到 `bcrypt`
+- `prisma/schema.prisma` 已完成核心业务表建模
+- 若要跑通数据库链路，必须先创建 `.env.local`
 - `NEXT_PUBLIC_AMAP_JS_KEY` 在 `feature/map-board` 阶段启用
 - 生产部署到 Railway 时，日志设置 `LOG_PRETTY=false`，JSON 输出到 stdout
