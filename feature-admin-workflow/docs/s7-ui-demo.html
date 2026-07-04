@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>S7 调度前端 — 操作日志时间线 & Toast 演示</title>
+<style>
+  /* ===== demo_v12 设计变量 ===== */
+  :root {
+    --bg:        oklch(0.220 0.012 250);
+    --panel:     oklch(0.250 0.012 250);
+    --surface:   oklch(0.280 0.012 250);
+    --line:      oklch(0.320 0.012 250);
+    --ink:       oklch(0.940 0.010 250);
+    --text:      oklch(0.780 0.010 250);
+    --text-secondary: oklch(0.620 0.010 250);
+    --muted:     oklch(0.480 0.010 250);
+    --accent:    oklch(0.635 0.115 35);
+    --success:   oklch(0.620 0.140 145);
+    --warning:   oklch(0.700 0.130 85);
+    --danger:    oklch(0.580 0.160 25);
+    --radius-sm: 4px;
+    --radius-md: 6px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+  }
+
+  /* ===== 整体容器：模拟右侧工作区 ===== */
+  .workspace {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 960px;
+    width: 100%;
+  }
+
+  .workspace h2 {
+    color: var(--ink);
+    font-size: 18px;
+    margin-bottom: 4px;
+  }
+  .workspace > header p {
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+
+  /* ===== 两张卡片并排 ===== */
+  .grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  /* ===== 详情卡片 ===== */
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    padding: 14px;
+  }
+
+  .cardHead {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  .cardHead h3 { color: var(--ink); font-size: 14px; }
+  .cardHead p  { color: var(--text-secondary); font-size: 12px; margin-top: 2px; }
+
+  .statusBadge {
+    display: inline-block;
+    border-radius: 3px;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    background: color-mix(in srgb, var(--warning) 18%, var(--surface));
+    color: var(--warning);
+    white-space: nowrap;
+  }
+
+  /* ===== 字段网格 ===== */
+  .fieldGrid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .fieldGrid div {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--surface) 72%, var(--bg));
+    padding: 8px 10px;
+    min-width: 0;
+  }
+  .fieldGrid span {
+    display: block;
+    color: var(--muted);
+    font-size: 11px;
+    margin-bottom: 2px;
+  }
+  .fieldGrid strong {
+    display: block;
+    color: var(--ink);
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ===== 操作按钮区 ===== */
+  .actionGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+    max-height: 160px;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+  .actionGrid select,
+  .actionGrid input {
+    grid-column: 1 / -1;
+    height: 34px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    padding: 0 10px;
+  }
+  .actionGrid button {
+    height: 34px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+    transition: 0.15s;
+  }
+  .actionGrid button:hover:not(:disabled) { border-color: var(--accent); color: var(--ink); }
+  .actionGrid button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .actionGrid .primary  { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .actionGrid .danger   { color: var(--danger); }
+  .actionGrid .danger:hover:not(:disabled) { border-color: var(--danger); }
+
+  /* ===== 🆕 操作日志时间线 ===== */
+  .logTimeline {
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .logTimeline .sectionTitle {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .logTimeline .sectionTitle h4 {
+    color: var(--ink);
+    font-size: 13px;
+  }
+  .logTimeline .sectionTitle p {
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .logTimeline article {
+    display: grid;
+    grid-template-columns: 55px 52px 85px minmax(0, 1fr) 85px;
+    gap: 6px;
+    align-items: center;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--surface) 74%, var(--bg));
+    padding: 7px 8px;
+    font-size: 11px;
+    margin-bottom: 6px;
+  }
+  .logTimeline article strong {
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .logTimeline article > span {
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .logTimeline time {
+    color: var(--muted);
+    font-size: 10px;
+    white-space: nowrap;
+  }
+  .logTimeline code {
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .logTimeline code:hover { text-decoration: underline; }
+
+  /* 操作标签颜色 */
+  .logBadge {
+    display: inline-block;
+    border-radius: 2px;
+    padding: 1px 6px;
+    font-size: 10px;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .logBadge.assign   { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); }
+  .logBadge.reassign { background: color-mix(in srgb, var(--warning) 20%, transparent); color: var(--warning); }
+  .logBadge.withdraw { background: color-mix(in srgb, var(--danger) 20%, transparent); color: var(--danger); }
+  .logBadge.accept   { background: color-mix(in srgb, var(--success) 20%, transparent); color: var(--success); }
+
+  .ghostBtn {
+    display: block;
+    width: 100%;
+    height: 30px;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  .ghostBtn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .emptyState {
+    border: 1px dashed var(--line);
+    border-radius: var(--radius-sm);
+    color: var(--muted);
+    font-size: 12px;
+    padding: 12px;
+    text-align: center;
+  }
+
+  /* ===== 🆕 Toast 浮动通知 ===== */
+  .toast {
+    position: fixed;
+    bottom: 28px;
+    left: 28px;
+    z-index: 100;
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    padding: 12px 18px;
+    animation: toastIn 0.35s ease;
+  }
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .toast .icon { font-size: 18px; }
+  .toast .msg  { color: var(--text); font-size: 13px; }
+  .toast code  { color: var(--muted); font-size: 11px; cursor: pointer; }
+  .toast .dismiss {
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 2px;
+  }
+  .toast .dismiss:hover { color: var(--ink); }
+
+  /* ===== 模拟日志表头 ===== */
+  .logHeader {
+    display: grid;
+    grid-template-columns: 55px 52px 85px minmax(0, 1fr) 85px;
+    gap: 6px;
+    padding: 0 8px 6px;
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  /* ===== 分隔线 ===== */
+  .divider {
+    border: none;
+    border-top: 1px solid var(--line);
+    margin: 24px 0;
+  }
+
+  .section-label {
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="workspace">
+
+  <!-- ============================================================ -->
+  <!-- 标题 -->
+  <!-- ============================================================ -->
+  <header>
+    <h2>订单详情与调度操作</h2>
+    <p>订单详情卡片 · 操作按钮 · <span style="color: var(--accent);">🆕 操作日志时间线</span></p>
+  </header>
+
+  <!-- ============================================================ -->
+  <!-- 两张卡片：左=订单详情+日志时间线 | 右=推荐派单 -->
+  <!-- ============================================================ -->
+  <div class="grid">
+
+    <!-- ===== 左卡片：订单详情 + 操作 + 🆕 日志时间线 ===== -->
+    <div class="card">
+
+      <!-- 头部 -->
+      <div class="cardHead">
+        <div>
+          <h3>RC202607047392627961357421411 · 赣AE10F5</h3>
+          <p>订单详情与调度操作。</p>
+        </div>
+        <span class="statusBadge">待取车</span>
+      </div>
+
+      <!-- 字段网格 -->
+      <div class="fieldGrid">
+        <div><span>订单状态</span><strong>待取车</strong></div>
+        <div><span>当前司机</span><strong>胡凡</strong></div>
+        <div><span>锁单</span><strong>否</strong></div>
+        <div><span>订单进展</span><strong>等待派单确认</strong></div>
+      </div>
+
+      <!-- 操作按钮 -->
+      <div class="actionGrid">
+        <select>
+          <option>选择司机</option>
+          <option>胡凡 · S1 · 南昌站店</option>
+          <option>刘成 · S2 · 青山湖店</option>
+        </select>
+        <input placeholder="改派或撤回原因">
+        <button class="primary">推荐派单</button>
+        <button>手动派单</button>
+        <button>标记已接单</button>
+        <button class="danger">改派</button>
+        <button class="danger">撤回</button>
+      </div>
+
+      <!-- 🆕 操作日志时间线 -->
+      <div class="logTimeline">
+        <div class="sectionTitle">
+          <h4>📋 操作日志</h4>
+          <p>最近 6 条，共 12 条</p>
+        </div>
+
+        <div class="logHeader">
+          <span>操作人</span><span>动作</span><span>时间</span><span>原因</span><span>TraceId</span>
+        </div>
+
+        <article>
+          <strong>张调度</strong>
+          <span class="logBadge accept">接单</span>
+          <time>07-04 17:52</time>
+          <span>司机确认接单</span>
+          <code title="点击复制">3f2a1b8c...</code>
+        </article>
+
+        <article>
+          <strong>李调度</strong>
+          <span class="logBadge assign">派单</span>
+          <time>07-04 17:48</time>
+          <span>推荐派单-胡凡</span>
+          <code title="点击复制">a1c4e7f9...</code>
+        </article>
+
+        <article>
+          <strong>李调度</strong>
+          <span class="logBadge withdraw">撤回</span>
+          <time>07-04 17:46</time>
+          <span>司机无法联系</span>
+          <code title="点击复制">d8b2c3a1...</code>
+        </article>
+
+        <article>
+          <strong>张调度</strong>
+          <span class="logBadge reassign">改派</span>
+          <time>07-04 17:43</time>
+          <span>原司机离线</span>
+          <code title="点击复制">b5e4f2c7...</code>
+        </article>
+
+        <article>
+          <strong>系统</strong>
+          <span class="logBadge assign">派单</span>
+          <time>07-04 17:40</time>
+          <span>自动推荐-刘成</span>
+          <code title="点击复制">f9a1d6e3...</code>
+        </article>
+
+        <article>
+          <strong>王调度</strong>
+          <span class="logBadge accept">接单</span>
+          <time>07-04 17:35</time>
+          <span>-</span>
+          <code title="点击复制">2c7b8a4d...</code>
+        </article>
+
+        <button class="ghostBtn">加载更多</button>
+      </div>
+    </div>
+
+    <!-- ===== 右卡片：推荐派单 Top N（保持原样，仅作对照） ===== -->
+    <div class="card">
+      <div class="cardHead">
+        <div>
+          <h3>推荐派单 Top N</h3>
+          <p>ETA、负载惩罚和结果由调度引擎返回。</p>
+        </div>
+        <button style="background:none;border:1px solid var(--line);border-radius:var(--radius-sm);color:var(--text-secondary);font-size:12px;padding:4px 10px;cursor:pointer;">查看日志</button>
+      </div>
+
+      <!-- 模拟候选卡片 -->
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:10px;">
+        <div style="border:1px solid var(--accent);border-radius:var(--radius-sm);padding:10px;background:color-mix(in srgb, var(--accent) 10%, var(--surface));">
+          <strong style="color:var(--ink);font-size:13px;">#1 胡凡</strong>
+          <span style="color:var(--success);font-size:12px;margin-left:8px;">S1</span>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;font-size:11px;color:var(--text-secondary);">
+            <span>优先级 <strong style="color:var(--ink);">1</strong></span>
+            <span>ETA <strong style="color:var(--ink);">12m</strong></span>
+          </div>
+          <button style="width:100%;height:28px;margin-top:8px;border:1px solid var(--accent);border-radius:var(--radius-sm);background:var(--accent);color:#fff;font-size:12px;cursor:pointer;">派单</button>
+        </div>
+        <div style="border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px;background:color-mix(in srgb, var(--surface) 76%, var(--bg));">
+          <strong style="color:var(--ink);font-size:13px;">#2 刘成</strong>
+          <span style="color:var(--warning);font-size:12px;margin-left:8px;">S2</span>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;font-size:11px;color:var(--text-secondary);">
+            <span>优先级 <strong style="color:var(--ink);">2</strong></span>
+            <span>ETA <strong style="color:var(--ink);">18m</strong></span>
+          </div>
+          <button style="width:100%;height:28px;margin-top:8px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font-size:12px;cursor:pointer;">派单</button>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--line);padding-top:8px;color:var(--muted);font-size:11px;">
+        右侧原有嵌入式日志保留作为快速参考（缩短为最近 5 条）
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ============================================================ -->
+  <!-- 🆕 Toast 演示区域 -->
+  <!-- ============================================================ -->
+  <div class="section-label">🆕 Toast 冲突通知（409 时触发，3.5 秒自动消失）</div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div style="border:1px solid var(--line);border-radius:var(--radius-md);padding:14px;background:var(--surface);">
+      <h4 style="color:var(--ink);font-size:13px;margin-bottom:6px;">场景：双调度员并发派单</h4>
+      <p style="color:var(--text-secondary);font-size:12px;line-height:1.6;">
+        调度员 A 正在查看订单 RC2026...<br>
+        调度员 B 抢先一步派单成功<br>
+        调度员 A 点击"手动派单"→ 后端返回 <strong style="color:var(--danger);">409 Conflict</strong><br>
+        → 前端弹出 Toast 并自动刷新
+      </p>
+    </div>
+    <div style="border:1px solid var(--line);border-radius:var(--radius-md);padding:14px;background:var(--surface);">
+      <h4 style="color:var(--ink);font-size:13px;margin-bottom:6px;">场景：司机已接单后调度员操作</h4>
+      <p style="color:var(--text-secondary);font-size:12px;line-height:1.6;">
+        订单状态已从 ASSIGNED → ACCEPTED<br>
+        调度员点击"撤回"→ 后端返回 <strong style="color:var(--danger);">409 Conflict</strong><br>
+        → 前端弹出 Toast + 自动刷新订单详情
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================================================ -->
+<!-- 🆕 Toast 浮动组件（固定在左下角演示） -->
+<!-- ============================================================ -->
+<div class="toast" id="toast-demo" style="display: flex;">
+  <span class="icon">⚠️</span>
+  <span class="msg">订单状态已变化，正在刷新...</span>
+  <code title="点击复制 traceId" onclick="copyTraceId('a1c4e7f9-4b3d-8c2a-1e5f-6d7b8a9c0e1f')">a1c4e7f9...</code>
+  <span class="dismiss" onclick="document.getElementById('toast-demo').style.display='none'" title="关闭">×</span>
+</div>
+
+<script>
+  function copyTraceId(id) {
+    navigator.clipboard.writeText(id).then(() => {
+      const el = event.target;
+      const orig = el.textContent;
+      el.textContent = '已复制!';
+      setTimeout(() => el.textContent = orig, 1200);
+    });
+  }
+  // 点击任意 code 复制完整 traceId
+  document.querySelectorAll('.logTimeline code').forEach(el => {
+    el.addEventListener('click', () => {
+      const fakeIds = ['3f2a1b8c-9d4e-5f6a-7b8c-9d0e1f2a3b4c','a1c4e7f9-4b3d-8c2a-1e5f-6d7b8a9c0e1f','d8b2c3a1-5e6f-7a8b-9c0d-1e2f3a4b5c6d','b5e4f2c7-8a9b-0c1d-2e3f-4a5b6c7d8e9f','f9a1d6e3-4b5c-6d7e-8f9a-0b1c2d3e4f5a','2c7b8a4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d'];
+      const idx = Array.from(el.parentElement.parentElement.children).indexOf(el.parentElement);
+      navigator.clipboard.writeText(fakeIds[idx] || fakeIds[0]);
+      el.textContent = '已复制!';
+      setTimeout(() => el.textContent = el.getAttribute('data-orig') || el.textContent, 1200);
+    });
+  });
+</script>
+
+</body>
+</html>
