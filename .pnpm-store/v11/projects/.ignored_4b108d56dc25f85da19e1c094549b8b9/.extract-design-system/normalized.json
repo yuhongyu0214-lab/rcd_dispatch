@@ -1,0 +1,123 @@
+{
+  "source": "C:/Users/yhy/AppData/Local/Temp/人车单前端demo_v12.html",
+  "extractedAt": "2026-06-27T07:34:59.819Z",
+  "status": "extracted-from-demo-v12-local-html",
+  "note": "本次未改写项目代码；Browser Use 阻止 file:// 打开，因此 computed style 以静态 CSS 变量和规则为准。",
+  "tokens": {
+    "color": {
+      "background": {
+        "page": "oklch(0.945 0.006 235)",
+        "panel": "oklch(0.905 0.012 235)",
+        "surface": "oklch(0.985 0.003 235)",
+        "map": "oklch(0.875 0.018 230)",
+        "deep": "oklch(0.235 0.032 240)",
+        "elevated": "oklch(0.330 0.045 240)"
+      },
+      "text": {
+        "primary": "oklch(0.220 0.025 240)",
+        "secondary": "oklch(0.420 0.030 240)",
+        "tertiary": "oklch(0.560 0.020 240)",
+        "onNav": "oklch(0.955 0.006 235)"
+      },
+      "brandAndSemantic": {
+        "primary": "oklch(0.635 0.115 35)",
+        "accent": "oklch(0.635 0.115 35)",
+        "accentCyan": "oklch(0.620 0.090 220)",
+        "success": "oklch(0.590 0.115 160)",
+        "warning": "oklch(0.690 0.125 76)",
+        "danger": "oklch(0.610 0.160 27)",
+        "info": "oklch(0.620 0.090 220)"
+      },
+      "line": {
+        "default": "oklch(0.810 0.010 235)",
+        "muted": "oklch(0.790 0.012 235)",
+        "glass": "color-mix(in srgb, var(--line) 86%, transparent)"
+      }
+    },
+    "radius": {
+      "--radius-sm": "8px",
+      "--radius-md": "12px",
+      "--radius-lg": "16px"
+    },
+    "shadow": {
+      "--primary-glow": "color-mix(in srgb, oklch(0.635 0.115 35) 26%, transparent)",
+      "--shadow-card": "0 6px 8px rgba(31, 35, 39, 0.08)",
+      "--shadow-modal": "0 18px 46px rgba(31, 35, 39, 0.18)",
+      "--glow-idle": "0 0 0 4px color-mix(in srgb, var(--success) 18%, transparent)",
+      "--glow-busy": "0 0 0 4px color-mix(in srgb, var(--warning) 18%, transparent)",
+      "--glow-warn": "0 0 0 4px color-mix(in srgb, var(--danger) 18%, transparent)",
+      "--glow-exec": "0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent)"
+    },
+    "typography": {
+      "system": "-apple-system, \"SF Pro Display\", \"Helvetica Neue\", Arial, \"Microsoft YaHei\", sans-serif",
+      "mono": "\"SF Mono\", \"Space Mono\", Consolas, monospace",
+      "bodyFontSize": "15px",
+      "numeric": "tabular-nums"
+    },
+    "layout": {
+      "railWidth": "72px",
+      "workPanelWidth": "420px",
+      "listContentWidth": "408px",
+      "listScrollbarWidth": "12px",
+      "designWidth": "1488px",
+      "designHeight": "1000px",
+      "appScale": "1",
+      "rightPanelMinWidth": "996px",
+      "panelHeadHeight": "396px",
+      "kpiHeight": "60px",
+      "tabHeight": "36px",
+      "controlHeight": "38px",
+      "rightHeadHeight": "84px",
+      "mapDockHeight": "236px",
+      "detailCardHeight": "208px",
+      "recommendCardHeight": "208px",
+      "actionHeight": "32px",
+      "tapTarget": "44px"
+    }
+  },
+  "layoutRules": {
+    "appShell": "三列固定骨架：72px 深色 rail + 420px 工作面板 + 右侧弹性主区域；整体按 1488x1000 设计画布缩放，body overflow hidden，超出通过轨道滚动查看。",
+    "panel": "panel-head 固定 396px；KPI 高 60px；四宫格 tab 高 36px；列表内容 408px，右侧预留 12px 滚动条。",
+    "mapBoardOnly": "只有地图看板使用地图画布；其他 step 使用表格、流程轴或明细列表。",
+    "mapDock": "地图底部 dock 固定 236px，左右两栏分别为订单详情与推荐派单 Top N。",
+    "listDensity": "卡片最小高度约 126px，表格/明细行以一行一对象为主，避免重复详情卡。"
+  },
+  "componentRules": {
+    "navigation": "rail icon 48x48 圆形按钮，active 使用 nav-active；主 step 跳转由 rail 完成。",
+    "objectTabs": "地图看板中的订单/司机/预警/车辆是对象筛选，不触发 step 跳转；在 KPI 卡片栏和地图标记中联动。",
+    "filters": "搜索与 select 选择即生效，无提交按钮；时间/状态需保留“全部”选项。",
+    "buttons": "主操作使用 action-button，次操作 ghost-button，风险操作 danger-button；按钮高度 32px，触摸目标 44px。",
+    "cards": "选中卡片使用 accent 边框和浅暖底色；未选中保留 surface-glass；状态用 badge 表达。",
+    "mapMarkers": "订单水滴、司机方向盘、车辆小车、门店小屋、预警三角；选中项放大，其余增强透明度。",
+    "recommendations": "推荐派单 Top N 固定在地图底部右栏，保留优先级、ETA、负载惩罚和 outcome，不展示中文推荐理由。"
+  },
+  "interactions": {
+    "autoFilter": "input/change 直接 render，无需提交。",
+    "refreshPoints": "刷新点位只更新点位状态与提示，不重置视图。",
+    "selectItem": "选中对象同步列表、详情、地图标记和底部 dock。",
+    "driverWorkflow": "司机管理用每人一行横向流程轴，状态点向右推进，右侧显示预计完成时间。",
+    "vehicleWorkflow": "车辆管理每车一行，支持车牌、车型、门店、GPS 状态模糊搜索，显示当前所属门店、当前订单、本月完单、本月营收、当前位置。"
+  },
+  "apiPlaceholders": [
+    "/api/orders/ingest",
+    "/api/orders",
+    "/api/orders/:id/geocode-output",
+    "/api/map",
+    "/api/dispatch/recommend",
+    "/api/dispatch/confirm",
+    "/api/drivers",
+    "/api/drivers/:id/work-orders",
+    "/api/vehicles/ingest",
+    "/api/vehicles",
+    "/api/logs",
+    "/api/map/route",
+    "/api/adapters/gps/mock",
+    "/api/orders/:id"
+  ],
+  "implementationGuards": [
+    "不要直接套蓝白 SaaS 主题；保留灰蓝背景、深色 rail、暖棕 accent、青绿语义色的组合。",
+    "布局尺寸优先 token 化，禁止随页面内容改变 rail、panel、KPI、dock 高宽。",
+    "前端迁移到 Next/Tailwind 时，先把这些变量落到 CSS variables，再映射到组件 class。",
+    "本文件仅为设计参数提取结果，不代表正式 worktree 代码修改。"
+  ]
+}

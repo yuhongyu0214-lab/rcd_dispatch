@@ -1,0 +1,75 @@
+<style>
+  .rcd-grid { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:18px; margin-top:18px; }
+  .rcd-card { border:1px solid #d8d4cc; border-radius:12px; overflow:hidden; background:#fff; cursor:pointer; transition:160ms ease; }
+  .rcd-card:hover { transform:translateY(-2px); border-color:#111; }
+  .rcd-card.selected { outline:3px solid #10b981; outline-offset:2px; }
+  .rcd-preview { height:240px; background:#f7f4ef; display:grid; grid-template-columns:40px 1fr 86px; border-bottom:1px solid #e6e1d8; }
+  .rail { background:#111; display:flex; flex-direction:column; align-items:center; gap:10px; padding:12px 8px; }
+  .dot { width:22px; height:22px; border-radius:999px; background:#f3efe8; }
+  .map { position:relative; background:#e7e1d6; overflow:hidden; }
+  .map:before { content:""; position:absolute; inset:0; background:linear-gradient(35deg, transparent 0 42%, rgba(17,17,17,.08) 43% 44%, transparent 45%), linear-gradient(120deg, transparent 0 55%, rgba(17,17,17,.08) 56% 57%, transparent 58%); }
+  .pin { position:absolute; width:18px; height:18px; border-radius:50%; border:3px solid #fff; box-shadow:0 4px 10px rgba(0,0,0,.18); }
+  .p1 { left:28%; top:34%; background:#10b981; } .p2 { left:58%; top:48%; background:#f59e0b; } .p3 { left:44%; top:64%; background:#3b82f6; }
+  .panel { padding:12px; background:#fffaf3; border-left:1px solid #ded8cf; }
+  .mini-line { height:10px; border-radius:999px; background:#ded8cf; margin-bottom:9px; }
+  .mini-line.dark { background:#111; width:70%; }
+  .mini-card { border:1px solid #e1dcd3; border-radius:8px; padding:9px; margin:8px 0; background:#fff; }
+  .b .rcd-preview { grid-template-columns:44px 112px 1fr; background:#0b0e14; }
+  .b .rail { background:#0b0e14; border-right:1px solid rgba(255,255,255,.12); }
+  .b .dot { border-radius:8px; background:rgba(255,255,255,.18); }
+  .b .map { background:#10151d; }
+  .b .map:before { background:linear-gradient(35deg, transparent 0 42%, rgba(255,255,255,.08) 43% 44%, transparent 45%), linear-gradient(120deg, transparent 0 55%, rgba(255,255,255,.08) 56% 57%, transparent 58%); }
+  .b .panel { background:#11151c; border-color:rgba(255,255,255,.1); }
+  .b .mini-card { background:rgba(255,255,255,.07); border-color:rgba(255,255,255,.1); }
+  .b .mini-line { background:rgba(255,255,255,.22); }
+  .c .rcd-preview { grid-template-columns:56px 270px 1fr; }
+  .c .panel { grid-column:2; border-left:0; border-right:1px solid #ded8cf; }
+  .c .map { grid-column:3; }
+  .c .rail .dot:first-child { background:#10b981; }
+  .label-chip { display:inline-flex; align-items:center; height:22px; padding:0 8px; border-radius:999px; background:#111; color:#fff; font-size:12px; margin-bottom:8px; }
+  .rcd-card-body { padding:14px; }
+  .rcd-card-body h3 { margin:0 0 6px; font-size:17px; }
+  .rcd-card-body p { margin:0; color:#57534e; line-height:1.45; }
+  @media (max-width: 900px) { .rcd-grid { grid-template-columns:1fr; } }
+</style>
+
+<h2>demo_v12 应该怎么融合？</h2>
+<p class="subtitle">我建议保留 v11 的功能模块和接入点，用 v1 的浅色地图优先设计语言重塑体验。可以点选一个方向。</p>
+
+<div class="rcd-grid">
+  <div class="rcd-card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="rcd-preview">
+      <div class="rail"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+      <div class="map"><span class="pin p1"></span><span class="pin p2"></span><span class="pin p3"></span></div>
+      <div class="panel"><div class="label-chip">v1</div><div class="mini-line dark"></div><div class="mini-card"><div class="mini-line"></div><div class="mini-line"></div></div><div class="mini-card"><div class="mini-line"></div></div></div>
+    </div>
+    <div class="rcd-card-body">
+      <h3>A. 地图优先极简版</h3>
+      <p>最接近 demo_v1，右侧动态面板承载车辆、订单、司机、预警。好接入，但调度闭环显得轻。</p>
+    </div>
+  </div>
+
+  <div class="rcd-card b" data-choice="b" onclick="toggleSelect(this)">
+    <div class="rcd-preview">
+      <div class="rail"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+      <div class="panel"><div class="mini-card"><div class="mini-line"></div></div><div class="mini-card"><div class="mini-line"></div><div class="mini-line"></div></div><div class="mini-card"><div class="mini-line"></div></div></div>
+      <div class="map"><span class="pin p1"></span><span class="pin p2"></span><span class="pin p3"></span></div>
+    </div>
+    <div class="rcd-card-body">
+      <h3>B. v11 深色工作台</h3>
+      <p>保留 v11 的中栏、折叠、预警、canvas 动效。功能最足，但和 v1 的品牌变量差异大。</p>
+    </div>
+  </div>
+
+  <div class="rcd-card c" data-choice="c" onclick="toggleSelect(this)">
+    <div class="rcd-preview">
+      <div class="rail"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+      <div class="panel"><div class="label-chip">推荐</div><div class="mini-line dark"></div><div class="mini-card"><div class="mini-line"></div><div class="mini-line"></div></div><div class="mini-card"><div class="mini-line"></div><div class="mini-line"></div></div></div>
+      <div class="map"><span class="pin p1"></span><span class="pin p2"></span><span class="pin p3"></span></div>
+    </div>
+    <div class="rcd-card-body">
+      <h3>C. 接入型混合版</h3>
+      <p>v1 的浅色变量和圆形侧栏，加 v11 的订单池、司机池、推荐派单、预警和 API 接入占位。最适合做 v12。</p>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,15 @@
+BEGIN;
+
+ALTER TABLE "Vehicle" DROP COLUMN IF EXISTS "gpsLat";
+ALTER TABLE "Vehicle" DROP COLUMN IF EXISTS "gpsLng";
+
+ALTER TABLE "Order" ALTER COLUMN "status" DROP DEFAULT;
+ALTER TYPE "OrderStatus" RENAME TO "OrderStatus_old";
+CREATE TYPE "OrderStatus" AS ENUM ('PENDING', 'RECOMMENDING', 'ASSIGNED', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED', 'RECYCLED', 'CANCELLED');
+ALTER TABLE "Order"
+  ALTER COLUMN "status" TYPE "OrderStatus"
+  USING ("status"::text::"OrderStatus");
+ALTER TABLE "Order" ALTER COLUMN "status" SET DEFAULT 'PENDING';
+DROP TYPE "OrderStatus_old";
+
+COMMIT;

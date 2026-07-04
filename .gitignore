@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+.next/
+**/.next/
+dist/
+coverage/
+.upload-staging/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+pnpm-debug.log*
+
+# Local editor and OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Nested worktree/git metadata
+.git-feature-data-model/
+**/.git
+**/.git/
+.git.worktree.bak
+
+# Local AI/tool settings
+.claude/settings.local.json
+**/.claude/settings.local.json
+
+# npm lockfiles are not used in this pnpm-locked repo
+package-lock.json

@@ -1,0 +1,223 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+enum DriverStatus {
+  OFFLINE
+  S1
+  S2
+  S3
+  S4
+  UNAVAILABLE
+}
+
+enum VehicleStatus {
+  AVAILABLE
+  PRE_ASSIGNED
+  IN_USE
+  UNAVAILABLE
+}
+
+enum OrderType {
+  STORE_PICKUP
+  STORE_RETURN
+  DOOR_DELIVERY
+  DOOR_PICKUP
+}
+
+enum OrderStatus {
+  PENDING
+  RECOMMENDING
+  ASSIGNED
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  RECYCLED
+  CANCELLED
+}
+
+enum AssignmentType {
+  MANUAL_ASSIGN
+  RECOMMEND_ASSIGN
+  REASSIGN
+}
+
+enum AssignmentStatus {
+  ACTIVE
+  ACCEPTED
+  WITHDRAWN
+  RECYCLED
+  COMPLETED
+  CANCELLED
+}
+
+enum OperationEntityType {
+  ORDER
+  ASSIGNMENT
+  DRIVER
+  VEHICLE
+  IMPORT_BATCH
+}
+
+enum OperationAction {
+  ASSIGN
+  REASSIGN
+  WITHDRAW
+  RECYCLE
+  CANCEL
+  ACCEPT
+  START
+  COMPLETE
+  IMPORT
+}
+
+model User {
+  id                 String         @id @default(cuid())
+  email              String         @unique
+  phone              String         @unique
+  name               String
+  password           String
+  role               String         @default("admin")
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  assignmentsCreated Assignment[]
+  operationLogs      OperationLog[]
+}
+
+model Store {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  name      String
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  drivers   Driver[]
+  vehicles  Vehicle[]
+  orders    Order[]
+}
+
+model Driver {
+  id          String         @id @default(cuid())
+  storeId     String
+  name        String
+  phone       String         @unique
+  status      DriverStatus   @default(S1)
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  store       Store          @relation(fields: [storeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  assignments Assignment[]
+  locations   DriverLocation[]
+
+  @@index([storeId, status])
+}
+
+model Vehicle {
+  id           String        @id @default(cuid())
+  storeId      String
+  licensePlate String        @unique
+  vehicleType  String
+  gpsLat       Float?
+  gpsLng       Float?
+  status       VehicleStatus @default(AVAILABLE)
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  store        Store         @relation(fields: [storeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  orders       Order[]
+
+  @@index([storeId, status])
+}
+
+model Order {
+  id                   String        @id @default(cuid())
+  orderNo              String        @unique
+  type                 OrderType
+  status               OrderStatus   @default(PENDING)
+  storeId              String
+  vehicleId            String?
+  licensePlateSnapshot String?
+  importBatchId        String?
+  channel              String?
+  driverNameSnapshot   String?
+  vehicleTypeSnapshot  String?
+  pickupAddress        String
+  pickupLat            Float?
+  pickupLng            Float?
+  returnAddress        String
+  returnLat            Float?
+  returnLng            Float?
+  scheduledAt          DateTime
+  currentAssignmentId  String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  store                Store         @relation(fields: [storeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  vehicle              Vehicle?      @relation(fields: [vehicleId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  assignments          Assignment[]  @relation("OrderAssignments")
+  currentAssignment    Assignment?   @relation("CurrentAssignment", fields: [currentAssignmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([storeId, status])
+  @@index([status, scheduledAt])
+  @@index([currentAssignmentId])
+  @@index([importBatchId])
+}
+
+model Assignment {
+  id                   String           @id @default(cuid())
+  orderId              String
+  driverId             String
+  type                 AssignmentType
+  status               AssignmentStatus @default(ACTIVE)
+  previousAssignmentId String?
+  createdByUserId      String
+  assignedAt           DateTime         @default(now())
+  acceptedAt           DateTime?
+  withdrawnAt          DateTime?
+  recycledAt           DateTime?
+  completedAt          DateTime?
+  order                Order            @relation("OrderAssignments", fields: [orderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  driver               Driver           @relation(fields: [driverId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  createdByUser        User             @relation(fields: [createdByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  previousAssignment   Assignment?      @relation("AssignmentChain", fields: [previousAssignmentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  nextAssignments      Assignment[]     @relation("AssignmentChain")
+  currentForOrders     Order[]          @relation("CurrentAssignment")
+
+  @@index([orderId, status])
+  @@index([driverId, status])
+  @@index([assignedAt])
+  @@index([previousAssignmentId])
+}
+
+model OperationLog {
+  id             String              @id @default(cuid())
+  entityType     OperationEntityType
+  entityId       String
+  action         OperationAction
+  operatorUserId String
+  reason         String?
+  metadataJson   Json?
+  createdAt      DateTime            @default(now())
+  operatorUser   User                @relation(fields: [operatorUserId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([entityType, entityId])
+  @@index([operatorUserId, createdAt])
+  @@index([action, createdAt])
+}
+
+model DriverLocation {
+  id        String   @id @default(cuid())
+  driverId  String
+  lat       Float
+  lng       Float
+  timestamp DateTime @default(now())
+  createdAt DateTime @default(now())
+  driver    Driver   @relation(fields: [driverId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([driverId, timestamp])
+}

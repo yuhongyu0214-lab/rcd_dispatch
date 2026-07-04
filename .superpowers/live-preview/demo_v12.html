@@ -1,0 +1,2442 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RCD Dispatch demo_v12</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: oklch(0.945 0.006 235);
+  --panel: oklch(0.905 0.012 235);
+  --surface: oklch(0.985 0.003 235);
+  --map: oklch(0.875 0.018 230);
+  --bg-deep: oklch(0.235 0.032 240);
+  --bg-elevated: oklch(0.330 0.045 240);
+  --line: oklch(0.810 0.010 235);
+  --muted-line: oklch(0.790 0.012 235);
+  --surface-glass: color-mix(in srgb, var(--surface) 86%, transparent);
+  --surface-glass-hover: color-mix(in srgb, var(--surface) 94%, var(--accent) 6%);
+  --border-glass: color-mix(in srgb, var(--line) 86%, transparent);
+  --accent: oklch(0.635 0.115 35);
+  --accent-ink: oklch(0.220 0.025 240);
+  --primary: oklch(0.635 0.115 35);
+  --primary-glow: color-mix(in srgb, oklch(0.635 0.115 35) 26%, transparent);
+  --accent-cyan: oklch(0.620 0.090 220);
+  --success: oklch(0.590 0.115 160);
+  --warning: oklch(0.690 0.125 76);
+  --danger: oklch(0.610 0.160 27);
+  --info: oklch(0.620 0.090 220);
+  --ink: oklch(0.220 0.025 240);
+  --body-muted: oklch(0.420 0.030 240);
+  --text-primary: oklch(0.220 0.025 240);
+  --text-secondary: oklch(0.420 0.030 240);
+  --text-tertiary: oklch(0.560 0.020 240);
+  --nav: oklch(0.235 0.032 240);
+  --nav-active: oklch(0.330 0.045 240);
+  --on-nav: oklch(0.955 0.006 235);
+  --road: color-mix(in srgb, var(--ink) 11%, transparent);
+  --shadow-card: 0 6px 8px rgba(31, 35, 39, 0.08);
+  --shadow-modal: 0 18px 46px rgba(31, 35, 39, 0.18);
+  --glow-idle: 0 0 0 4px color-mix(in srgb, var(--success) 18%, transparent);
+  --glow-busy: 0 0 0 4px color-mix(in srgb, var(--warning) 18%, transparent);
+  --glow-warn: 0 0 0 4px color-mix(in srgb, var(--danger) 18%, transparent);
+  --glow-exec: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --rail-w: 72px;
+  --work-panel-w: 420px;
+  --list-content-w: 408px;
+  --list-scrollbar-w: 12px;
+  --design-w: 1488px;
+  --design-h: 1000px;
+  --app-scale: 1;
+  --right-panel-min-w: 996px;
+  --panel-head-h: 396px;
+  --kpi-h: 60px;
+  --tab-h: 36px;
+  --control-h: 38px;
+  --right-head-h: 84px;
+  --map-dock-h: 236px;
+  --detail-card-h: 208px;
+  --recommend-card-h: 208px;
+  --card-action-h: 32px;
+  --tap-target: 44px;
+  --font-system: -apple-system, "SF Pro Display", "Helvetica Neue", Arial, "Microsoft YaHei", sans-serif;
+  --font-mono: "SF Mono", "Space Mono", Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 100%; height: 100%; }
+body {
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-system);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select { font: inherit; }
+button { border: 0; cursor: pointer; }
+button, select, input { touch-action: manipulation; }
+svg { display: block; }
+
+.viewport-frame {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  width: 100vw;
+  height: 100dvh;
+  max-width: 100vw;
+  max-height: 100dvh;
+  place-items: center;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.app {
+  display: grid;
+  grid-template-columns: var(--rail-w) var(--work-panel-w) minmax(0, 1fr);
+  width: var(--design-w);
+  min-width: var(--design-w);
+  height: var(--design-h);
+  min-height: var(--design-h);
+  overflow: hidden;
+  background: var(--bg);
+  transform: scale(var(--app-scale));
+  transform-origin: center center;
+  will-change: transform;
+  contain: layout paint;
+}
+
+.app > *,
+.work-panel *,
+.map-screen * {
+  min-width: 0;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 10px;
+  width: var(--rail-w);
+  background: var(--nav);
+  color: var(--on-nav);
+  box-shadow: 2px 0 20px rgba(31, 35, 39, 0.18);
+  z-index: 20;
+}
+.logo {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  margin-bottom: 18px;
+  border-radius: 999px;
+  background: var(--on-nav);
+  color: var(--nav);
+  font-size: 12px;
+  font-weight: 800;
+}
+.nav-item {
+  position: relative;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: color-mix(in srgb, var(--on-nav) 62%, transparent);
+  transition: background 180ms ease, color 180ms ease, transform 80ms ease;
+}
+.nav-item:hover { background: color-mix(in srgb, var(--on-nav) 10%, transparent); color: var(--on-nav); }
+.nav-item:active { transform: scale(0.96); }
+.nav-item.active { background: var(--nav-active); color: var(--on-nav); border-color: color-mix(in srgb, var(--on-nav) 13%, transparent); }
+.nav-item.warning::after {
+  content: "";
+  position: absolute;
+  right: 7px;
+  top: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--danger);
+  box-shadow: var(--glow-warn);
+}
+.rail-divider {
+  width: 32px;
+  height: 1px;
+  margin: 8px 0;
+  background: color-mix(in srgb, var(--on-nav) 14%, transparent);
+}
+.rail-state {
+  width: 10px;
+  height: 10px;
+  margin-top: auto;
+  border-radius: 999px;
+  background: var(--success);
+  box-shadow: var(--glow-idle);
+}
+
+.work-panel {
+  display: flex;
+  min-width: 0;
+  height: var(--design-h);
+  max-height: var(--design-h);
+  overflow: hidden;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+}
+.panel-head {
+  flex: 0 0 var(--panel-head-h);
+  min-height: var(--panel-head-h);
+  max-height: var(--panel-head-h);
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--line);
+  overflow: hidden;
+}
+.eyeline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.sync-pill {
+  display: inline-flex;
+  height: 26px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, var(--success) 28%, var(--line));
+  border-radius: 999px;
+  padding: 0 10px;
+  background: color-mix(in srgb, var(--success) 9%, var(--surface));
+  color: color-mix(in srgb, var(--success) 72%, var(--ink));
+  font-size: 12px;
+  font-weight: 700;
+}
+.sync-pill::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--success);
+}
+.panel-title {
+  margin: 12px 0 0;
+  height: 30px;
+  overflow: hidden;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.panel-subtitle {
+  margin: 6px 0 0;
+  height: 42px;
+  overflow: hidden;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  height: var(--kpi-h);
+  margin-top: 15px;
+}
+.kpi {
+  min-width: 0;
+  height: var(--kpi-h);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 10px;
+}
+.kpi span { display: block; color: var(--text-secondary); font-size: 12px; }
+.kpi strong { display: block; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 20px; }
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  height: var(--tab-h);
+  margin-top: 14px;
+}
+.tab {
+  height: var(--tab-h);
+  min-height: var(--tab-h);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 72%, var(--panel));
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+.tab.active {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: var(--ink);
+}
+.control-grid {
+  display: grid;
+  grid-template-columns: 1fr 122px;
+  gap: 8px;
+  height: var(--control-h);
+  margin-top: 12px;
+}
+.search {
+  height: var(--control-h);
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 0 12px;
+  color: var(--text-primary);
+  outline: none;
+}
+.search:focus,
+.select:focus {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--line));
+  box-shadow: var(--glow-exec);
+}
+.select {
+  height: var(--control-h);
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-primary);
+  padding: 0 9px;
+  outline: none;
+}
+.seg-row {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.filter-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  height: 62px;
+  margin-top: 10px;
+}
+.filter-field {
+  display: grid;
+  grid-template-rows: 16px var(--control-h);
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+.filter-field .select {
+  width: 100%;
+  font-weight: 700;
+}
+.seg-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.segmented button {
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+.segmented button.active {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--line));
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--ink);
+}
+.panel-body {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 48px;
+  gap: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 14px 0 0 0;
+}
+.list-scroll {
+  width: var(--work-panel-w);
+  min-height: 0;
+  overflow-y: scroll;
+  overflow-x: hidden;
+  padding: 0 var(--list-scrollbar-w) 10px 0;
+  scrollbar-gutter: stable;
+}
+.list-scroll::-webkit-scrollbar {
+  width: var(--list-scrollbar-w);
+}
+.list-scroll::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--panel) 74%, var(--surface));
+}
+.list-scroll::-webkit-scrollbar-thumb {
+  border: 3px solid color-mix(in srgb, var(--panel) 74%, var(--surface));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 28%, transparent);
+}
+.section-stack {
+  display: grid;
+  width: var(--list-content-w);
+  gap: 10px;
+  padding-left: 14px;
+}
+.ingest-card,
+.order-card,
+.driver-card,
+.vehicle-card,
+.alert-card,
+.log-card,
+.detail-card,
+.recommend-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: none;
+}
+.ingest-card { padding: 12px; }
+.ingest-card {
+  min-height: 108px;
+  overflow: hidden;
+}
+.ingest-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.mini-title { font-size: 13px; font-weight: 800; }
+.mini-sub { margin-top: 3px; color: var(--text-secondary); font-size: 12px; line-height: 1.4; }
+.api-code {
+  display: inline-flex;
+  height: 24px;
+  align-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 7%, var(--surface));
+  padding: 0 9px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+.field {
+  min-width: 0;
+  min-height: 52px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--panel) 42%, var(--surface));
+  padding: 8px;
+}
+.field span { display: block; color: var(--text-secondary); font-size: 11px; }
+.field strong { display: block; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.order-card,
+.driver-card,
+.vehicle-card,
+.alert-card,
+.log-card {
+  width: 100%;
+  min-height: 126px;
+  padding: 12px;
+  text-align: left;
+  transition: border-color 160ms ease, background 160ms ease, transform 80ms ease;
+}
+.order-card:hover,
+.driver-card:hover,
+.vehicle-card:hover,
+.alert-card:hover,
+.log-card:hover {
+  background: var(--surface-glass-hover);
+}
+.order-card.active,
+.driver-card.active,
+.vehicle-card.active,
+.alert-card.active,
+.log-card.active {
+  border-color: color-mix(in srgb, var(--accent) 54%, var(--line));
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+}
+.card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 28px;
+}
+.card-title { display: flex; min-width: 0; align-items: center; gap: 8px; font-weight: 800; }
+.card-title span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status-icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 900;
+}
+.status-icon.pickup { background: color-mix(in srgb, var(--warning) 16%, var(--surface)); }
+.status-icon.return { background: color-mix(in srgb, var(--info) 14%, var(--surface)); }
+.status-icon.done { background: color-mix(in srgb, var(--success) 14%, var(--surface)); }
+.pill {
+  display: inline-flex;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0 9px;
+  background: color-mix(in srgb, var(--ink) 7%, var(--surface));
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.pill.gray { color: var(--text-tertiary); background: color-mix(in srgb, var(--ink) 6%, var(--surface)); }
+.pill.danger { color: color-mix(in srgb, var(--danger) 80%, var(--ink)); background: color-mix(in srgb, var(--danger) 12%, var(--surface)); }
+.pill.success { color: color-mix(in srgb, var(--success) 80%, var(--ink)); background: color-mix(in srgb, var(--success) 12%, var(--surface)); }
+.pill.warn { color: color-mix(in srgb, var(--warning) 70%, var(--ink)); background: color-mix(in srgb, var(--warning) 15%, var(--surface)); }
+.card-meta {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  min-height: 52px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.card-meta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.order-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 10px; }
+.action-button,
+.ghost-button,
+.danger-button {
+  display: inline-flex;
+  height: var(--card-action-h);
+  min-width: 64px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: var(--radius-sm);
+  padding: 0 11px;
+  font-size: 12px;
+  font-weight: 800;
+}
+.action-button {
+  background: var(--primary);
+  color: var(--accent-ink);
+}
+.ghost-button {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text-primary);
+}
+.danger-button {
+  background: color-mix(in srgb, var(--danger) 13%, var(--surface));
+  color: color-mix(in srgb, var(--danger) 82%, var(--ink));
+}
+.pager {
+  display: flex;
+  width: var(--work-panel-w);
+  height: 48px;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 14px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  background: var(--panel);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.pager select { width: 92px; }
+.work-orders {
+  margin-top: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.work-orders .field-grid { grid-template-columns: repeat(2, 1fr); margin-top: 0; }
+.map-screen {
+  position: relative;
+  display: grid;
+  grid-template-rows: var(--right-head-h) minmax(0, 1fr) var(--map-dock-h);
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: var(--design-h);
+  max-height: var(--design-h);
+  overflow: hidden;
+  background: var(--bg);
+}
+.map-screen.is-info-view {
+  grid-template-rows: var(--right-head-h) minmax(0, 1fr);
+}
+.map-screen.is-info-view .map-wrap,
+.map-screen.is-info-view .bottom-dock {
+  display: none;
+}
+.map-screen:not(.is-info-view) .info-workspace {
+  display: none;
+}
+.map-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  height: var(--right-head-h);
+  min-height: var(--right-head-h);
+  max-height: var(--right-head-h);
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 78%, var(--bg));
+}
+.top-title { display: grid; gap: 4px; }
+.top-title strong { font-size: 17px; }
+.top-title span {
+  display: block;
+  max-width: 44ch;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-topbar .field-grid {
+  width: 520px;
+  max-width: 520px;
+  height: 52px;
+  margin: 0;
+  grid-template-columns: repeat(3, 1fr);
+}
+.map-wrap {
+  position: relative;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+canvas#map {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.map-actions {
+  position: absolute;
+  right: 18px;
+  top: 18px;
+  display: flex;
+  gap: 8px;
+  z-index: 5;
+}
+.map-action {
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-glass);
+  color: var(--text-primary);
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 800;
+  backdrop-filter: blur(10px);
+}
+.map-legend {
+  position: absolute;
+  left: 18px;
+  bottom: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-glass);
+  padding: 9px;
+  backdrop-filter: blur(10px);
+}
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+.info-window {
+  position: absolute;
+  z-index: 10;
+  width: 310px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-modal);
+  padding: 12px;
+}
+.info-window h4 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+.info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.info-row strong {
+  color: var(--text-primary);
+  text-align: right;
+}
+.info-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.info-workspace {
+  min-height: 0;
+  height: calc(var(--design-h) - var(--right-head-h));
+  max-height: calc(var(--design-h) - var(--right-head-h));
+  overflow: auto;
+  padding: 16px;
+  scrollbar-gutter: stable;
+}
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+.workspace-stack {
+  display: grid;
+  gap: 12px;
+}
+.wide-card {
+  min-width: 0;
+  max-width: 100%;
+  max-height: calc(var(--design-h) - var(--right-head-h) - 32px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: 14px;
+  scrollbar-gutter: stable;
+}
+.wide-card h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.wide-card .mini-sub {
+  margin-bottom: 10px;
+}
+.workspace-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(260px, 420px) auto;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 8px;
+}
+.workspace-filter-bar .search {
+  width: 100%;
+}
+.workspace-filter-hint {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.data-table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  margin-top: 10px;
+  font-size: 12px;
+  table-layout: fixed;
+}
+.data-table th,
+.data-table td {
+  border-top: 1px solid var(--line);
+  padding: 8px 6px;
+  text-align: left;
+  vertical-align: top;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.data-table th {
+  color: var(--text-secondary);
+  font-weight: 800;
+}
+.order-detail-table {
+  min-width: 1840px;
+}
+.vehicle-detail-table {
+  min-width: 1220px;
+}
+.order-detail-table tbody tr,
+.vehicle-detail-table tbody tr {
+  cursor: pointer;
+}
+.order-detail-table tbody tr.active,
+.vehicle-detail-table tbody tr.active {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+.bottom-dock {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  height: var(--map-dock-h);
+  min-height: var(--map-dock-h);
+  max-height: var(--map-dock-h);
+  overflow: hidden;
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 82%, var(--bg));
+}
+.detail-card,
+.recommend-card {
+  min-width: 0;
+  max-width: 100%;
+  height: var(--detail-card-h);
+  min-height: var(--detail-card-h);
+  max-height: var(--detail-card-h);
+  overflow: auto;
+  padding: 12px;
+  scrollbar-gutter: stable;
+}
+.recommend-card {
+  height: var(--recommend-card-h);
+  min-height: var(--recommend-card-h);
+  max-height: var(--recommend-card-h);
+}
+.detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 28px;
+}
+.detail-title { font-size: 14px; font-weight: 900; }
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-height: 116px;
+  margin-top: 10px;
+}
+.recommend-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(118px, 1fr));
+  gap: 8px;
+  min-height: 132px;
+  max-width: 100%;
+  margin-top: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-gutter: stable;
+}
+.candidate {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--panel) 40%, var(--surface));
+  min-height: 128px;
+  padding: 9px;
+  text-align: left;
+}
+.candidate.active {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+.candidate strong { display: block; margin-bottom: 7px; font-size: 13px; }
+.candidate-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.driver-timeline-list {
+  display: grid;
+  gap: 10px;
+  min-width: 960px;
+  margin-top: 10px;
+}
+.driver-timeline-row {
+  display: grid;
+  grid-template-columns: 164px minmax(520px, 1fr) 136px;
+  align-items: center;
+  gap: 14px;
+  min-height: 68px;
+  border-top: 1px solid var(--line);
+  padding: 10px 0;
+}
+.driver-timeline-row:first-child { border-top: 0; }
+.driver-timeline-row.active {
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+.driver-name {
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--text-primary);
+}
+.driver-meta {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.timeline-track {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: center;
+  min-height: 48px;
+}
+.timeline-track::before {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  top: 21px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--success) 0 32%, var(--primary) 32% 66%, color-mix(in srgb, var(--line) 82%, var(--surface)) 66% 100%);
+  content: "";
+}
+.timeline-step {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-align: center;
+}
+.timeline-dot {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 2px solid var(--surface);
+  border-radius: 999px;
+  background: var(--line);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-secondary) 24%, transparent);
+}
+.timeline-step.done .timeline-dot { background: var(--success); }
+.timeline-step.current .timeline-dot {
+  background: var(--primary);
+  animation: timelinePulse 1.8s ease-in-out infinite;
+}
+.timeline-step.next .timeline-dot { background: color-mix(in srgb, var(--warning) 80%, var(--surface)); }
+.timeline-step.offline .timeline-dot { background: color-mix(in srgb, var(--text-muted) 60%, var(--surface)); }
+.timeline-label {
+  max-width: 170px;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.timeline-eta {
+  justify-self: end;
+  min-width: 120px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--panel) 46%, var(--surface));
+  padding: 8px 10px;
+  text-align: right;
+}
+.timeline-eta span {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.timeline-eta strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+@keyframes timelinePulse {
+  0%, 100% { transform: translateX(-3px) scale(1); opacity: 0.78; }
+  50% { transform: translateX(8px) scale(1.14); opacity: 1; }
+}
+.toast-stack {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 50;
+  display: grid;
+  gap: 8px;
+}
+.toast {
+  min-width: 260px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-modal);
+  padding: 10px 12px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.toast.success { border-color: color-mix(in srgb, var(--success) 46%, var(--line)); }
+.toast.warn { border-color: color-mix(in srgb, var(--warning) 52%, var(--line)); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="viewport-frame" id="viewport-frame">
+<div class="app" id="app-shell">
+  <nav class="rail" aria-label="主导航">
+    <div class="logo">RCD</div>
+    <button class="nav-item active" data-view="orders" title="订单池" aria-label="订单池">
+      <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 3h10a2 2 0 0 1 2 2v16l-3-2-2 2-2-2-2 2-2-2-3 2V5a2 2 0 0 1 2-2Zm2 5h6V6H9v2Zm0 4h6v-2H9v2Zm0 4h4v-2H9v2Z"/></svg>
+    </button>
+    <button class="nav-item" data-view="map" title="地图" aria-label="地图">
+      <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="m14 5 4-2 3 1.5v15L18 18l-4 2-4-2-4 2-3-1.5v-15L6 5l4-2 4 2Zm-1 1.7-2-1v10.6l2 1V6.7Zm2 10.6 2-1V5.7l-2 1v10.6ZM8 16.3V5.7l-2 1v10.6l2-1Z"/></svg>
+    </button>
+    <button class="nav-item" data-view="drivers" title="司机" aria-label="司机">
+      <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 2a7 7 0 0 1 6.93 6H15a3 3 0 0 0-6 0H5.07A7 7 0 0 1 12 5Zm0 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm-6.93 0H9a3 3 0 0 0 2 2.83V19a7 7 0 0 1-5.93-6Zm7.93 6v-3.17A3 3 0 0 0 15 13h3.93A7 7 0 0 1 13 19Z"/></svg>
+    </button>
+    <button class="nav-item" data-view="vehicles" title="车辆" aria-label="车辆">
+      <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 11 6.7 6.8A3 3 0 0 1 9.5 5h5a3 3 0 0 1 2.8 1.8L19 11h1a2 2 0 0 1 2 2v4h-2a3 3 0 0 1-6 0H10a3 3 0 0 1-6 0H2v-4a2 2 0 0 1 2-2h1Zm2.2 0h9.6l-1.35-3.38A1 1 0 0 0 14.5 7h-5a1 1 0 0 0-.95.62L7.2 11ZM7 18a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm10 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/></svg>
+    </button>
+    <button class="nav-item warning" data-view="alerts" title="预警" aria-label="预警">
+      <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2 1.7 20h20.6L12 2Zm1 15h-2v-2h2v2Zm0-4h-2V8h2v5Z"/></svg>
+    </button>
+    <button class="nav-item" data-view="logs" title="日志" aria-label="日志">
+      <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 3h14a1 1 0 0 1 1 1v17l-3-2-2 2-3-2-3 2-2-2-3 2V4a1 1 0 0 1 1-1Zm3 5h8V6H8v2Zm0 4h8v-2H8v2Zm0 4h6v-2H8v2Z"/></svg>
+    </button>
+    <div class="rail-divider"></div>
+    <div class="rail-state" title="Mock 服务正常"></div>
+  </nav>
+
+  <aside class="work-panel">
+    <header class="panel-head">
+      <div class="eyeline">
+        <span id="eyeline-text">订单池 · 外部订单自动传入</span>
+        <span class="sync-pill" id="sync-pill">Mock API</span>
+      </div>
+      <h1 class="panel-title" id="panel-title">订单池</h1>
+      <p class="panel-subtitle" id="panel-subtitle">订单自动传入、入库状态在此集中展示。</p>
+      <div class="kpi-row" id="kpi-row"></div>
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-object="orders">订单</button>
+        <button class="tab" data-object="drivers">司机</button>
+        <button class="tab" data-object="alerts">预警</button>
+        <button class="tab" data-object="vehicles">车辆</button>
+      </div>
+      <div class="control-grid">
+        <input id="search-input" class="search" placeholder="搜索订单、司机、车牌、门店">
+        <select id="search-filter" class="select" aria-label="搜索范围">
+          <option value="all">全部</option>
+          <option value="orders">订单</option>
+          <option value="drivers">司机</option>
+          <option value="plates">车牌</option>
+          <option value="stores">门店</option>
+        </select>
+      </div>
+      <div class="filter-row">
+        <label class="filter-field">
+          <span>时间筛选</span>
+          <select id="time-filter" class="select" aria-label="时间筛选">
+            <option value="all" selected>全部</option>
+            <option value="2">2小时</option>
+            <option value="4">4小时</option>
+            <option value="6">6小时</option>
+          </select>
+        </label>
+        <label class="filter-field">
+          <span>订单状态</span>
+          <select id="status-filter" class="select" aria-label="订单状态">
+            <option value="all" selected>全部</option>
+            <option value="待取车">待取车</option>
+            <option value="待还车">待还车</option>
+          </select>
+        </label>
+      </div>
+    </header>
+    <main class="panel-body">
+      <div class="list-scroll">
+        <div id="list" class="section-stack"></div>
+      </div>
+      <div id="pager" class="pager"></div>
+    </main>
+  </aside>
+
+  <main class="map-screen" id="right-screen">
+    <section class="map-topbar">
+      <div class="top-title">
+        <strong id="right-title">上海调度地图</strong>
+        <span id="map-caption">订单、司机、门店、车辆点位联动展示</span>
+      </div>
+      <div class="field-grid">
+        <div class="field"><span id="right-field-a-label">地图接口</span><strong id="right-field-a">GET /api/map</strong></div>
+        <div class="field"><span id="right-field-b-label">订单自动传入</span><strong id="right-field-b">POST /api/orders/ingest</strong></div>
+        <div class="field"><span id="right-field-c-label">车辆信息传入</span><strong id="right-field-c">POST /api/vehicles/ingest</strong></div>
+      </div>
+    </section>
+
+    <section class="info-workspace" id="info-workspace"></section>
+
+    <section class="map-wrap" id="map-area">
+      <canvas id="map"></canvas>
+      <div class="map-actions">
+        <button class="map-action" id="refresh-points">刷新点位</button>
+      </div>
+      <div class="map-legend">
+        <span class="legend-item"><i class="legend-dot" style="background: var(--warning)"></i>订单</span>
+        <span class="legend-item"><i class="legend-dot" style="background: var(--info)"></i>车辆</span>
+        <span class="legend-item"><i class="legend-dot" style="background: var(--accent)"></i>门店</span>
+        <span class="legend-item"><i class="legend-dot" style="background: var(--success)"></i>司机</span>
+        <span class="legend-item"><i class="legend-dot" style="background: var(--danger)"></i>预警</span>
+      </div>
+    </section>
+
+    <section class="bottom-dock">
+      <article class="detail-card" id="detail-panel"></article>
+      <article class="recommend-card" id="recommend-panel"></article>
+    </section>
+  </main>
+</div>
+</div>
+<div class="toast-stack" id="toast-stack"></div>
+
+<script>
+const API_ENDPOINTS = {
+  orderIngest: "/api/orders/ingest",
+  orders: "/api/orders",
+  geocode: "/api/orders/:id/geocode-output",
+  map: "/api/map",
+  route: "/api/map/route?orderId=",
+  recommend: "/api/dispatch/recommend",
+  confirm: "/api/dispatch/confirm",
+  drivers: "/api/drivers",
+  driverWorkOrders: "/api/drivers/:id/work-orders",
+  vehiclesIngest: "/api/vehicles/ingest",
+  vehicles: "/api/vehicles",
+  logs: "/api/logs",
+  alerts: "/api/alerts?sort=thresholdExceededDuration"
+};
+
+const stores = [
+  { id: "SH-HQ", name: "上海虹桥门店", district: "闵行", lat: 0.38, lng: 0.25 },
+  { id: "SH-PD", name: "浦东张江门店", district: "浦东", lat: 0.45, lng: 0.70 },
+  { id: "SH-XH", name: "徐汇滨江门店", district: "徐汇", lat: 0.64, lng: 0.42 }
+];
+
+const drivers = [
+  { id: "DRV-021", name: "李强", status: "S1", statusText: "门店空闲", vehicleId: "VEH-沪A73K21", store: "上海虹桥门店", lat: 0.33, lng: 0.29, eta: 18, load: 2, currentOrderId: "D3832" },
+  { id: "DRV-037", name: "周敏", status: "S2", statusText: "返程空闲", vehicleId: "VEH-沪B91M08", store: "徐汇滨江门店", lat: 0.59, lng: 0.39, eta: 27, load: 1, currentOrderId: "D3833" },
+  { id: "DRV-052", name: "王磊", status: "S3", statusText: "门店忙碌", vehicleId: "VEH-沪D62Q19", store: "浦东张江门店", lat: 0.50, lng: 0.66, eta: 34, load: 3, currentOrderId: "D3835" },
+  { id: "DRV-066", name: "赵倩", status: "S4", statusText: "订单忙碌", vehicleId: "VEH-沪F20C88", store: "上海虹桥门店", lat: 0.30, lng: 0.46, eta: 49, load: 4, currentOrderId: "D3836" },
+  { id: "DRV-088", name: "陈晨", status: "OFFLINE", statusText: "离线", vehicleId: "VEH-沪C18L56", store: "浦东张江门店", lat: 0.54, lng: 0.78, eta: 999, load: 0, currentOrderId: "" },
+  { id: "DRV-093", name: "孙浩", status: "UNAVAILABLE", statusText: "暂不可用", vehicleId: "VEH-沪E76P03", store: "徐汇滨江门店", lat: 0.70, lng: 0.48, eta: 999, load: 0, currentOrderId: "" }
+];
+
+const vehicles = [
+  { id: "VEH-沪A73K21", plate: "沪A·73K21", type: "别克 GL8", status: "可调度", store: "上海虹桥门店", lat: 0.36, lng: 0.31, gpsAt: "09:42", gpsStatus: "在线", dispatchable: true, currentOrderId: "D3832", locked: false, source: "GPS mock", monthCompleted: 42, monthRevenue: "48600元", currentLocation: "虹桥T2停车楼" },
+  { id: "VEH-沪B91M08", plate: "沪B·91M08", type: "大众 朗逸", status: "待还车", store: "徐汇滨江门店", lat: 0.62, lng: 0.44, gpsAt: "09:40", gpsStatus: "在线", dispatchable: true, currentOrderId: "D3833", locked: true, source: "GPS mock", monthCompleted: 37, monthRevenue: "39200元", currentLocation: "上海南站" },
+  { id: "VEH-沪C18L56", plate: "沪C·18L56", type: "特斯拉 Model 3", status: "GPS 离线", store: "浦东张江门店", lat: 0.55, lng: 0.74, gpsAt: "08:58", gpsStatus: "离线", dispatchable: false, currentOrderId: "", locked: false, source: "GPS mock", monthCompleted: 29, monthRevenue: "52100元", currentLocation: "张江高科地铁站" },
+  { id: "VEH-沪D62Q19", plate: "沪D·62Q19", type: "丰田 凯美瑞", status: "补能中", store: "浦东张江门店", lat: 0.48, lng: 0.63, gpsAt: "09:38", gpsStatus: "在线", dispatchable: true, currentOrderId: "D3835", locked: false, source: "GPS mock", monthCompleted: 34, monthRevenue: "36800元", currentLocation: "世纪公园" },
+  { id: "VEH-沪F20C88", plate: "沪F·20C88", type: "奥迪 A4L", status: "清洁中", store: "上海虹桥门店", lat: 0.28, lng: 0.50, gpsAt: "09:37", gpsStatus: "在线", dispatchable: true, currentOrderId: "D3836", locked: true, source: "GPS mock", monthCompleted: 31, monthRevenue: "44700元", currentLocation: "虹桥天地" }
+];
+
+const orders = [
+  { id: "D3832", type: "租车", status: "待取车", store: "上海虹桥门店", plate: "沪A·73K21", driverId: "DRV-021", driver: "李强", from: "虹桥T2停车楼", to: "静安嘉里中心", pickupAddress: "上海市闵行区虹桥T2停车楼", returnAddress: "上海市静安区南京西路1515号", start: "10:00", end: "12:00", windowHours: 2, lat: 0.34, lng: 0.34, routeTo: { lat: 0.56, lng: 0.36 }, progress: "清洁中", locked: false, insertedAt: "09:21:08", source: "订单自动传入", traceId: "trc-sh-3832", geoStatus: "SUCCESS", pickupLat: "31.1942", pickupLng: "121.3268", returnLat: "31.2264", returnLng: "121.4592", geoConfidence: "0.93" },
+  { id: "D3833", type: "还车", status: "待还车", store: "徐汇滨江门店", plate: "沪B·91M08", driverId: "DRV-037", driver: "周敏", from: "徐汇滨江门店", to: "上海南站", pickupAddress: "上海市徐汇区龙腾大道", returnAddress: "上海市徐汇区沪闵路9001号", start: "10:30", end: "13:30", windowHours: 4, lat: 0.63, lng: 0.41, routeTo: { lat: 0.72, lng: 0.36 }, progress: "已整备", locked: true, insertedAt: "09:25:19", source: "订单自动传入", traceId: "trc-sh-3833", geoStatus: "SUCCESS", pickupLat: "31.1731", pickupLng: "121.4529", returnLat: "31.1530", returnLng: "121.4301", geoConfidence: "0.91" },
+  { id: "D3834", type: "租车", status: "待取车", store: "浦东张江门店", plate: "沪C·18L56", driverId: "", driver: "", from: "张江高科地铁站", to: "陆家嘴中心", pickupAddress: "上海市浦东新区张江高科地铁站", returnAddress: "上海市浦东新区陆家嘴环路", start: "11:00", end: "13:00", windowHours: 2, lat: 0.48, lng: 0.72, routeTo: { lat: 0.41, lng: 0.60 }, progress: "补能中", locked: false, insertedAt: "09:31:44", source: "订单自动传入", traceId: "trc-sh-3834", geoStatus: "REVIEW", pickupLat: "31.2045", pickupLng: "121.5989", returnLat: "31.2396", returnLng: "121.4998", geoConfidence: "0.78" },
+  { id: "D3835", type: "调车", status: "待取车", store: "浦东张江门店", plate: "沪D·62Q19", driverId: "DRV-052", driver: "王磊", from: "世纪公园", to: "浦东机场T2", pickupAddress: "上海市浦东新区锦绣路1001号", returnAddress: "上海市浦东新区浦东机场T2", start: "13:00", end: "16:00", windowHours: 6, lat: 0.44, lng: 0.61, routeTo: { lat: 0.22, lng: 0.84 }, progress: "补能中", locked: false, insertedAt: "09:33:26", source: "订单自动传入", traceId: "trc-sh-3835", geoStatus: "SUCCESS", pickupLat: "31.2160", pickupLng: "121.5514", returnLat: "31.1443", returnLng: "121.8083", geoConfidence: "0.95" },
+  { id: "D3836", type: "租车", status: "待还车", store: "上海虹桥门店", plate: "沪F·20C88", driverId: "DRV-066", driver: "赵倩", from: "虹桥天地", to: "古北SOHO", pickupAddress: "上海市闵行区申长路688号", returnAddress: "上海市长宁区红宝石路188号", start: "12:00", end: "17:00", windowHours: 6, lat: 0.30, lng: 0.40, routeTo: { lat: 0.42, lng: 0.43 }, progress: "清洁中", locked: true, insertedAt: "09:36:01", source: "订单自动传入", traceId: "trc-sh-3836", geoStatus: "SUCCESS", pickupLat: "31.1947", pickupLng: "121.3168", returnLat: "31.2035", returnLng: "121.4016", geoConfidence: "0.90" },
+  { id: "D3837", type: "还车", status: "已完成", store: "徐汇滨江门店", plate: "沪E·76P03", driverId: "", driver: "", from: "徐家汇港汇", to: "徐汇滨江门店", pickupAddress: "上海市徐汇区虹桥路1号", returnAddress: "上海市徐汇区龙腾大道", start: "08:00", end: "09:40", windowHours: 2, lat: 0.67, lng: 0.38, routeTo: { lat: 0.64, lng: 0.42 }, progress: "已整备", locked: false, insertedAt: "08:03:51", source: "订单自动传入", traceId: "trc-sh-3837", geoStatus: "SUCCESS", pickupLat: "31.1938", pickupLng: "121.4375", returnLat: "31.1731", returnLng: "121.4529", geoConfidence: "0.96" }
+];
+
+const extraMockOrders = Array.from({ length: 20 }, (_, index) => {
+  const n = 3838 + index;
+  const statusList = ["待取车", "待还车", "已完成"];
+  const storeList = ["上海虹桥门店", "浦东张江门店", "徐汇滨江门店"];
+  const fromList = ["长宁来福士", "浦东软件园", "人民广场", "五角场合生汇", "上海西站", "前滩太古里", "莘庄龙之梦", "北外滩来福士"];
+  const toList = ["虹桥天地", "张江高科地铁站", "静安寺", "徐汇滨江门店", "陆家嘴中心", "上海南站", "世纪公园", "虹桥T2停车楼"];
+  const plateLetters = "GHJKLMNPQRSTUVWXYZ";
+  const status = statusList[index % statusList.length];
+  const store = storeList[index % storeList.length];
+  const driver = drivers[index % drivers.length];
+  const assigned = status !== "已完成" && !["OFFLINE", "UNAVAILABLE"].includes(driver.status) && index % 4 !== 0;
+  const startHour = 9 + (index % 9);
+  const windowHours = [2, 4, 6][index % 3];
+  const routeLat = 0.24 + ((index * 0.071) % 0.58);
+  const routeLng = 0.22 + ((index * 0.083) % 0.58);
+  return {
+    id: "D" + n,
+    type: ["租车", "还车", "调车"][index % 3],
+    status,
+    store,
+    plate: `沪${plateLetters[index % plateLetters.length]}·${(82 + index).toString().padStart(2, "0")}X${(31 + index).toString().padStart(2, "0")}`,
+    driverId: assigned ? driver.id : "",
+    driver: assigned ? driver.name : "",
+    from: fromList[index % fromList.length],
+    to: toList[(index + 3) % toList.length],
+    pickupAddress: `上海市${["长宁区", "浦东新区", "黄浦区", "杨浦区", "普陀区", "闵行区"][index % 6]}${fromList[index % fromList.length]}`,
+    returnAddress: `上海市${["闵行区", "浦东新区", "静安区", "徐汇区", "浦东新区", "徐汇区"][index % 6]}${toList[(index + 3) % toList.length]}`,
+    start: `${String(startHour).padStart(2, "0")}:00`,
+    end: `${String(startHour + windowHours).padStart(2, "0")}:00`,
+    windowHours,
+    lat: 0.20 + ((index * 0.047) % 0.62),
+    lng: 0.18 + ((index * 0.059) % 0.64),
+    routeTo: { lat: routeLat, lng: routeLng },
+    progress: ["清洁中", "补能中", "已整备"][index % 3],
+    locked: index % 5 === 0,
+    insertedAt: `${String(9 + Math.floor((42 + index) / 60)).padStart(2, "0")}:${String((42 + index) % 60).padStart(2, "0")}:${String((10 + index) % 60).padStart(2, "0")}`,
+    source: "订单自动传入",
+    traceId: `trc-sh-${n}`,
+    geoStatus: index % 7 === 0 ? "REVIEW" : "SUCCESS",
+    pickupLat: (31.1600 + index * 0.0037).toFixed(4),
+    pickupLng: (121.3200 + index * 0.0081).toFixed(4),
+    returnLat: (31.1800 + index * 0.0029).toFixed(4),
+    returnLng: (121.3900 + index * 0.0068).toFixed(4),
+    geoConfidence: (index % 7 === 0 ? 0.76 : 0.88 + (index % 8) * 0.01).toFixed(2)
+  };
+});
+orders.push(...extraMockOrders);
+
+const driverWorkOrders = {
+  "DRV-021": { prev: "D3825 已完成 08:40", current: "D3832 清洁中", next: "D3840 12:30 待取车" },
+  "DRV-037": { prev: "D3828 已完成 09:10", current: "D3833 已整备", next: "D3842 14:00 待还车" },
+  "DRV-052": { prev: "D3830 已完成 09:25", current: "D3835 补能中", next: "D3848 16:10 待取车" },
+  "DRV-066": { prev: "D3829 已完成 09:05", current: "D3836 清洁中", next: "D3843 17:30 待还车" },
+  "DRV-088": { prev: "无", current: "离线", next: "待同步" },
+  "DRV-093": { prev: "无", current: "暂不可用", next: "待恢复" }
+};
+
+const alerts = [
+  { id: "AL-007", type: "GPS 离线", target: "沪C·18L56", refKind: "vehicles", refId: "VEH-沪C18L56", thresholdMinutes: 30, actualMinutes: 74, text: "车辆 GPS 离线超阈值" },
+  { id: "AL-004", type: "未接单超时", target: "D3834", refKind: "orders", refId: "D3834", thresholdMinutes: 15, actualMinutes: 48, text: "订单 D3834 未分配司机" },
+  { id: "AL-011", type: "ETA 超限", target: "D3835", refKind: "orders", refId: "D3835", thresholdMinutes: 120, actualMinutes: 142, text: "最优候选 ETA 超过 120 分钟" },
+  { id: "AL-012", type: "低油量", target: "沪D·62Q19", refKind: "vehicles", refId: "VEH-沪D62Q19", thresholdMinutes: 10, actualMinutes: 25, text: "补能任务持续超过阈值" },
+  { id: "AL-015", type: "地址解析失败", target: "D3834", refKind: "orders", refId: "D3834", thresholdMinutes: 0, actualMinutes: 8, text: "地理编码置信度偏低，需人工复核" }
+].map(item => ({ ...item, exceededMinutes: Math.max(0, item.actualMinutes - item.thresholdMinutes) }));
+
+let operationLogs = [
+  { id: "LOG-901", action: "订单传入", orderId: "D3832", driverId: "-", driverName: "-", licensePlate: "沪A·73K21", operator: "系统", traceId: "trc-sh-3832", result: "已入库并完成地理编码", timestamp: "09:21:08" },
+  { id: "LOG-902", action: "派单", orderId: "D3832", driverId: "DRV-021", driverName: "李强", licensePlate: "沪A·73K21", operator: "运营管理员", traceId: "trc-sh-3832", result: "ASSIGNED", timestamp: "09:22:34" },
+  { id: "LOG-903", action: "改派", orderId: "D3836", driverId: "DRV-066", driverName: "赵倩", licensePlate: "沪F·20C88", operator: "运营管理员", traceId: "trc-sh-3836", result: "记录改派原因并保留原状态", timestamp: "09:39:16" },
+  { id: "LOG-904", action: "车辆同步", orderId: "-", driverId: "-", driverName: "-", licensePlate: "沪C·18L56", operator: "GPS mock", traceId: "trc-veh-1856", result: "GPS_OFFLINE", timestamp: "09:41:02" }
+];
+
+const state = {
+  activeView: "orders",
+  activeObject: "orders",
+  selectedId: "D3832",
+  selectedKind: "orders",
+  selectedDriverId: "DRV-021",
+  search: "",
+  searchFilter: "all",
+  vehicleDetailSearch: "",
+  timeWindow: "all",
+  statusFilter: "all",
+  pageSize: 20,
+  page: 1,
+  flash: 0
+};
+
+const canvas = document.getElementById("map");
+const ctx = canvas.getContext("2d");
+const mapArea = document.getElementById("map-area");
+const rightScreen = document.getElementById("right-screen");
+const infoWorkspace = document.getElementById("info-workspace");
+const listEl = document.getElementById("list");
+const pagerEl = document.getElementById("pager");
+const detailPanel = document.getElementById("detail-panel");
+const recommendPanel = document.getElementById("recommend-panel");
+const searchInput = document.getElementById("search-input");
+const searchFilter = document.getElementById("search-filter");
+let mapW = 0;
+let mapH = 0;
+let infoEl = null;
+let appScale = 1;
+
+function updateViewportScale() {
+  const styles = getComputedStyle(document.documentElement);
+  const frameW = window.innerWidth || document.documentElement.clientWidth || 1488;
+  const frameH = window.innerHeight || document.documentElement.clientHeight || 1000;
+  const railW = parseFloat(styles.getPropertyValue("--rail-w")) || 72;
+  const workPanelW = parseFloat(styles.getPropertyValue("--work-panel-w")) || 420;
+  const minRightPanelW = 900;
+  const designH = 1000;
+  const designW = Math.max(Math.round(designH * (frameW / frameH)), railW + workPanelW + minRightPanelW);
+  document.documentElement.style.setProperty("--design-w", `${designW}px`);
+  document.documentElement.style.setProperty("--design-h", `${designH}px`);
+  document.documentElement.style.setProperty("--right-panel-min-w", `${designW - railW - workPanelW}px`);
+  appScale = Math.min(frameW / designW, frameH / designH);
+  document.documentElement.style.setProperty("--app-scale", appScale.toFixed(5));
+}
+
+function css(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function getOrder(id) { return orders.find(item => item.id === id); }
+function getDriver(id) { return drivers.find(item => item.id === id); }
+function getVehicle(id) { return vehicles.find(item => item.id === id); }
+function getStore(id) { return stores.find(item => item.id === id); }
+function getAlert(id) { return alerts.find(item => item.id === id); }
+function activeOrder() {
+  if (state.selectedKind === "orders") return getOrder(state.selectedId);
+  if (state.selectedKind === "drivers") return orders.find(item => item.driverId === state.selectedId) || getOrder(state.selectedId);
+  if (state.selectedKind === "vehicles") return orders.find(item => "VEH-" + item.plate.replace("·", "") === state.selectedId) || getOrder(state.selectedId);
+  if (state.selectedKind === "alerts") {
+    const alert = getAlert(state.selectedId);
+    return alert && alert.refKind === "orders" ? getOrder(alert.refId) : getOrder("D3832");
+  }
+  return getOrder("D3832");
+}
+
+function matchesText(value) {
+  const text = state.search.trim().toLowerCase();
+  if (!text) return true;
+  return value.toLowerCase().includes(text);
+}
+
+function orderPoolOrders() {
+  return orders.filter(order => order.status !== "已完成");
+}
+
+function filteredOrders() {
+  return orderPoolOrders().filter(order => {
+    const base = [
+      order.id,
+      order.plate,
+      order.store,
+      order.driver || "",
+      order.from,
+      order.to,
+      order.pickupAddress,
+      order.returnAddress
+    ].join(" ");
+    const byFilter =
+      state.searchFilter === "all" ||
+      (state.searchFilter === "orders" && matchesText(order.id + " " + order.type)) ||
+      (state.searchFilter === "drivers" && matchesText(order.driver || "")) ||
+      (state.searchFilter === "plates" && matchesText(order.plate)) ||
+      (state.searchFilter === "stores" && matchesText(order.store));
+    const timeMatch = state.timeWindow === "all" || order.windowHours <= Number(state.timeWindow);
+    const statusMatch = state.statusFilter === "all" || order.status === state.statusFilter;
+    return statusMatch && timeMatch && byFilter && matchesText(base);
+  });
+}
+
+function statusClass(status) {
+  if (status === "待取车") return "pickup";
+  if (status === "待还车") return "return";
+  return "done";
+}
+
+function statusSymbol(status) {
+  if (status === "待取车") return "取";
+  if (status === "待还车") return "还";
+  return "完";
+}
+
+function renderKpis() {
+  const visibleOrders = filteredOrders();
+  const poolOrders = orderPoolOrders();
+  const geocoded = poolOrders.filter(item => item.geoStatus === "SUCCESS").length;
+  const alertCount = alerts.filter(item => item.exceededMinutes > 0).length;
+  const mapKpis = {
+    orders: [
+      ["订单点位", orders.length],
+      ["待取车", orders.filter(item => item.status === "待取车").length],
+      ["待还车", orders.filter(item => item.status === "待还车").length]
+    ],
+    drivers: [
+      ["司机点位", drivers.length],
+      ["可调度司机", drivers.filter(item => !["OFFLINE", "UNAVAILABLE"].includes(item.status)).length],
+      ["离线/不可用", drivers.filter(item => ["OFFLINE", "UNAVAILABLE"].includes(item.status)).length]
+    ],
+    alerts: [
+      ["预警点位", alerts.length],
+      ["超阈值预警", alertCount],
+      ["最长超阈值", Math.max(...alerts.map(item => item.exceededMinutes)) + "m"]
+    ],
+    vehicles: [
+      ["车辆点位", vehicles.length],
+      ["车辆在线", vehicles.filter(item => item.dispatchable).length],
+      ["GPS 离线", vehicles.filter(item => item.status.includes("离线")).length]
+    ]
+  };
+  const viewKpis = {
+    orders: [
+      ["当前筛选订单", visibleOrders.length],
+      ["入库订单", poolOrders.length],
+      ["地理编码待复核", poolOrders.filter(item => item.geoStatus !== "SUCCESS").length]
+    ],
+    map: mapKpis[state.activeObject] || [
+      ["地图点位", orders.length + drivers.length + vehicles.length + stores.length],
+      ["车辆在线", vehicles.filter(item => item.dispatchable).length],
+      ["超阈值预警", alertCount]
+    ],
+    drivers: [
+      ["司机总数", drivers.length],
+      ["可调度司机", drivers.filter(item => !["OFFLINE", "UNAVAILABLE"].includes(item.status)).length],
+      ["离线/不可用", drivers.filter(item => ["OFFLINE", "UNAVAILABLE"].includes(item.status)).length]
+    ],
+    vehicles: [
+      ["车辆总数", vehicles.length],
+      ["可参与调度", vehicles.filter(item => item.dispatchable).length],
+      ["GPS 离线", vehicles.filter(item => item.status.includes("离线")).length]
+    ],
+    alerts: [
+      ["预警总数", alerts.length],
+      ["超阈值预警", alertCount],
+      ["最长超阈值", Math.max(...alerts.map(item => item.exceededMinutes)) + "m"]
+    ],
+    logs: [
+      ["日志条数", operationLogs.length],
+      ["改派记录", operationLogs.filter(item => item.action === "改派").length],
+      ["traceId", new Set(operationLogs.map(item => item.traceId)).size]
+    ]
+  }[state.activeView] || [];
+  document.getElementById("kpi-row").innerHTML = viewKpis
+    .map(([label, value]) => `<div class="kpi"><span>${label}</span><strong>${value}</strong></div>`)
+    .join("");
+}
+
+function setPanelCopy() {
+  const copy = {
+    orders: ["订单池", "订单池 · 外部订单自动传入", "订单自动传入、入库状态在此集中展示。"],
+    map: ["地图看板", "地图 · 四类对象联动", "筛选选择即生效，点位跟随订单、司机、车辆、门店联动。"],
+    drivers: ["司机管理", "司机 · 工单与状态", "点击司机卡片查看工单进度轴、当前订单和订单进展。"],
+    vehicles: ["车辆管理", "车辆 · GPS 与位置同步", "车辆基础信息、GPS 更新时间和是否参与调度在此集中展示。"],
+    alerts: ["预警中心", "预警 · 阈值排序", "预警按超过阈值时长降序排列，越久越靠前。"],
+    logs: ["日志查询", "日志 · traceId", "按订单号、司机、车牌号和操作记录派单、改派等时间戳。"]
+  }[state.activeView];
+  document.getElementById("panel-title").textContent = copy[0];
+  document.getElementById("eyeline-text").textContent = copy[1];
+  document.getElementById("panel-subtitle").textContent = copy[2];
+}
+
+function setRightHeader(title, caption, fields) {
+  document.getElementById("right-title").textContent = title;
+  document.getElementById("map-caption").textContent = caption;
+  document.getElementById("right-field-a-label").textContent = fields[0][0];
+  document.getElementById("right-field-a").textContent = fields[0][1];
+  document.getElementById("right-field-b-label").textContent = fields[1][0];
+  document.getElementById("right-field-b").textContent = fields[1][1];
+  document.getElementById("right-field-c-label").textContent = fields[2][0];
+  document.getElementById("right-field-c").textContent = fields[2][1];
+}
+
+function renderRightSurface() {
+  const isMap = state.activeView === "map";
+  rightScreen.classList.toggle("is-info-view", !isMap);
+  if (isMap) {
+    setRightHeader("地图看板", "订单、司机、门店、车辆点位联动展示", [
+      ["地图接口", "GET /api/map"],
+      ["路径规划", "GET /api/map/route"],
+      ["GPS mock", "GET /api/adapters/gps/mock"]
+    ]);
+    infoWorkspace.innerHTML = "";
+    resizeMap();
+    renderDetail();
+    renderRecommendations();
+    return;
+  }
+  closeInfo();
+  const header = {
+    orders: ["订单池信息", "订单自动传入与入库状态集中展示", [["订单池", "GET /api/orders"], ["自动传入", "POST /api/orders/ingest"], ["订单详情", "GET /api/orders/:id"]]],
+    drivers: ["司机管理信息", "司机状态、工单进度轴和当前订单进展", [["司机列表", "GET /api/drivers"], ["司机工单", "GET /api/drivers/:id/work-orders"], ["调度参与", "S1/S2/S3/S4"]]],
+    vehicles: ["车辆管理信息", "车辆自动传入、GPS 和是否参与调度", [["车辆列表", "GET /api/vehicles"], ["车辆传入", "POST /api/vehicles/ingest"], ["GPS mock", "GET /api/adapters/gps/mock"]]],
+    alerts: ["预警信息", "按超过阈值时长排序，越久越靠前", [["预警查询", API_ENDPOINTS.alerts], ["排序字段", "exceededMinutes"], ["处置", "仅记录日志"]]],
+    logs: ["日志查询信息", "按订单号、司机、车牌号和操作追踪时间戳", [["日志查询", "GET /api/logs"], ["traceId", "X-Trace-Id"], ["范围", "派单/改派/车辆同步"]]]
+  }[state.activeView] || ["业务信息", "当前模块信息", [["接口", "-"], ["状态", "-"], ["来源", "mock"]]];
+  setRightHeader(header[0], header[1], header[2]);
+  renderInfoWorkspace();
+}
+
+function renderInfoWorkspace() {
+  if (state.activeView === "orders") return renderOrdersWorkspace();
+  if (state.activeView === "drivers") return renderDriversWorkspace();
+  if (state.activeView === "vehicles") return renderVehiclesWorkspace();
+  if (state.activeView === "alerts") return renderAlertsWorkspace();
+  if (state.activeView === "logs") return renderLogsWorkspace();
+  infoWorkspace.innerHTML = "";
+}
+
+function renderOrdersWorkspace() {
+  const visible = filteredOrders();
+  infoWorkspace.innerHTML = `
+    <div class="workspace-stack">
+      <section class="wide-card">
+        <h3>订单明细</h3>
+        <div class="mini-sub">每个订单占一行，展示当前订单池筛选结果。</div>
+        <table class="data-table order-detail-table">
+          <thead>
+            <tr>
+              <th>订单号</th>
+              <th>类型</th>
+              <th>订单状态</th>
+              <th>车牌号</th>
+              <th>门店</th>
+              <th>当前司机</th>
+              <th>用车时间段</th>
+              <th>取车点</th>
+              <th>还车点</th>
+              <th>取车地址</th>
+              <th>还车地址</th>
+              <th>是否锁单</th>
+              <th>入库时间</th>
+              <th>订单来源</th>
+              <th>traceId</th>
+              <th>订单进展</th>
+            </tr>
+          </thead>
+          <tbody>${visible.map(order => `
+            <tr class="${state.selectedId === order.id ? "active" : ""}" data-kind="orders" data-id="${order.id}">
+              <td title="${order.id}">${order.id}</td>
+              <td title="${order.type}">${order.type}</td>
+              <td title="${order.status}">${order.status}</td>
+              <td title="${order.plate}">${order.plate}</td>
+              <td title="${order.store}">${order.store}</td>
+              <td title="${order.driver || "未分配"}">${order.driver || "未分配"}</td>
+              <td title="${order.start}-${order.end}">${order.start}-${order.end}</td>
+              <td title="${order.from}">${order.from}</td>
+              <td title="${order.to}">${order.to}</td>
+              <td title="${order.pickupAddress}">${order.pickupAddress}</td>
+              <td title="${order.returnAddress}">${order.returnAddress}</td>
+              <td title="${order.locked ? "是" : "否"}">${order.locked ? "是" : "否"}</td>
+              <td title="${order.insertedAt}">${order.insertedAt}</td>
+              <td title="${order.source}">${order.source}</td>
+              <td title="${order.traceId}">${order.traceId}</td>
+              <td title="${order.progress}">${order.progress}</td>
+            </tr>`).join("")}</tbody>
+        </table>
+      </section>
+    </div>`;
+}
+
+function driverEstimateLabel(driver, work) {
+  const order = driver.currentOrderId ? getOrder(driver.currentOrderId) : null;
+  if (order) return order.end;
+  const nextTime = String(work.next || "").match(/\d{1,2}:\d{2}/);
+  if (nextTime) return nextTime[0];
+  if (driver.eta !== 999) return `${driver.eta}m`;
+  return driver.status === "OFFLINE" ? "待同步" : "待恢复";
+}
+
+function renderDriverTimelineRow(driver) {
+  const work = driverWorkOrders[driver.id] || { prev: "无", current: "无", next: "待同步" };
+  const inactive = ["OFFLINE", "UNAVAILABLE"].includes(driver.status);
+  const selected = state.selectedId === driver.id || state.selectedDriverId === driver.id;
+  const estimate = driverEstimateLabel(driver, work);
+  return `
+    <div class="driver-timeline-row ${selected ? "active" : ""}" data-kind="drivers" data-id="${driver.id}">
+      <div>
+        <div class="driver-name">${driver.name} · ${driver.statusText}</div>
+        <div class="driver-meta">${driver.vehicleId.replace("VEH-", "")} · ${driver.store} · 负载 ${driver.load}</div>
+      </div>
+      <div class="timeline-track">
+        <div class="timeline-step ${work.prev === "无" ? "offline" : "done"}">
+          <span class="timeline-dot"></span>
+          <span class="timeline-label" title="${work.prev}">${work.prev}</span>
+        </div>
+        <div class="timeline-step ${inactive ? "offline" : "current"}">
+          <span class="timeline-dot"></span>
+          <span class="timeline-label" title="${work.current}">${work.current}</span>
+        </div>
+        <div class="timeline-step ${inactive ? "offline" : "next"}">
+          <span class="timeline-dot"></span>
+          <span class="timeline-label" title="${work.next}">${work.next}</span>
+        </div>
+      </div>
+      <div class="timeline-eta">
+        <span>预计完成</span>
+        <strong>${estimate}</strong>
+      </div>
+    </div>`;
+}
+
+function renderDriversWorkspace() {
+  const visibleDrivers = drivers.filter(driver => matchesText([driver.name, driver.statusText, driver.vehicleId, driver.store].join(" ")));
+  infoWorkspace.innerHTML = `
+    <div class="workspace-stack">
+      <section class="wide-card">
+        <h3>司机工单进度轴</h3>
+        <div class="mini-sub">每名司机一行，展示前序、当前与后续工单，右侧为预计完成时间节点。</div>
+        <div class="driver-timeline-list">
+          ${visibleDrivers.map(renderDriverTimelineRow).join("")}
+        </div>
+      </section>
+    </div>`;
+}
+
+function matchesVehicleDetailSearch(vehicle) {
+  const text = state.vehicleDetailSearch.trim().toLowerCase();
+  if (!text) return true;
+  return [vehicle.plate, vehicle.type, vehicle.store, vehicle.gpsStatus]
+    .join(" ")
+    .toLowerCase()
+    .includes(text);
+}
+
+function renderVehicleDetailRows() {
+  const visibleVehicles = vehicles
+    .filter(vehicle => matchesText([vehicle.plate, vehicle.type, vehicle.status, vehicle.store, vehicle.currentOrderId, vehicle.currentLocation].join(" ")))
+    .filter(matchesVehicleDetailSearch);
+  if (!visibleVehicles.length) {
+    return `<tr><td colspan="12" title="暂无匹配车辆">暂无匹配车辆</td></tr>`;
+  }
+  return visibleVehicles.map(vehicle => `
+    <tr class="${state.selectedId === vehicle.id ? "active" : ""}" data-kind="vehicles" data-id="${vehicle.id}">
+      <td title="${vehicle.plate}">${vehicle.plate}</td>
+      <td title="${vehicle.type}">${vehicle.type}</td>
+      <td title="${vehicle.store}">${vehicle.store}</td>
+      <td title="${vehicle.status}">${vehicle.status}</td>
+      <td title="${vehicle.gpsStatus}">${vehicle.gpsStatus}</td>
+      <td title="${vehicle.gpsAt}">${vehicle.gpsAt}</td>
+      <td title="${vehicle.currentOrderId || "无"}">${vehicle.currentOrderId || "无"}</td>
+      <td title="${vehicle.monthCompleted} 单">${vehicle.monthCompleted} 单</td>
+      <td title="${vehicle.monthRevenue}">${vehicle.monthRevenue}</td>
+      <td title="${vehicle.currentLocation}">${vehicle.currentLocation}</td>
+      <td title="${vehicle.dispatchable ? "是" : "否"}">${vehicle.dispatchable ? "是" : "否"}</td>
+      <td title="${vehicle.locked ? "是" : "否"}">${vehicle.locked ? "是" : "否"}</td>
+    </tr>`).join("");
+}
+
+function renderVehiclesWorkspace() {
+  infoWorkspace.innerHTML = `
+    <div class="workspace-stack">
+      <section class="wide-card">
+        <h3>车辆明细</h3>
+        <div class="mini-sub">每辆车占一行，车辆 API 数据用于联动车辆管理与调度判断。</div>
+        <div class="workspace-filter-bar">
+          <input class="search" id="vehicle-detail-search" value="${state.vehicleDetailSearch}" placeholder="搜索车牌号、车型、门店、GPS 状态" />
+          <span class="workspace-filter-hint">输入即筛选</span>
+        </div>
+        <table class="data-table vehicle-detail-table">
+          <thead>
+            <tr>
+              <th>车牌号</th>
+              <th>车型</th>
+              <th>当前所属门店</th>
+              <th>车辆状态</th>
+              <th>GPS 状态</th>
+              <th>GPS 更新时间</th>
+              <th>当前订单</th>
+              <th>本月完单</th>
+              <th>本月营收</th>
+              <th>当前位置</th>
+              <th>参与调度</th>
+              <th>锁单</th>
+            </tr>
+          </thead>
+          <tbody id="vehicle-detail-body">${renderVehicleDetailRows()}</tbody>
+        </table>
+      </section>
+    </div>`;
+}
+
+function renderAlertsWorkspace() {
+  const sorted = alerts.slice().sort((a, b) => b.exceededMinutes - a.exceededMinutes);
+  infoWorkspace.innerHTML = `
+    <div class="workspace-stack">
+      <section class="wide-card">
+        <h3>预警排序</h3>
+        <div class="mini-sub">不按类型分组，统一按超过阈值时长降序排列。</div>
+        <table class="data-table">
+          <thead><tr><th>预警</th><th>对象</th><th>阈值</th><th>已持续</th><th>超阈值</th></tr></thead>
+          <tbody>${sorted.map(item => `<tr><td>${item.type}</td><td>${item.target}</td><td>${item.thresholdMinutes}m</td><td>${item.actualMinutes}m</td><td>${item.exceededMinutes}m</td></tr>`).join("")}</tbody>
+        </table>
+      </section>
+    </div>`;
+}
+
+function renderLogsWorkspace() {
+  infoWorkspace.innerHTML = `
+    <div class="workspace-stack">
+      <section class="wide-card">
+        <h3>操作日志</h3>
+        <div class="mini-sub">改派、派单、车辆同步等操作仅在日志中记录时间戳和 traceId。</div>
+        <table class="data-table">
+          <thead><tr><th>时间</th><th>动作</th><th>订单</th><th>司机</th><th>车牌</th><th>结果</th></tr></thead>
+          <tbody>${operationLogs.map(item => `<tr><td>${item.timestamp}</td><td>${item.action}</td><td>${item.orderId}</td><td>${item.driverName}</td><td>${item.licensePlate}</td><td>${item.result}</td></tr>`).join("")}</tbody>
+        </table>
+      </section>
+    </div>`;
+}
+
+function renderList() {
+  renderKpis();
+  setPanelCopy();
+  listEl.innerHTML = "";
+  pagerEl.innerHTML = "";
+  const listView = state.activeView === "map" ? state.activeObject : state.activeView;
+  if (listView === "orders") renderOrders();
+  else if (listView === "drivers") renderDrivers();
+  else if (listView === "vehicles") renderVehicles();
+  else if (listView === "alerts") renderAlerts();
+  else if (listView === "logs") renderLogs();
+  renderRightSurface();
+}
+
+function renderOrders() {
+  const data = filteredOrders();
+  const start = (state.page - 1) * state.pageSize;
+  const rows = data.slice(start, start + state.pageSize);
+  const poolOrders = orderPoolOrders();
+  const geocodedCount = poolOrders.filter(item => item.geoStatus === "SUCCESS").length;
+  const reviewCount = poolOrders.length - geocodedCount;
+  listEl.insertAdjacentHTML("beforeend", `
+    <section class="ingest-card">
+      <div class="ingest-top">
+        <div>
+          <div class="mini-title">订单自动传入</div>
+          <div class="mini-sub">已入库 ${poolOrders.length} 单，地理编码成功 ${geocodedCount} 单，需复核 ${reviewCount} 单。</div>
+        </div>
+        <span class="api-code">${API_ENDPOINTS.orderIngest}</span>
+      </div>
+      <div class="field-grid">
+        <div class="field"><span>最近同步</span><strong>09:41:02</strong></div>
+        <div class="field"><span>默认每页</span><strong>20 条</strong></div>
+        <div class="field"><span>来源</span><strong>外部订单 mock</strong></div>
+      </div>
+    </section>`);
+  if (!rows.length) {
+    listEl.insertAdjacentHTML("beforeend", `<section class="ingest-card"><div class="mini-title">暂无匹配订单</div><div class="mini-sub">调整时间、状态或关键词后会自动刷新。</div></section>`);
+  }
+  rows.forEach(order => {
+    listEl.insertAdjacentHTML("beforeend", `
+      <button class="order-card ${state.selectedId === order.id ? "active" : ""}" data-kind="orders" data-id="${order.id}">
+        <div class="card-head">
+          <div class="card-title"><span class="status-icon ${statusClass(order.status)}">${statusSymbol(order.status)}</span><span>${order.id} · ${order.plate}</span></div>
+          <span class="pill">${order.status}</span>
+        </div>
+        <div class="card-meta">
+          <span>${order.start}-${order.end} · ${order.store}</span>
+          <span>${order.from} -> ${order.to}</span>
+          <span>入库 ${order.insertedAt} · ${order.geoStatus} · ${order.traceId}</span>
+        </div>
+        <div class="order-actions">
+          <span class="ghost-button" data-action="log" data-order="${order.id}">查看日志</span>
+          <span class="${order.driver ? "ghost-button" : "action-button"}" data-action="assign" data-order="${order.id}">${order.driver ? "司机" : "派单"}</span>
+        </div>
+      </button>`);
+  });
+  pagerEl.innerHTML = `
+    <span>共 ${data.length} 条，当前显示 ${rows.length} 条</span>
+    <label>每页
+      <select class="select" id="page-size">
+        <option value="20"${state.pageSize === 20 ? " selected" : ""}>20</option>
+        <option value="50"${state.pageSize === 50 ? " selected" : ""}>50</option>
+        <option value="100"${state.pageSize === 100 ? " selected" : ""}>100</option>
+      </select>
+    </label>`;
+  const pageSize = document.getElementById("page-size");
+  if (pageSize) pageSize.addEventListener("change", event => {
+    state.pageSize = Number(event.target.value);
+    state.page = 1;
+    renderList();
+  });
+}
+
+function renderDrivers() {
+  drivers
+    .filter(driver => matchesText([driver.name, driver.statusText, driver.vehicleId, driver.store].join(" ")))
+    .forEach(driver => {
+    const gray = driver.status === "OFFLINE" || driver.status === "UNAVAILABLE";
+    const work = driverWorkOrders[driver.id];
+    listEl.insertAdjacentHTML("beforeend", `
+      <button class="driver-card ${state.selectedId === driver.id ? "active" : ""}" data-kind="drivers" data-id="${driver.id}">
+        <div class="card-head">
+          <div class="card-title"><span class="status-icon">司</span><span>${driver.name} · ${driver.vehicleId.replace("VEH-", "")}</span></div>
+          <span class="pill ${gray ? "gray" : "success"}">${driver.statusText}</span>
+        </div>
+        <div class="card-meta">
+          <span>${driver.store} · ETA ${driver.eta === 999 ? "--" : driver.eta + "m"} · 负载 ${driver.load}</span>
+          <span>参与调度：${gray ? "否" : "是"} · 状态 ${driver.status}</span>
+        </div>
+        ${state.selectedId === driver.id ? `
+          <div class="work-orders">
+            <div class="field-grid">
+              <div class="field"><span>前序工单</span><strong>${work.prev}</strong></div>
+              <div class="field"><span>当前负责</span><strong>${work.current}</strong></div>
+              <div class="field"><span>后续工单</span><strong>${work.next}</strong></div>
+              <div class="field"><span>API</span><strong>/api/drivers/:id/work-orders</strong></div>
+            </div>
+          </div>` : ""}
+      </button>`);
+  });
+}
+
+function renderVehicles() {
+  vehicles
+    .filter(vehicle => matchesText([vehicle.plate, vehicle.type, vehicle.status, vehicle.store, vehicle.currentOrderId].join(" ")))
+    .forEach(vehicle => {
+    listEl.insertAdjacentHTML("beforeend", `
+      <button class="vehicle-card ${state.selectedId === vehicle.id ? "active" : ""}" data-kind="vehicles" data-id="${vehicle.id}">
+        <div class="card-head">
+          <div class="card-title"><span class="status-icon">车</span><span>${vehicle.plate} · ${vehicle.type}</span></div>
+          <span class="pill ${vehicle.dispatchable ? "success" : "gray"}">${vehicle.status}</span>
+        </div>
+        <div class="card-meta">
+          <span>${vehicle.store} · GPS ${vehicle.gpsAt} · ${vehicle.source}</span>
+          <span>参与调度：${vehicle.dispatchable ? "是" : "否"} · 锁单：${vehicle.locked ? "是" : "否"} · 当前订单 ${vehicle.currentOrderId || "无"}</span>
+        </div>
+      </button>`);
+  });
+}
+
+function renderAlerts() {
+  alerts
+    .slice()
+    .filter(alert => matchesText([alert.id, alert.type, alert.target, alert.text].join(" ")))
+    .sort((a, b) => b.exceededMinutes - a.exceededMinutes)
+    .forEach(alert => {
+    listEl.insertAdjacentHTML("beforeend", `
+      <button class="alert-card ${state.selectedId === alert.id ? "active" : ""}" data-kind="alerts" data-id="${alert.id}">
+        <div class="card-head">
+          <div class="card-title"><span class="status-icon">!</span><span>${alert.type} · ${alert.target}</span></div>
+          <span class="pill danger">+${alert.exceededMinutes}m</span>
+        </div>
+        <div class="card-meta">
+          <span>${alert.text}</span>
+          <span>阈值 ${alert.thresholdMinutes}m · 已持续 ${alert.actualMinutes}m · 排序字段 exceededMinutes</span>
+        </div>
+        <div class="order-actions">
+          <span class="ghost-button" data-action="locate-alert" data-alert="${alert.id}">定位点位</span>
+          <span class="danger-button" data-action="manual-alert" data-alert="${alert.id}">转人工处理</span>
+        </div>
+      </button>`);
+  });
+}
+
+function renderLogs() {
+  operationLogs
+    .filter(log => matchesText([log.action, log.orderId, log.driverName, log.licensePlate, log.operator, log.traceId, log.result].join(" ")))
+    .forEach(log => {
+    listEl.insertAdjacentHTML("beforeend", `
+      <button class="log-card ${state.selectedId === log.id ? "active" : ""}" data-kind="logs" data-id="${log.id}">
+        <div class="card-head">
+          <div class="card-title"><span class="status-icon">记</span><span>${log.action} · ${log.orderId}</span></div>
+          <span class="pill">${log.timestamp}</span>
+        </div>
+        <div class="card-meta">
+          <span>司机 ${log.driverName} · 车牌 ${log.licensePlate} · 操作人 ${log.operator}</span>
+          <span>${log.traceId} · ${log.result}</span>
+        </div>
+      </button>`);
+  });
+}
+
+function renderDetail() {
+  const order = activeOrder() || orders[0];
+  const driver = order.driverId ? getDriver(order.driverId) : getDriver(state.selectedDriverId);
+  detailPanel.innerHTML = `
+    <div class="detail-head">
+      <div class="detail-title">${order.id} · ${order.plate}</div>
+      <span class="pill ${order.locked ? "warn" : "success"}">锁单：${order.locked ? "是" : "否"}</span>
+    </div>
+    <div class="detail-grid">
+      <div class="field"><span>状态</span><strong>${order.status}</strong></div>
+      <div class="field"><span>用车时间</span><strong>${order.start}-${order.end}</strong></div>
+      <div class="field"><span>当前司机</span><strong>${driver ? driver.name : "未分配"}</strong></div>
+      <div class="field"><span>订单进展</span><strong>${order.progress}</strong></div>
+      <div class="field"><span>取车地址</span><strong title="${order.pickupAddress}">${order.pickupAddress}</strong></div>
+      <div class="field"><span>还车地址</span><strong title="${order.returnAddress}">${order.returnAddress}</strong></div>
+    </div>
+    <div class="order-actions">
+      <button class="ghost-button" onclick="showRelatedLogs('${order.id}')">查看日志</button>
+      <button class="ghost-button" onclick="showRoute('${order.id}')">查看路径</button>
+      <button class="action-button" onclick="openAssign('${order.id}')">${order.driver ? "司机" : "派单"}</button>
+      <button class="danger-button" onclick="reassignOrder('${order.id}')">改派</button>
+    </div>`;
+}
+
+function candidatePriority(driver) {
+  const map = { S1: 1, S2: 2, S3: 3, S4: 4, OFFLINE: 99, UNAVAILABLE: 99 };
+  return map[driver.status] || 9;
+}
+
+function runDispatchPreview(orderId) {
+  const order = getOrder(orderId) || activeOrder();
+  return drivers
+    .filter(driver => !["OFFLINE", "UNAVAILABLE"].includes(driver.status))
+    .map(driver => ({
+      driver,
+      eta: driver.eta + Math.round(Math.hypot(order.lat - driver.lat, order.lng - driver.lng) * 80),
+      priority: candidatePriority(driver),
+      loadPenalty: driver.load * 8
+    }))
+    .sort((a, b) => (a.priority * 100 + a.eta + a.loadPenalty) - (b.priority * 100 + b.eta + b.loadPenalty))
+    .slice(0, 3);
+}
+
+function renderRecommendations() {
+  const order = activeOrder() || orders[0];
+  const candidates = runDispatchPreview(order.id);
+  const best = candidates[0];
+  const outcome = !best ? ["PENDING", "NO_DRIVER"] : best.eta >= 120 ? ["MANUAL", "ETA_EXCEEDED"] : ["DISPATCHED", ""];
+  recommendPanel.innerHTML = `
+    <div class="detail-head">
+      <div class="detail-title">推荐派单 Top N</div>
+      <span class="pill ${outcome[0] === "DISPATCHED" ? "success" : "warn"}">${outcome[0]}${outcome[1] ? " / " + outcome[1] : ""}</span>
+    </div>
+    <div class="recommend-list">
+      ${candidates.map((item, index) => `
+        <button class="candidate ${state.selectedDriverId === item.driver.id ? "active" : ""}" data-candidate="${item.driver.id}">
+          <strong>#${index + 1} ${item.driver.name}</strong>
+          <div class="candidate-row"><span>优先级</span><b>${item.priority}</b></div>
+          <div class="candidate-row"><span>ETA</span><b>${item.eta}m</b></div>
+          <div class="candidate-row"><span>负载惩罚</span><b>${item.loadPenalty}</b></div>
+          <div class="candidate-row"><span>状态</span><b>${item.driver.statusText}</b></div>
+        </button>`).join("")}
+    </div>`;
+}
+
+function resizeMap() {
+  const dpr = window.devicePixelRatio || 1;
+  mapW = mapArea.clientWidth;
+  mapH = mapArea.clientHeight;
+  canvas.width = Math.max(1, Math.floor(mapW * dpr));
+  canvas.height = Math.max(1, Math.floor(mapH * dpr));
+  canvas.style.width = mapW + "px";
+  canvas.style.height = mapH + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function toScreen(lat, lng) {
+  const pad = Math.min(72, Math.max(38, mapW * 0.06));
+  return {
+    x: pad + lng * (mapW - pad * 2),
+    y: pad + lat * (mapH - pad * 2)
+  };
+}
+
+function markerFocus(kind, id) {
+  if (state.selectedKind === kind && state.selectedId === id) return "selected";
+  if (state.activeObject === kind) return "category";
+  if (state.selectedKind && state.selectedKind !== kind) return "dim";
+  return "normal";
+}
+
+function alphaFor(focus) {
+  if (focus === "dim") return 0.42;
+  if (focus === "category") return 0.86;
+  return 1;
+}
+
+function markerScale(focus) {
+  if (focus === "selected") return 1.22;
+  if (focus === "category") return 1.08;
+  return 1;
+}
+
+function drawDrop(x, y, size, color, focus) {
+  ctx.save();
+  ctx.globalAlpha = alphaFor(focus);
+  ctx.translate(x, y);
+  ctx.scale(markerScale(focus), markerScale(focus));
+  ctx.fillStyle = color;
+  ctx.strokeStyle = css("--surface");
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(0, size);
+  ctx.bezierCurveTo(-size * 1.1, -size * 0.1, -size * 0.62, -size, 0, -size);
+  ctx.bezierCurveTo(size * 0.62, -size, size * 1.1, -size * 0.1, 0, size);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#fff";
+  ctx.font = "800 11px " + css("--font-system");
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("单", 0, -2);
+  ctx.restore();
+}
+
+function drawCar(x, y, size, color, focus) {
+  ctx.save();
+  ctx.globalAlpha = alphaFor(focus);
+  ctx.translate(x, y);
+  ctx.scale(markerScale(focus), markerScale(focus));
+  ctx.fillStyle = color;
+  ctx.strokeStyle = css("--surface");
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.roundRect(-size * 1.2, -size * 0.4, size * 2.4, size * 1.1, 5);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(-size * 0.55, -size * 0.82, size * 1.1, size * 0.42);
+  ctx.fillStyle = css("--ink");
+  ctx.beginPath();
+  ctx.arc(-size * 0.65, size * 0.72, 3, 0, Math.PI * 2);
+  ctx.arc(size * 0.65, size * 0.72, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawHouse(x, y, size, color, focus) {
+  ctx.save();
+  ctx.globalAlpha = alphaFor(focus);
+  ctx.translate(x, y);
+  ctx.scale(markerScale(focus), markerScale(focus));
+  ctx.fillStyle = color;
+  ctx.strokeStyle = css("--surface");
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(0, -size);
+  ctx.lineTo(size, -size * 0.1);
+  ctx.lineTo(size * 0.78, -size * 0.1);
+  ctx.lineTo(size * 0.78, size);
+  ctx.lineTo(-size * 0.78, size);
+  ctx.lineTo(-size * 0.78, -size * 0.1);
+  ctx.lineTo(-size, -size * 0.1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(-3, size * 0.25, 6, size * 0.55);
+  ctx.restore();
+}
+
+function drawWheel(x, y, size, color, focus) {
+  ctx.save();
+  ctx.globalAlpha = alphaFor(focus);
+  ctx.translate(x, y);
+  ctx.scale(markerScale(focus), markerScale(focus));
+  ctx.strokeStyle = color;
+  ctx.fillStyle = css("--surface");
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(0, 0, size, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(0, -size + 4);
+  ctx.moveTo(0, 0);
+  ctx.lineTo(-size + 4, size * 0.45);
+  ctx.moveTo(0, 0);
+  ctx.lineTo(size - 4, size * 0.45);
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(0, 0, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawAlert(x, y, size, color, focus) {
+  ctx.save();
+  ctx.globalAlpha = alphaFor(focus);
+  ctx.translate(x, y);
+  ctx.scale(markerScale(focus), markerScale(focus));
+  ctx.fillStyle = color;
+  ctx.strokeStyle = css("--surface");
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(0, -size);
+  ctx.lineTo(size, size);
+  ctx.lineTo(-size, size);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#fff";
+  ctx.font = "900 14px " + css("--font-system");
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("!", 0, size * 0.2);
+  ctx.restore();
+}
+
+function drawRoute(order) {
+  if (!order) return;
+  const a = toScreen(order.lat, order.lng);
+  const b = toScreen(order.routeTo.lat, order.routeTo.lng);
+  ctx.save();
+  ctx.strokeStyle = css("--accent");
+  ctx.lineWidth = 4;
+  ctx.setLineDash([7, 7]);
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.quadraticCurveTo((a.x + b.x) / 2, Math.min(a.y, b.y) - 56, b.x, b.y);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawMap() {
+  ctx.clearRect(0, 0, mapW, mapH);
+  ctx.fillStyle = css("--map");
+  ctx.fillRect(0, 0, mapW, mapH);
+  ctx.strokeStyle = css("--road");
+  ctx.lineWidth = 2;
+  [
+    [[0.05, 0.26], [0.38, 0.38], [0.90, 0.30]],
+    [[0.12, 0.70], [0.45, 0.55], [0.86, 0.76]],
+    [[0.30, 0.10], [0.42, 0.40], [0.54, 0.86]],
+    [[0.68, 0.12], [0.56, 0.46], [0.28, 0.82]]
+  ].forEach(road => {
+    ctx.beginPath();
+    road.forEach(([lat, lng], index) => {
+      const p = toScreen(lat, lng);
+      if (index === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    });
+    ctx.stroke();
+  });
+  ctx.fillStyle = "rgba(255,255,255,0.28)";
+  for (let y = 0.16; y < 0.90; y += 0.18) {
+    for (let x = 0.12; x < 0.90; x += 0.18) {
+      const p = toScreen(y, x);
+      ctx.fillRect(p.x, p.y, 34, 22);
+    }
+  }
+  drawRoute(activeOrder());
+  stores.forEach(store => {
+    const p = toScreen(store.lat, store.lng);
+    drawHouse(p.x, p.y, 14, css("--accent"), markerFocus("stores", store.id));
+  });
+  orders.forEach(order => {
+    const p = toScreen(order.lat, order.lng);
+    drawDrop(p.x, p.y, 15, order.status === "已完成" ? css("--success") : css("--warning"), markerFocus("orders", order.id));
+  });
+  vehicles.forEach(vehicle => {
+    const p = toScreen(vehicle.lat, vehicle.lng);
+    drawCar(p.x, p.y, 12, vehicle.dispatchable ? css("--info") : css("--muted-line"), markerFocus("vehicles", vehicle.id));
+  });
+  drivers.forEach(driver => {
+    const p = toScreen(driver.lat, driver.lng);
+    const gray = driver.status === "OFFLINE" || driver.status === "UNAVAILABLE";
+    drawWheel(p.x, p.y, 13, gray ? css("--muted-line") : css("--success"), markerFocus("drivers", driver.id));
+  });
+  alerts.forEach(alert => {
+    const ref = alert.refKind === "orders" ? getOrder(alert.refId) : getVehicle(alert.refId);
+    if (!ref) return;
+    const p = toScreen(ref.lat - 0.035, ref.lng + 0.026);
+    drawAlert(p.x, p.y, 11, css("--danger"), markerFocus("alerts", alert.id));
+  });
+  requestAnimationFrame(drawMap);
+}
+
+function findPoint(kind, id) {
+  if (kind === "orders") return getOrder(id);
+  if (kind === "drivers") return getDriver(id);
+  if (kind === "vehicles") return getVehicle(id);
+  if (kind === "stores") return getStore(id);
+  if (kind === "alerts") {
+    const alert = getAlert(id);
+    if (!alert) return null;
+    return alert.refKind === "orders" ? getOrder(alert.refId) : getVehicle(alert.refId);
+  }
+  return null;
+}
+
+function showInfo(kind, id) {
+  closeInfo();
+  const item = findPoint(kind, id);
+  if (!item) return;
+  const p = toScreen(item.lat, item.lng);
+  infoEl = document.createElement("div");
+  infoEl.className = "info-window";
+  infoEl.style.left = Math.min(Math.max(12, p.x + 18), mapW - 330) + "px";
+  infoEl.style.top = Math.min(Math.max(76, p.y - 82), mapH - 260) + "px";
+  if (kind === "orders") {
+    infoEl.innerHTML = `
+      <h4>${item.id} · ${item.plate}</h4>
+      <div class="info-row"><span>路线</span><strong>${item.from} -> ${item.to}</strong></div>
+      <div class="info-row"><span>状态</span><strong>${item.status}</strong></div>
+      <div class="info-row"><span>司机</span><strong>${item.driver || "未分配"}</strong></div>
+      <div class="info-row"><span>进展</span><strong>${item.progress}</strong></div>
+      <div class="info-actions"><button class="ghost-button" onclick="showRelatedLogs('${item.id}')">日志</button><button class="action-button" onclick="openAssign('${item.id}')">${item.driver ? "司机" : "派单"}</button></div>`;
+  } else if (kind === "drivers") {
+    infoEl.innerHTML = `
+      <h4>${item.name} · ${item.statusText}</h4>
+      <div class="info-row"><span>车辆</span><strong>${item.vehicleId.replace("VEH-", "")}</strong></div>
+      <div class="info-row"><span>门店</span><strong>${item.store}</strong></div>
+      <div class="info-row"><span>ETA</span><strong>${item.eta === 999 ? "--" : item.eta + "m"}</strong></div>
+      <div class="info-actions"><button class="ghost-button" onclick="setActiveView('drivers')">司机管理</button></div>`;
+  } else if (kind === "vehicles") {
+    infoEl.innerHTML = `
+      <h4>${item.plate} · ${item.type}</h4>
+      <div class="info-row"><span>状态</span><strong>${item.status}</strong></div>
+      <div class="info-row"><span>GPS</span><strong>${item.gpsAt}</strong></div>
+      <div class="info-row"><span>参与调度</span><strong>${item.dispatchable ? "是" : "否"}</strong></div>
+      <div class="info-actions"><button class="ghost-button" onclick="setActiveView('vehicles')">车辆管理</button></div>`;
+  } else if (kind === "stores") {
+    infoEl.innerHTML = `
+      <h4>${item.name}</h4>
+      <div class="info-row"><span>区域</span><strong>${item.district}</strong></div>
+      <div class="info-row"><span>订单数</span><strong>${orders.filter(order => order.store === item.name).length}</strong></div>
+      <div class="info-row"><span>车辆数</span><strong>${vehicles.filter(vehicle => vehicle.store === item.name).length}</strong></div>
+      <div class="info-actions"><button class="ghost-button" onclick="setActiveView('orders')">查看订单池</button></div>`;
+  } else {
+    const alert = getAlert(id);
+    infoEl.innerHTML = `
+      <h4>${alert.type} · ${alert.target}</h4>
+      <div class="info-row"><span>超阈值</span><strong>${alert.exceededMinutes}m</strong></div>
+      <div class="info-row"><span>说明</span><strong>${alert.text}</strong></div>
+      <div class="info-actions"><button class="danger-button" onclick="manualAlert('${alert.id}')">转人工处理</button></div>`;
+  }
+  mapArea.appendChild(infoEl);
+}
+
+function closeInfo() {
+  if (infoEl) infoEl.remove();
+  infoEl = null;
+}
+
+function pickAt(x, y) {
+  const points = [
+    ...orders.map(item => ({ kind: "orders", id: item.id, lat: item.lat, lng: item.lng })),
+    ...drivers.map(item => ({ kind: "drivers", id: item.id, lat: item.lat, lng: item.lng })),
+    ...vehicles.map(item => ({ kind: "vehicles", id: item.id, lat: item.lat, lng: item.lng })),
+    ...stores.map(item => ({ kind: "stores", id: item.id, lat: item.lat, lng: item.lng }))
+  ];
+  let best = null;
+  let bestDistance = Infinity;
+  points.forEach(item => {
+    const p = toScreen(item.lat, item.lng);
+    const distance = Math.hypot(x - p.x, y - p.y);
+    if (distance < 26 && distance < bestDistance) {
+      best = item;
+      bestDistance = distance;
+    }
+  });
+  return best;
+}
+
+function selectItem(kind, id, openInfo = true) {
+  state.selectedKind = kind;
+  state.selectedId = id;
+  if (["orders", "drivers", "vehicles", "alerts"].includes(kind)) state.activeObject = kind;
+  if (kind === "orders") {
+    const order = getOrder(id);
+    if (order && order.driverId) state.selectedDriverId = order.driverId;
+  }
+  document.querySelectorAll(".tab").forEach(tab => tab.classList.toggle("active", tab.dataset.object === state.activeObject));
+  renderList();
+  if (openInfo && kind !== "logs" && state.activeView === "map") showInfo(kind, id);
+}
+
+function setActiveView(view) {
+  state.activeView = view;
+  if (["orders", "drivers", "vehicles", "alerts"].includes(view)) state.activeObject = view;
+  document.querySelectorAll(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.view === view));
+  document.querySelectorAll(".tab").forEach(tab => tab.classList.toggle("active", tab.dataset.object === state.activeObject));
+  renderList();
+}
+
+function setActiveObject(kind) {
+  state.activeObject = kind;
+  if (state.activeView === "map") {
+    document.querySelectorAll(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.view === "map"));
+    document.querySelectorAll(".tab").forEach(tab => tab.classList.toggle("active", tab.dataset.object === state.activeObject));
+    renderList();
+    return;
+  }
+  setActiveView(kind);
+}
+
+function showRelatedLogs(orderId) {
+  state.activeView = "logs";
+  state.activeObject = "orders";
+  const log = operationLogs.find(item => item.orderId === orderId);
+  if (log) {
+    state.selectedKind = "logs";
+    state.selectedId = log.id;
+  }
+  setActiveView("logs");
+  showToast(`已按订单 ${orderId} 跳转日志。`, "success");
+}
+
+function showRoute(orderId) {
+  setActiveView("map");
+  selectItem("orders", orderId, true);
+  showToast(`已调用 ${API_ENDPOINTS.route}${orderId} mock。`, "success");
+}
+
+function openAssign(orderId) {
+  const candidates = runDispatchPreview(orderId);
+  if (candidates[0]) {
+    state.selectedDriverId = candidates[0].driver.id;
+    showToast(`已选中推荐司机 ${candidates[0].driver.name}，未提交真实派单。`, "success");
+    renderList();
+  }
+}
+
+function reassignOrder(orderId) {
+  const order = getOrder(orderId);
+  if (!order) return;
+  const candidate = runDispatchPreview(orderId).find(item => item.driver.id !== order.driverId);
+  if (!candidate) return;
+  const oldDriver = order.driver || "未分配";
+  order.driverId = candidate.driver.id;
+  order.driver = candidate.driver.name;
+  state.selectedDriverId = candidate.driver.id;
+  operationLogs.unshift({
+    id: "LOG-" + Math.round(900 + Math.random() * 80),
+    action: "改派",
+    orderId: order.id,
+    driverId: candidate.driver.id,
+    driverName: candidate.driver.name,
+    licensePlate: order.plate,
+    operator: "运营管理员",
+    traceId: order.traceId,
+    result: `由 ${oldDriver} 改派为 ${candidate.driver.name}`,
+    timestamp: new Date().toLocaleTimeString("zh-CN", { hour12: false })
+  });
+  renderList();
+  showToast(`已记录改派日志：${oldDriver} -> ${candidate.driver.name}`, "success");
+}
+
+function manualAlert(alertId) {
+  const alert = getAlert(alertId);
+  if (!alert) return;
+  operationLogs.unshift({
+    id: "LOG-" + Math.round(900 + Math.random() * 80),
+    action: "转人工处理",
+    orderId: alert.refKind === "orders" ? alert.refId : "-",
+    driverId: "-",
+    driverName: "-",
+    licensePlate: alert.refKind === "vehicles" ? alert.target : "-",
+    operator: "运营管理员",
+    traceId: "trc-alert-" + alert.id.toLowerCase(),
+    result: "仅记录日志，不改变状态机",
+    timestamp: new Date().toLocaleTimeString("zh-CN", { hour12: false })
+  });
+  showToast("已记录转人工处理日志，不改变订单状态。", "warn");
+}
+
+function showToast(message, type) {
+  const stack = document.getElementById("toast-stack");
+  const toast = document.createElement("div");
+  toast.className = "toast " + (type || "");
+  toast.textContent = message;
+  stack.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transition = "opacity 180ms ease";
+    setTimeout(() => toast.remove(), 220);
+  }, 2500);
+}
+
+document.querySelectorAll(".nav-item").forEach(button => {
+  button.addEventListener("click", () => setActiveView(button.dataset.view));
+});
+document.querySelectorAll(".tab").forEach(tab => {
+  tab.addEventListener("click", () => setActiveObject(tab.dataset.object));
+});
+searchInput.addEventListener("input", event => {
+  state.search = event.target.value;
+  state.page = 1;
+  renderList();
+});
+searchFilter.addEventListener("change", event => {
+  state.searchFilter = event.target.value;
+  state.page = 1;
+  renderList();
+});
+document.getElementById("time-filter").addEventListener("change", event => {
+  state.timeWindow = event.target.value;
+  state.page = 1;
+  renderList();
+});
+document.getElementById("status-filter").addEventListener("change", event => {
+  state.statusFilter = event.target.value;
+  state.page = 1;
+  renderList();
+});
+function handleSelectableClick(event) {
+  const card = event.target.closest("[data-kind][data-id]");
+  if (card) selectItem(card.dataset.kind, card.dataset.id, true);
+}
+
+infoWorkspace.addEventListener("input", event => {
+  if (event.target.id !== "vehicle-detail-search") return;
+  state.vehicleDetailSearch = event.target.value;
+  const body = document.getElementById("vehicle-detail-body");
+  if (body) body.innerHTML = renderVehicleDetailRows();
+});
+
+listEl.addEventListener("click", event => {
+  const action = event.target.closest("[data-action]");
+  if (action) {
+    event.stopPropagation();
+    const orderId = action.dataset.order;
+    const alertId = action.dataset.alert;
+    if (action.dataset.action === "log") showRelatedLogs(orderId);
+    if (action.dataset.action === "assign") openAssign(orderId);
+    if (action.dataset.action === "locate-alert") {
+      setActiveView("map");
+      selectItem("alerts", alertId, true);
+    }
+    if (action.dataset.action === "manual-alert") manualAlert(alertId);
+    return;
+  }
+  handleSelectableClick(event);
+});
+infoWorkspace.addEventListener("click", handleSelectableClick);
+recommendPanel.addEventListener("click", event => {
+  const candidate = event.target.closest("[data-candidate]");
+  if (!candidate) return;
+  state.selectedDriverId = candidate.dataset.candidate;
+  renderRecommendations();
+  showToast(`已选中司机 ${getDriver(state.selectedDriverId).name}，推荐结果自动更新。`, "success");
+});
+document.getElementById("refresh-points").addEventListener("click", () => {
+  state.flash += 1;
+  document.getElementById("map-caption").textContent = `点位已刷新，最近同步 ${new Date().toLocaleTimeString("zh-CN", { hour12: false })}`;
+  showToast(`已调用 ${API_ENDPOINTS.map} mock 刷新点位。`, "success");
+});
+canvas.addEventListener("click", event => {
+  const rect = canvas.getBoundingClientRect();
+  const x = (event.clientX - rect.left) / appScale;
+  const y = (event.clientY - rect.top) / appScale;
+  const item = pickAt(x, y);
+  if (item) selectItem(item.kind, item.id, true);
+  else closeInfo();
+});
+window.addEventListener("resize", () => {
+  updateViewportScale();
+  resizeMap();
+});
+
+updateViewportScale();
+resizeMap();
+renderList();
+requestAnimationFrame(drawMap);
+</script>
+</body>
+</html>

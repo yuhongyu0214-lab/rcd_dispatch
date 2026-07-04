@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RCD demo_v12 live preview</title>
+  <style>
+    :root {
+      --bg: #f6f3ee;
+      --ink: #111111;
+      --muted: #6b6560;
+      --line: #ded8cf;
+      --surface: #ffffff;
+      --accent: #10b981;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); font-family: Arial, "Microsoft YaHei", sans-serif; }
+    .live-bar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      height: 44px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.92);
+    }
+    .live-title { font-size: 13px; font-weight: 700; }
+    .live-status { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+    .live-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--accent); box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.14); }
+    #preview-root { min-height: calc(100vh - 44px); }
+    .error { margin: 24px; padding: 16px; border: 1px solid #efb4a7; border-radius: 8px; background: #fff1ee; color: #9f2d1f; }
+  </style>
+</head>
+<body>
+  <header class="live-bar">
+    <div class="live-title">人车单 demo_v12 live preview</div>
+    <div class="live-status"><span class="live-dot"></span><span id="live-status-text">Watching preview.html</span></div>
+  </header>
+  <main id="preview-root"></main>
+  <script>
+    const root = document.getElementById('preview-root');
+    const statusText = document.getElementById('live-status-text');
+    let last = '';
+
+    async function refreshPreview() {
+      try {
+        const response = await fetch('preview.html?ts=' + Date.now(), { cache: 'no-store' });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const html = await response.text();
+        if (html !== last) {
+          last = html;
+          root.innerHTML = html;
+          statusText.textContent = 'Updated ' + new Date().toLocaleTimeString();
+        }
+      } catch (error) {
+        root.innerHTML = '<div class="error">预览服务可用，但 preview.html 暂时读取失败：' + error.message + '</div>';
+        statusText.textContent = 'Waiting for preview.html';
+      }
+    }
+
+    refreshPreview();
+    setInterval(refreshPreview, 1000);
+  </script>
+</body>
+</html>

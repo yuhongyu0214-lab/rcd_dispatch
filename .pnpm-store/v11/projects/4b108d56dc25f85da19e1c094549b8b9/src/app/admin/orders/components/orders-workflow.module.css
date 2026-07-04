@@ -1,0 +1,1060 @@
+.viewport {
+  --bg-deep: oklch(0.235 0.032 240);
+  --bg-elevated: oklch(0.330 0.045 240);
+  --surface-glass: color-mix(in srgb, var(--surface) 86%, transparent);
+  --muted-line: oklch(0.790 0.012 235);
+  --primary-glow: color-mix(in srgb, var(--accent) 22%, transparent);
+  --font-system: -apple-system, "SF Pro Display", "Helvetica Neue", Arial, "Microsoft YaHei", sans-serif;
+  --font-mono: "SF Mono", "Space Mono", Consolas, monospace;
+
+  position: fixed;
+  inset: 0;
+  display: grid;
+  overflow: hidden;
+  place-items: center;
+  background: var(--bg);
+  font-family: var(--font-system);
+  font-variant-numeric: tabular-nums;
+}
+
+.appShell {
+  display: grid;
+  width: var(--design-w);
+  min-width: var(--design-w);
+  height: var(--design-h);
+  min-height: var(--design-h);
+  grid-template-columns: var(--rail-w) var(--work-panel-w) minmax(0, 1fr);
+  overflow: hidden;
+  background: var(--bg);
+  contain: layout paint;
+  transform: scale(var(--app-scale));
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.navRail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 10px;
+  background: var(--bg-deep, var(--nav));
+  color: #faf7f2;
+}
+
+.railBrand,
+.railItem,
+.railItemActive,
+.railItemDisabled {
+  display: grid;
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
+  min-height: 48px;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.railBrand {
+  border-color: rgb(255 255 255 / 18%);
+  font-size: 12px;
+}
+
+.railItem {
+  background: rgb(255 255 255 / 6%);
+  color: #d7d0c5;
+}
+
+.railItemActive {
+  background: var(--bg-elevated, var(--nav-active));
+  color: #ffffff;
+  box-shadow: 0 0 0 4px rgb(255 255 255 / 7%);
+}
+
+.railItemDisabled {
+  background: rgb(255 255 255 / 3%);
+  color: rgb(215 208 197 / 48%);
+  cursor: not-allowed;
+}
+
+.workPanel {
+  display: flex;
+  min-width: 0;
+  height: var(--design-h);
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.panelHead {
+  flex: 0 0 var(--panel-head-h);
+  height: var(--panel-head-h);
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+  padding: 18px 16px 14px;
+}
+
+.kicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.panelHead h1,
+.workspaceHead h2 {
+  margin: 6px 0 0;
+  color: var(--ink);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.panelHead p,
+.workspaceHead p,
+.cardTitle p,
+.detailHead p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.kpiRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.kpiRow div {
+  height: var(--kpi-h);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 9px 10px;
+}
+
+.kpiRow span,
+.fieldGrid span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.kpiRow strong,
+.fieldGrid strong {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.objectTabs,
+.panelFilters {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.panelFilters {
+  grid-template-columns: minmax(0, 1fr) 132px;
+}
+
+.filterButton,
+.filterButtonActive,
+.ghostButton,
+.actionButton,
+.dangerButton,
+.inlineButton {
+  min-height: var(--card-action-h);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    color 180ms ease,
+    transform 80ms ease-out;
+}
+
+.filterButton,
+.ghostButton,
+.inlineButton {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.filterButtonActive,
+.actionButton {
+  border-color: color-mix(in srgb, var(--accent) 64%, var(--line));
+  background: color-mix(in srgb, var(--accent) 70%, var(--surface));
+  color: white;
+}
+
+.dangerButton {
+  border-color: color-mix(in srgb, var(--danger) 62%, var(--line));
+  background: color-mix(in srgb, var(--danger) 14%, var(--surface));
+  color: color-mix(in srgb, var(--danger) 86%, black);
+}
+
+.ghostButton:hover,
+.filterButton:hover,
+.inlineButton:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--surface) 94%, var(--accent) 6%);
+}
+
+.actionButton:hover:not(:disabled),
+.dangerButton:hover:not(:disabled),
+.ghostButton:hover:not(:disabled),
+.inlineButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.actionButton:active:not(:disabled),
+.dangerButton:active:not(:disabled),
+.ghostButton:active:not(:disabled),
+.inlineButton:active:not(:disabled),
+.filterButton:active,
+.filterButtonActive:active {
+  transform: scale(0.97);
+}
+
+.actionButton:disabled,
+.dangerButton:disabled {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--line) 55%, var(--surface));
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+}
+
+.panelFilters input,
+.panelFilters select,
+.actionGrid input,
+.actionGrid select {
+  width: 100%;
+  height: var(--control-h);
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  outline: none;
+  padding: 0 12px;
+}
+
+.panelFilters select,
+.actionGrid select {
+  appearance: none;
+  background-color: var(--surface);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 16px) 50%,
+    calc(100% - 11px) 50%;
+  background-repeat: no-repeat;
+  background-size: 5px 5px;
+  padding-right: 30px;
+}
+
+.panelFilters select::-ms-expand,
+.actionGrid select::-ms-expand {
+  display: none;
+}
+
+.panelFilters input:focus,
+.panelFilters select:focus,
+.actionGrid input:focus,
+.actionGrid select:focus,
+.filterButton:focus-visible,
+.filterButtonActive:focus-visible,
+.ghostButton:focus-visible,
+.actionButton:focus-visible,
+.dangerButton:focus-visible,
+.inlineButton:focus-visible,
+.railItem:focus-visible,
+.railItemActive:focus-visible {
+  outline: 2px solid var(--primary-glow);
+  outline-offset: 2px;
+}
+
+.listWrap {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 10px var(--list-scrollbar-w) 10px 10px;
+}
+
+.listWrap,
+.tableScroll,
+.actionGrid,
+.recommendPanel,
+.localLogs,
+.logList,
+.timelineList {
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-width: thin;
+}
+
+.listWrap::-webkit-scrollbar,
+.tableScroll::-webkit-scrollbar,
+.actionGrid::-webkit-scrollbar,
+.recommendPanel::-webkit-scrollbar,
+.localLogs::-webkit-scrollbar,
+.logList::-webkit-scrollbar,
+.timelineList::-webkit-scrollbar {
+  width: var(--list-scrollbar-w);
+  height: var(--list-scrollbar-w);
+}
+
+.listWrap::-webkit-scrollbar-track,
+.tableScroll::-webkit-scrollbar-track,
+.actionGrid::-webkit-scrollbar-track,
+.recommendPanel::-webkit-scrollbar-track,
+.localLogs::-webkit-scrollbar-track,
+.logList::-webkit-scrollbar-track,
+.timelineList::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: var(--scrollbar-track);
+}
+
+.listWrap::-webkit-scrollbar-thumb,
+.tableScroll::-webkit-scrollbar-thumb,
+.actionGrid::-webkit-scrollbar-thumb,
+.recommendPanel::-webkit-scrollbar-thumb,
+.localLogs::-webkit-scrollbar-thumb,
+.logList::-webkit-scrollbar-thumb,
+.timelineList::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--scrollbar-thumb);
+  background-clip: content-box;
+}
+
+.listWrap::-webkit-scrollbar-thumb:hover,
+.tableScroll::-webkit-scrollbar-thumb:hover,
+.actionGrid::-webkit-scrollbar-thumb:hover,
+.recommendPanel::-webkit-scrollbar-thumb:hover,
+.localLogs::-webkit-scrollbar-thumb:hover,
+.logList::-webkit-scrollbar-thumb:hover,
+.timelineList::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  background-clip: content-box;
+}
+
+.listContent {
+  display: flex;
+  width: var(--list-content-w);
+  flex-direction: column;
+  gap: 10px;
+}
+
+.orderCard,
+.orderCardActive {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-glass);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.orderCardActive {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--surface) 78%, var(--accent) 9%);
+}
+
+.cardMain {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 12px;
+  text-align: left;
+}
+
+.orderGlyph {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warning) 28%, var(--surface));
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.cardCopy,
+.cardCopy span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.cardCopy span {
+  flex-direction: row;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cardCopy strong,
+.cardCopy em,
+.cardCopy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardCopy strong {
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.cardCopy em {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--info) 13%, var(--surface));
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+
+.cardCopy small {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.cardActions {
+  display: grid;
+  grid-template-columns: 1fr 74px;
+  gap: 8px;
+  padding: 0 12px 12px 50px;
+}
+
+.panelFoot {
+  display: flex;
+  height: 50px;
+  align-items: center;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+  padding: 0 16px;
+}
+
+.panelFoot span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace {
+  display: grid;
+  min-width: var(--right-panel-min-w);
+  height: var(--design-h);
+  grid-template-rows: var(--right-head-h) minmax(0, 1fr);
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.workspaceHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 44%, var(--bg));
+  padding: 0 18px;
+}
+
+.apiPills {
+  display: flex;
+  max-width: 620px;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.apiPills span {
+  display: grid;
+  min-width: 156px;
+  height: 52px;
+  align-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 62%, var(--bg));
+  color: var(--muted);
+  font-size: 11px;
+  padding: 0 12px;
+}
+
+.apiPills strong {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.infoWorkspace {
+  min-height: 0;
+  overflow: hidden;
+  padding: 14px;
+}
+
+.tableCard,
+.tableCardWide,
+.detailCard {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.tableCard {
+  display: grid;
+  height: 410px;
+  grid-template-rows: 70px minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.tableCardWide {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: 70px minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.cardTitle,
+.detailHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 14px;
+}
+
+.cardTitle h3,
+.detailHead h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.detailHead span {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--success) 12%, var(--surface));
+  color: color-mix(in srgb, var(--success) 72%, black);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 10px;
+}
+
+.tableScroll {
+  overflow: auto;
+}
+
+.workspaceSearch {
+  width: 320px;
+  height: var(--control-h);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  outline: none;
+  padding: 0 12px;
+}
+
+.workspaceSearch:focus {
+  outline: 2px solid var(--primary-glow);
+  outline-offset: 2px;
+}
+
+.orderTable {
+  width: 1540px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.orderTable th,
+.orderTable td {
+  max-width: 190px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-secondary);
+  overflow: hidden;
+  padding: 9px 10px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orderTable th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: color-mix(in srgb, var(--surface) 92%, var(--panel));
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.orderTable tbody tr {
+  cursor: pointer;
+}
+
+.orderTable tbody tr:hover,
+.selectedRow {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.inlineButton {
+  height: 28px;
+  min-height: 28px;
+}
+
+.workflowGrid {
+  display: grid;
+  height: calc(100% - 424px);
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.detailCard {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: 68px auto minmax(0, auto) auto;
+  overflow: hidden;
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding: 12px 14px;
+}
+
+.fieldGrid div {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 72%, var(--bg));
+  padding: 9px 10px;
+}
+
+.actionGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 14px 14px;
+}
+
+.actionGrid button {
+  height: 38px;
+}
+
+.recommendPanel {
+  min-height: 0;
+  overflow: auto;
+  padding: 0 14px 12px;
+}
+
+.candidateGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.candidateCard,
+.candidateCardActive {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 76%, var(--bg));
+  padding: 10px;
+}
+
+.candidateCardActive {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+.candidateMain {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.candidateMain strong,
+.candidateMain span,
+.candidateMeta strong,
+.candidateMeta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidateMain span,
+.candidateMeta span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.candidateMeta {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 4px 8px;
+  font-size: 12px;
+}
+
+.candidateMeta strong {
+  color: var(--ink);
+}
+
+.localLogs {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  padding: 12px 14px 14px;
+}
+
+.localLogs article,
+.logRow {
+  display: grid;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 74%, var(--bg));
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 10px;
+}
+
+.localLogs article {
+  grid-template-columns: 110px 80px minmax(0, 1fr) 90px;
+}
+
+.localLogs strong,
+.logRow strong {
+  color: var(--ink);
+}
+
+.localLogs span,
+.logRow span,
+.localLogs time,
+.logRow time {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logList {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  padding: 12px 14px 14px;
+}
+
+.logRow {
+  grid-template-columns: 120px 130px 120px 120px minmax(170px, 1fr) 120px;
+}
+
+.emptyState {
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 13px;
+  padding: 16px;
+}
+
+.timelineList {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  padding: 12px 14px 14px;
+}
+
+.timelineRow,
+.timelineRowActive {
+  display: grid;
+  min-height: 76px;
+  grid-template-columns: 150px minmax(160px, 1fr) repeat(4, 130px);
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 82%, var(--bg));
+  color: var(--text-secondary);
+  padding: 12px;
+  text-align: left;
+}
+
+.timelineRowActive {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--surface) 78%, var(--accent) 9%);
+}
+
+.timelineRow strong,
+.timelineRowActive strong {
+  display: block;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timelineRow small,
+.timelineRowActive small {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timelineAxis {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  align-items: center;
+  gap: 0;
+}
+
+.timelineAxis::before {
+  position: absolute;
+  right: 14px;
+  left: 14px;
+  height: 2px;
+  background: var(--line);
+  content: "";
+}
+
+.timelineAxis i {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 14px;
+  height: 14px;
+  justify-self: center;
+  border: 2px solid var(--surface);
+  border-radius: 999px;
+  background: var(--muted);
+}
+
+.timelineDone {
+  background: var(--success) !important;
+}
+
+.timelinePulse {
+  background: var(--accent) !important;
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 18%, transparent);
+  animation: pulse-x 1.8s ease-in-out infinite;
+}
+
+.timelineMuted {
+  background: var(--text-tertiary) !important;
+}
+
+@keyframes pulse-x {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  50% {
+    transform: translateX(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timelinePulse {
+    animation: none;
+  }
+}
+
+/* ============================================================================
+   Toast 通知
+   ======================================================================== */
+
+.toastContainer {
+  position: fixed;
+  bottom: 24px;
+  left: calc(var(--rail-w) + var(--work-panel-w) + 24px);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 380px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 22%);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 13px 14px;
+  pointer-events: auto;
+  animation: toastSlideIn 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toastBar {
+  width: 4px;
+  height: 18px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.toastSuccess .toastBar {
+  background: var(--success);
+}
+
+.toastWarning .toastBar {
+  background: var(--warning);
+}
+
+.toastError .toastBar {
+  background: var(--danger);
+}
+
+.toastMessage {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================================================
+   操作日志时间线（订单详情卡片内）
+   ======================================================================== */
+
+.actionLogTimeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 14px 14px;
+}
+
+.actionLogTimeline article {
+  display: grid;
+  grid-template-columns: 88px auto 1fr;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 74%, var(--bg));
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 9px 12px;
+}
+
+.actionLogBadge {
+  display: inline-flex;
+  height: 24px;
+  align-items: center;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0 10px;
+  white-space: nowrap;
+  width: fit-content;
+}
+
+.actionLogBadgeAssign {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  color: var(--accent);
+}
+
+.actionLogBadgeReassign {
+  background: color-mix(in srgb, var(--warning) 18%, var(--surface));
+  color: color-mix(in srgb, var(--warning) 82%, black);
+}
+
+.actionLogBadgeWithdraw {
+  background: color-mix(in srgb, var(--danger) 14%, var(--surface));
+  color: color-mix(in srgb, var(--danger) 82%, black);
+}
+
+.actionLogBadgeAccept {
+  background: color-mix(in srgb, var(--success) 14%, var(--surface));
+  color: color-mix(in srgb, var(--success) 72%, black);
+}
+
+.actionLogBadgeDefault {
+  background: color-mix(in srgb, var(--muted) 14%, var(--surface));
+  color: var(--muted);
+}
+
+.actionLogTimeline time {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.actionLogTimeline span {
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -1,0 +1,1312 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>人车单地图看板 ETA 镜像预览</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: oklch(0.945 0.006 235);
+        --panel: oklch(0.905 0.012 235);
+        --surface: oklch(0.985 0.003 235);
+        --map: oklch(0.875 0.018 230);
+        --nav: oklch(0.235 0.032 240);
+        --ink: oklch(0.19 0.018 240);
+        --muted: oklch(0.45 0.02 235);
+        --line: oklch(0.82 0.014 235);
+        --primary: oklch(0.635 0.115 35);
+        --success: oklch(0.59 0.115 160);
+        --warning: oklch(0.69 0.125 76);
+        --danger: oklch(0.61 0.16 27);
+        --info: oklch(0.62 0.09 220);
+        --design-w: 1488px;
+        --design-h: 1000px;
+        --app-scale: 1;
+        --rail-w: 72px;
+        --work-panel-w: 420px;
+        --right-head-h: 84px;
+        --panel-head-h: 396px;
+        --map-dock-h: 236px;
+        --kpi-h: 60px;
+        --tab-h: 36px;
+        --control-h: 38px;
+        --radius-sm: 8px;
+        --radius-md: 12px;
+        --radius-lg: 16px;
+        --shadow-card: 0 6px 8px rgb(31 35 39 / 8%);
+        --shadow-modal: 0 18px 46px rgb(31 35 39 / 18%);
+        --font-system:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei",
+          Arial, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--font-system);
+        font-variant-numeric: tabular-nums;
+      }
+
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+
+      .viewport {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        overflow: hidden;
+        place-items: center;
+        background: var(--bg);
+      }
+
+      .app {
+        display: grid;
+        width: var(--design-w);
+        min-width: var(--design-w);
+        height: var(--design-h);
+        min-height: var(--design-h);
+        grid-template-columns: var(--rail-w) var(--work-panel-w) minmax(0, 1fr);
+        overflow: hidden;
+        background: var(--bg);
+        contain: layout paint;
+        transform: scale(var(--app-scale));
+        transform-origin: center center;
+      }
+
+      .rail {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        padding: 16px 10px;
+        background: var(--nav);
+        color: #faf7f2;
+      }
+
+      .brand,
+      .rail button {
+        display: grid;
+        width: 48px;
+        height: 48px;
+        place-items: center;
+        border-radius: 999px;
+        font-weight: 800;
+      }
+
+      .brand {
+        border: 1px solid rgb(255 255 255 / 18%);
+        font-size: 12px;
+      }
+
+      .rail button {
+        border: 1px solid rgb(255 255 255 / 14%);
+        background: rgb(255 255 255 / 6%);
+        color: #d7d0c5;
+        cursor: pointer;
+      }
+
+      .rail button.active {
+        background: oklch(0.33 0.045 240);
+        color: #fff;
+      }
+
+      .work-panel {
+        display: flex;
+        min-width: 0;
+        height: var(--design-h);
+        flex-direction: column;
+        border-right: 1px solid var(--line);
+        background: var(--panel);
+      }
+
+      .panel-head {
+        flex: 0 0 var(--panel-head-h);
+        height: var(--panel-head-h);
+        overflow: hidden;
+        border-bottom: 1px solid var(--line);
+        padding: 18px 16px 14px;
+      }
+
+      .kicker {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      .panel-head h1 {
+        margin-top: 6px;
+        font-size: 24px;
+        line-height: 1.1;
+      }
+
+      .panel-head > p {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .kpi-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .kpi-row div,
+      .detail-cell {
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+      }
+
+      .kpi-row div {
+        height: var(--kpi-h);
+        padding: 9px 10px;
+      }
+
+      .kpi-row span,
+      .detail-cell span,
+      .eta-meta span {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 800;
+      }
+
+      .kpi-row strong,
+      .detail-cell strong {
+        display: block;
+        margin-top: 3px;
+        overflow: hidden;
+        font-size: 16px;
+        font-weight: 800;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .tabs {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .tabs button,
+      .refresh,
+      .action,
+      .ghost,
+      .danger,
+      .eta-toggle button {
+        height: var(--tab-h);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--ink);
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .tabs button.active,
+      .eta-toggle button.active {
+        border-color: color-mix(in oklch, var(--primary), white 52%);
+        background: color-mix(in oklch, var(--primary), white 86%);
+      }
+
+      .filters {
+        display: grid;
+        grid-template-columns: 1fr 120px 120px;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .filters input,
+      .filters select {
+        width: 100%;
+        height: var(--control-h);
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--ink);
+        font-size: 13px;
+        font-weight: 800;
+        outline: none;
+        padding: 0 10px;
+      }
+
+      .list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 12px 12px 16px;
+        scrollbar-gutter: stable;
+      }
+
+      .list-head {
+        display: flex;
+        justify-content: space-between;
+        margin: 0 4px 10px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .point-card {
+        width: 100%;
+        min-height: 72px;
+        margin-bottom: 10px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: color-mix(in oklch, var(--surface), var(--bg) 8%);
+        box-shadow: var(--shadow-card);
+        cursor: pointer;
+        padding: 12px;
+        text-align: left;
+      }
+
+      .point-card.active {
+        border-color: color-mix(in oklch, var(--primary), white 38%);
+        background: color-mix(in oklch, var(--primary), white 90%);
+      }
+
+      .card-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .card-title {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        gap: 8px;
+        font-size: 16px;
+        font-weight: 900;
+      }
+
+      .pin {
+        display: grid;
+        width: 26px;
+        height: 26px;
+        flex: 0 0 26px;
+        place-items: center;
+        border-radius: 999px;
+        background: var(--nav);
+        color: #fff;
+        font-size: 12px;
+      }
+
+      .badge {
+        border-radius: 999px;
+        background: color-mix(in oklch, var(--success), white 82%);
+        color: var(--ink);
+        font-size: 12px;
+        font-weight: 900;
+        padding: 4px 8px;
+      }
+
+      .point-card p {
+        margin: 9px 0 0 34px;
+        overflow: hidden;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .workspace {
+        display: grid;
+        min-width: 0;
+        height: var(--design-h);
+        grid-template-rows: minmax(0, 1fr) var(--map-dock-h);
+        overflow: hidden;
+        background: var(--bg);
+      }
+
+      .driver-flow {
+        display: grid;
+        width: 100%;
+        min-width: 0;
+        grid-template-columns: 142px minmax(0, 1fr);
+        gap: 10px;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: color-mix(in srgb, var(--surface) 92%, transparent);
+        padding: 8px 10px;
+      }
+
+      .driver-flow-meta strong {
+        display: block;
+        overflow: hidden;
+        font-size: 14px;
+        font-weight: 950;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .driver-flow-meta span {
+        display: block;
+        margin-top: 4px;
+        overflow: hidden;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 800;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .flow-lane {
+        position: relative;
+        display: grid;
+        min-width: 0;
+        grid-template-columns: 0.8fr 0.7fr 0.6fr 0.9fr;
+        gap: 6px;
+        overflow: hidden;
+      }
+
+      .flow-lane::before {
+        position: absolute;
+        right: 4px;
+        left: 4px;
+        top: 50%;
+        height: 2px;
+        background: color-mix(in oklch, var(--line), var(--primary) 18%);
+        content: "";
+      }
+
+      .flow-segment {
+        position: relative;
+        z-index: 1;
+        min-width: 0;
+        height: 42px;
+        border-left: 3px solid var(--primary);
+        border-radius: var(--radius-sm);
+        background: color-mix(in oklch, var(--primary), white 90%);
+        padding: 6px 7px;
+      }
+
+      .flow-segment:nth-child(2) {
+        border-color: var(--success);
+        background: color-mix(in oklch, var(--success), white 88%);
+      }
+
+      .flow-segment:nth-child(3) {
+        border-color: var(--warning);
+        background: color-mix(in oklch, var(--warning), white 86%);
+      }
+
+      .flow-segment:nth-child(4) {
+        border-color: var(--info);
+        background: color-mix(in oklch, var(--info), white 88%);
+      }
+
+      .flow-segment strong,
+      .flow-segment span {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .flow-segment strong {
+        font-size: 11px;
+        font-weight: 950;
+      }
+
+      .flow-segment span {
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 800;
+      }
+
+      .map-stage {
+        position: relative;
+        overflow: hidden;
+        background:
+          linear-gradient(90deg, rgb(255 255 255 / 22%) 1px, transparent 1px) 0 0 / 174px
+            174px,
+          linear-gradient(rgb(255 255 255 / 20%) 1px, transparent 1px) 0 0 / 174px 174px,
+          var(--map);
+      }
+
+      .road {
+        position: absolute;
+        height: 2px;
+        background: color-mix(in srgb, var(--ink) 12%, transparent);
+        transform-origin: left center;
+      }
+
+      .route-line {
+        position: absolute;
+        left: 350px;
+        top: 238px;
+        width: 260px;
+        border-top: 4px dashed color-mix(in oklch, var(--primary), var(--danger) 20%);
+        transform: rotate(78deg);
+        transform-origin: left center;
+        opacity: 0.9;
+      }
+
+      .marker {
+        position: absolute;
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        border: 2px solid #fff;
+        border-radius: 999px;
+        box-shadow: 0 14px 18px rgb(17 17 17 / 20%);
+        color: #fff;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 900;
+        transition:
+          transform 160ms ease,
+          opacity 160ms ease;
+      }
+
+      .marker.order {
+        border-radius: 50% 50% 50% 8px;
+        background: var(--warning);
+        transform: rotate(-45deg);
+      }
+
+      .marker.order span {
+        transform: rotate(45deg);
+      }
+
+      .marker.driver {
+        background: var(--success);
+      }
+
+      .marker.vehicle {
+        background: var(--info);
+      }
+
+      .marker.store {
+        background: color-mix(in oklch, var(--primary), white 10%);
+      }
+
+      .marker.alert {
+        border-radius: 8px;
+        background: var(--danger);
+      }
+
+      .marker.active {
+        z-index: 4;
+        transform: scale(1.18);
+      }
+
+      .marker.dim {
+        opacity: 0.42;
+      }
+
+      .marker.order.active {
+        transform: rotate(-45deg) scale(1.18);
+      }
+
+      .eta-panel {
+        position: absolute;
+        top: 18px;
+        left: 18px;
+        z-index: 5;
+        width: 328px;
+        border: 1px solid color-mix(in oklch, var(--line), white 20%);
+        border-radius: var(--radius-md);
+        background: color-mix(in srgb, var(--surface) 92%, transparent);
+        box-shadow: var(--shadow-modal);
+        backdrop-filter: blur(10px);
+        padding: 12px;
+      }
+
+      .eta-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .eta-head strong {
+        font-size: 14px;
+        font-weight: 900;
+      }
+
+      .eta-toggle {
+        display: grid;
+        width: 146px;
+        grid-template-columns: 1fr 1fr;
+        gap: 5px;
+      }
+
+      .eta-toggle button {
+        height: 28px;
+        padding: 0 8px;
+        font-size: 11px;
+      }
+
+      .eta-option {
+        display: grid;
+        grid-template-columns: 42px minmax(0, 1fr) auto;
+        gap: 9px;
+        align-items: center;
+        margin-top: 9px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        padding: 9px;
+      }
+
+      .eta-option.primary {
+        border-color: color-mix(in oklch, var(--primary), white 48%);
+        background: color-mix(in oklch, var(--primary), white 91%);
+      }
+
+      .rank {
+        display: grid;
+        height: 42px;
+        place-items: center;
+        border-radius: var(--radius-sm);
+        background: var(--nav);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      .eta-copy strong {
+        display: block;
+        overflow: hidden;
+        font-size: 14px;
+        font-weight: 900;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .eta-copy span {
+        display: block;
+        margin-top: 3px;
+        overflow: hidden;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 800;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .eta-time {
+        color: var(--ink);
+        font-size: 18px;
+        font-weight: 950;
+      }
+
+      .map-stats {
+        position: absolute;
+        bottom: 22px;
+        left: 18px;
+        z-index: 3;
+        display: flex;
+        gap: 10px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: color-mix(in srgb, var(--surface) 88%, transparent);
+        box-shadow: var(--shadow-card);
+        padding: 8px 12px;
+      }
+
+      .map-stats span {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .legend-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        margin-right: 4px;
+        border-radius: 999px;
+        vertical-align: -1px;
+      }
+
+      .refresh {
+        position: absolute;
+        top: 18px;
+        right: 18px;
+        z-index: 4;
+        padding: 0 14px;
+      }
+
+      .dock {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 12px;
+        height: var(--map-dock-h);
+        border-top: 1px solid var(--line);
+        background: color-mix(in srgb, var(--panel) 82%, var(--bg));
+        padding: 12px 14px 14px;
+      }
+
+      .detail,
+      .recommend {
+        min-width: 0;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        padding: 12px;
+      }
+
+      .detail-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .detail-head h3 {
+        overflow: hidden;
+        font-size: 16px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .detail-cell {
+        min-height: 52px;
+        padding: 8px 9px;
+      }
+
+      .actions {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(74px, auto)) minmax(0, 1fr);
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .action {
+        background: color-mix(in oklch, var(--primary), white 28%);
+      }
+
+      .ghost {
+        background: var(--surface);
+      }
+
+      .danger {
+        border-color: color-mix(in oklch, var(--danger), white 52%);
+        background: color-mix(in oklch, var(--danger), white 82%);
+        color: color-mix(in oklch, var(--danger), black 18%);
+      }
+
+      .action:disabled {
+        cursor: not-allowed;
+        opacity: 0.48;
+      }
+
+      .dispatch-status {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        padding: 7px 9px;
+        font-size: 12px;
+        font-weight: 800;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .dispatch-status.info {
+        background: color-mix(in oklch, var(--info), white 88%);
+      }
+
+      .dispatch-status.success {
+        border-color: color-mix(in oklch, var(--success), white 52%);
+        background: color-mix(in oklch, var(--success), white 86%);
+        color: var(--success);
+      }
+
+      .dispatch-status.error {
+        border-color: color-mix(in oklch, var(--danger), white 48%);
+        background: color-mix(in oklch, var(--danger), white 89%);
+        color: var(--danger);
+      }
+
+      .recommend-list {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .candidate {
+        display: block;
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        background: color-mix(in oklch, var(--surface), var(--bg) 5%);
+        color: var(--ink);
+        cursor: pointer;
+        padding: 10px;
+        text-align: left;
+      }
+
+      .candidate.active {
+        border-color: color-mix(in oklch, var(--danger), white 48%);
+        background: color-mix(in oklch, var(--danger), white 91%);
+      }
+
+      .candidate strong {
+        display: block;
+        font-size: 14px;
+        font-weight: 900;
+      }
+
+      .row {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 7px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="viewport">
+      <div class="app">
+        <nav class="rail" aria-label="主导航">
+          <div class="brand">RCD</div>
+          <button>图</button>
+          <button class="active">单</button>
+          <button>人</button>
+          <button>车</button>
+          <button>警</button>
+          <button>日</button>
+        </nav>
+
+        <aside class="work-panel">
+          <header class="panel-head">
+            <p class="kicker">地图 · 四类对象联动</p>
+            <h1>地图看板</h1>
+            <p>筛选选择即生效，点位跟随订单、司机、车辆、门店联动。</p>
+
+            <div class="kpi-row">
+              <div><span>订单点位</span><strong>4</strong></div>
+              <div><span>待取还车</span><strong>4</strong></div>
+              <div><span>最近刷新</span><strong>00:58</strong></div>
+            </div>
+
+            <div class="tabs">
+              <button class="active" data-kind="order">订单</button>
+              <button data-kind="driver">司机</button>
+              <button data-kind="alert">预警</button>
+              <button data-kind="vehicle">车辆</button>
+            </div>
+
+            <div class="filters">
+              <input value="" placeholder="搜索订单、司机、车辆、门店" />
+              <select>
+                <option>全部时间</option>
+                <option>2 小时</option>
+                <option>4 小时</option>
+                <option>6 小时</option>
+              </select>
+              <select>
+                <option>全部状态</option>
+                <option>待取车</option>
+                <option>待还车</option>
+              </select>
+            </div>
+          </header>
+
+          <main class="list" id="list">
+            <div class="list-head"><span>订单列表</span><strong>4</strong></div>
+          </main>
+        </aside>
+
+        <main class="workspace">
+          <section class="map-stage" aria-label="地图镜像预览">
+            <div class="road" style="left: 310px; top: 196px; width: 520px; transform: rotate(13deg)"></div>
+            <div class="road" style="left: 580px; top: 138px; width: 420px; transform: rotate(63deg)"></div>
+            <div class="road" style="left: 220px; top: 360px; width: 720px; transform: rotate(-11deg)"></div>
+            <div class="road" style="left: 750px; top: 318px; width: 520px; transform: rotate(-30deg)"></div>
+            <div class="route-line"></div>
+
+            <article class="eta-panel" aria-label="ETA 最优方案">
+              <div class="eta-head">
+                <strong>导航预计到达</strong>
+                <div class="eta-toggle">
+                  <button class="active" data-mode="drive">驾车</button>
+                  <button data-mode="transit">公交地铁</button>
+                </div>
+              </div>
+              <div id="etaOptions"></div>
+            </article>
+
+            <button class="refresh">刷新点位</button>
+            <div id="markers"></div>
+
+            <div class="map-stats">
+              <span><i class="legend-dot" style="background: var(--warning)"></i>订单</span>
+              <span><i class="legend-dot" style="background: var(--info)"></i>车辆</span>
+              <span><i class="legend-dot" style="background: var(--primary)"></i>门店</span>
+              <span><i class="legend-dot" style="background: var(--success)"></i>司机</span>
+              <span><i class="legend-dot" style="background: var(--danger)"></i>预警</span>
+            </div>
+          </section>
+
+          <section class="dock">
+            <article class="detail" id="detail"></article>
+            <article class="recommend">
+              <div class="detail-head">
+                <h3 id="recommendTitle">推荐派单 Top N</h3>
+                <span class="badge">API placeholder</span>
+              </div>
+              <div class="recommend-list" id="recommendList"></div>
+            </article>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script>
+      const points = [
+        {
+          id: "D0001",
+          kind: "order",
+          label: "单",
+          title: "D0001",
+          status: "待取车",
+          store: "上海虹桥店",
+          route: "上海虹桥店取车区 -> 上海浦东新区张江路 100 号",
+          plate: "沪A12345",
+          driver: "李娜",
+          time: "09:00-11:00",
+          progress: "清洁中",
+          locked: "否",
+          x: 520,
+          y: 310
+        },
+        {
+          id: "D0002",
+          kind: "order",
+          label: "单",
+          title: "D0002",
+          status: "待取车",
+          store: "上海虹桥店",
+          route: "上海虹桥店停车场 -> 上海市闵行区申长路 888 号",
+          plate: "沪B91M08",
+          driver: "张伟",
+          time: "10:30-13:30",
+          progress: "补能中",
+          locked: "否",
+          x: 710,
+          y: 228
+        },
+        {
+          id: "D0003",
+          kind: "order",
+          label: "单",
+          title: "D0003",
+          status: "待还车",
+          store: "杭州西湖店",
+          route: "杭州市西湖区文三路 90 号 -> 杭州西湖店还车区",
+          plate: "浙A67890",
+          driver: "王强",
+          time: "13:20-16:30",
+          progress: "已整备",
+          locked: "是",
+          x: 950,
+          y: 360
+        },
+        {
+          id: "DRIVER-01",
+          kind: "driver",
+          label: "司",
+          title: "李娜",
+          status: "门店空闲",
+          store: "上海虹桥店",
+          route: "当前位于上海虹桥门店，参与调度",
+          plate: "沪A12345",
+          driver: "李娜",
+          time: "ETA 18m",
+          progress: "当前负责 D0001",
+          locked: "否",
+          x: 450,
+          y: 252
+        },
+        {
+          id: "DRIVER-02",
+          kind: "driver",
+          label: "司",
+          title: "张伟",
+          status: "门店忙碌",
+          store: "上海虹桥店",
+          route: "当前在补能工单途中，预计 10:42 可接下一单",
+          plate: "沪B91M08",
+          driver: "张伟",
+          time: "ETA 32m",
+          progress: "后续可接 D0002",
+          locked: "否",
+          x: 820,
+          y: 272
+        },
+        {
+          id: "DRIVER-03",
+          kind: "driver",
+          label: "司",
+          title: "王强",
+          status: "返程空闲",
+          store: "杭州西湖店",
+          route: "当前返程至杭州西湖店，预计 13:08 到店",
+          plate: "浙A67890",
+          driver: "王强",
+          time: "ETA 28m",
+          progress: "后续可接 D0003",
+          locked: "否",
+          x: 1020,
+          y: 442
+        },
+        {
+          id: "VEHICLE-01",
+          kind: "vehicle",
+          label: "车",
+          title: "沪A12345",
+          status: "在线",
+          store: "上海虹桥店",
+          route: "当前位于上海虹桥门店取车区",
+          plate: "沪A12345",
+          driver: "李娜",
+          time: "GPS 00:58",
+          progress: "本月完单 42 单",
+          locked: "否",
+          x: 640,
+          y: 385
+        },
+        {
+          id: "STORE-01",
+          kind: "store",
+          label: "店",
+          title: "上海虹桥店",
+          status: "营业中",
+          store: "上海虹桥店",
+          route: "上海虹桥枢纽取还车中心",
+          plate: "-",
+          driver: "-",
+          time: "08:00-22:00",
+          progress: "可接入车辆 18",
+          locked: "-",
+          x: 390,
+          y: 410
+        },
+        {
+          id: "ALERT-01",
+          kind: "alert",
+          label: "警",
+          title: "未接单超时",
+          status: "超阈值",
+          store: "上海虹桥店",
+          route: "D0001 待取车超过阈值 42 分钟",
+          plate: "沪A12345",
+          driver: "李娜",
+          time: "+42m",
+          progress: "需调度员复核",
+          locked: "-",
+          x: 870,
+          y: 282
+        }
+      ];
+
+      const etaPlans = {
+        drive: [
+          { rank: "主", title: "内环高架优先", desc: "开车 18 分钟 · 12.4 公里 · 当前最短", time: "18m" },
+          { rank: "备", title: "地面道路避堵", desc: "开车 24 分钟 · 10.8 公里 · 少收费", time: "24m" }
+        ],
+        transit: [
+          { rank: "主", title: "地铁 10 号线 + 步行", desc: "全程 38 分钟 · 地铁 29 分钟 · 步行 620 米", time: "38m" },
+          { rank: "备", title: "地铁 2 号线 + 公交", desc: "全程 46 分钟 · 地铁 31 分钟 · 步行 410 米", time: "46m" }
+        ]
+      };
+
+      let selectedId = "D0001";
+      let activeKind = "order";
+      let etaMode = "drive";
+      let selectedCandidateName = null;
+      let dispatchStatus = null;
+
+      const kindListLabels = {
+        order: "订单列表",
+        driver: "司机列表",
+        alert: "预警列表",
+        vehicle: "车辆列表"
+      };
+
+      const orderRecommendations = [
+        { name: "李娜", eta: "18m", penalty: "0", status: "门店空闲", target: "D0001", outcome: "DISPATCHED" },
+        { name: "王强", eta: "33m", penalty: "12", status: "返程空闲", target: "D0001", outcome: "DISPATCHED" },
+        { name: "张伟", eta: "42m", penalty: "12", status: "门店忙碌", target: "D0001", outcome: "DISPATCHED" }
+      ];
+
+      const driverRecommendations = [
+        { name: "D0001", eta: "18m", penalty: "0", status: "待取车", target: "李娜", outcome: "MATCHED" },
+        { name: "D0002", eta: "29m", penalty: "7", status: "待取车", target: "李娜", outcome: "MATCHED" },
+        { name: "D0003", eta: "46m", penalty: "12", status: "待还车", target: "李娜", outcome: "MANUAL_CHECK" }
+      ];
+
+      const driverFlows = {
+        "李娜": [
+          { title: "返店", value: "09:18 · 12.4km" },
+          { title: "整备", value: "18 分钟" },
+          { title: "补能", value: "12 分钟" },
+          { title: "送车", value: "09:58 · ETA 18m" }
+        ],
+        "张伟": [
+          { title: "返店", value: "10:42 · 8.6km" },
+          { title: "整备", value: "22 分钟" },
+          { title: "补能", value: "16 分钟" },
+          { title: "送车", value: "11:26 · ETA 29m" }
+        ],
+        "王强": [
+          { title: "返店", value: "13:08 · 15.1km" },
+          { title: "整备", value: "20 分钟" },
+          { title: "补能", value: "10 分钟" },
+          { title: "送车", value: "13:44 · ETA 33m" }
+        ]
+      };
+
+      function updateViewportScale() {
+        const frameW = window.innerWidth;
+        const frameH = window.innerHeight;
+        const railW = 72;
+        const workPanelW = 420;
+        const minRightW = 900;
+        const designH = 1000;
+        const designW = Math.max(
+          Math.round(designH * (frameW / frameH)),
+          railW + workPanelW + minRightW
+        );
+        const appScale = Math.min(frameW / designW, frameH / designH);
+        document.documentElement.style.setProperty("--design-w", `${designW}px`);
+        document.documentElement.style.setProperty("--design-h", `${designH}px`);
+        document.documentElement.style.setProperty("--app-scale", appScale.toFixed(5));
+      }
+
+      function getSelected() {
+        return points.find((point) => point.id === selectedId) || points[0];
+      }
+
+      function getDriverNameForFlow(point) {
+        if (point.kind === "driver") {
+          return point.title;
+        }
+
+        return point.driver && point.driver !== "-" ? point.driver : "李娜";
+      }
+
+      function renderList() {
+        const list = document.getElementById("list");
+        const visiblePoints = points.filter((point) => point.kind === activeKind);
+        const cards = points
+          .filter((point) => point.kind === activeKind)
+          .map(
+            (point) => `
+              <button class="point-card ${point.id === selectedId ? "active" : ""}" data-id="${point.id}">
+                <div class="card-top">
+                  <div class="card-title"><span class="pin">${point.label}</span>${point.title}</div>
+                  <span class="badge">${point.status}</span>
+                </div>
+                <p>${point.route}</p>
+              </button>`
+          )
+          .join("");
+        list.innerHTML = `<div class="list-head"><span>${kindListLabels[activeKind]}</span><strong>${visiblePoints.length}</strong></div>${cards}`;
+        list.querySelectorAll(".point-card").forEach((card) => {
+          card.addEventListener("click", () => {
+            selectedId = card.dataset.id;
+            selectedCandidateName = null;
+            dispatchStatus = null;
+            renderAll();
+          });
+        });
+      }
+
+      function renderMarkers() {
+        const box = document.getElementById("markers");
+        box.innerHTML = points
+          .map((point) => {
+            const active = point.id === selectedId ? "active" : "";
+            const dim = point.id !== selectedId ? "dim" : "";
+            return `<button class="marker ${point.kind} ${active} ${dim}" data-id="${point.id}" style="left:${point.x}px;top:${point.y}px"><span>${point.label}</span></button>`;
+          })
+          .join("");
+        box.querySelectorAll(".marker").forEach((marker) => {
+          marker.addEventListener("click", () => {
+            selectedId = marker.dataset.id;
+            activeKind = points.find((point) => point.id === selectedId)?.kind || activeKind;
+            selectedCandidateName = null;
+            dispatchStatus = null;
+            renderAll();
+          });
+        });
+      }
+
+      function renderDetail() {
+        const point = getSelected();
+        const dispatchDisabled =
+          point.kind !== "order" || !selectedCandidateName ? "disabled" : "";
+        const statusClass = dispatchStatus ? ` ${dispatchStatus.kind}` : "";
+        const statusMarkup = dispatchStatus
+          ? `<div class="dispatch-status${statusClass}">${dispatchStatus.message}</div>`
+          : "";
+        document.getElementById("detail").innerHTML = `
+          <div class="detail-head">
+            <h3>${point.title} · ${point.plate}</h3>
+            <span class="badge">锁单：${point.locked}</span>
+          </div>
+          <div class="detail-grid">
+            <div class="detail-cell"><span>状态</span><strong>${point.status}</strong></div>
+            <div class="detail-cell"><span>所属门店</span><strong>${point.store}</strong></div>
+            <div class="detail-cell"><span>当前司机</span><strong>${point.driver}</strong></div>
+            <div class="detail-cell"><span>用车时间</span><strong>${point.time}</strong></div>
+            <div class="detail-cell"><span>车牌号</span><strong>${point.plate}</strong></div>
+            <div class="detail-cell"><span>订单进展</span><strong>${point.progress}</strong></div>
+            <div class="detail-cell" style="grid-column: span 2"><span>路线</span><strong>${point.route}</strong></div>
+          </div>
+          <div class="actions">
+            <button class="ghost">查看路径</button>
+            <button class="ghost">司机</button>
+            <button class="action" id="confirmDispatch" ${dispatchDisabled}>派单</button>
+            <button class="danger">改派</button>
+            ${statusMarkup}
+          </div>
+        `;
+        const confirmButton = document.getElementById("confirmDispatch");
+        if (confirmButton) {
+          confirmButton.addEventListener("click", () => {
+            if (!selectedCandidateName || point.kind !== "order") {
+              dispatchStatus = {
+                kind: "error",
+                message: "请先选中订单和推荐司机"
+              };
+              renderDetail();
+              return;
+            }
+
+            dispatchStatus = {
+              kind: "success",
+              message: `已派给 ${selectedCandidateName}，留在地图看板`
+            };
+            renderDetail();
+          });
+        }
+      }
+
+      function renderEta() {
+        document.querySelectorAll(".eta-toggle button").forEach((button) => {
+          button.classList.toggle("active", button.dataset.mode === etaMode);
+        });
+        document.getElementById("etaOptions").innerHTML = etaPlans[etaMode]
+          .map(
+            (plan, index) => `
+              <div class="eta-option ${index === 0 ? "primary" : ""}">
+                <div class="rank">${plan.rank}</div>
+                <div class="eta-copy"><strong>${plan.title}</strong><span>${plan.desc}</span></div>
+                <div class="eta-time">${plan.time}</div>
+              </div>`
+          )
+          .join("");
+      }
+
+      function renderRecommend() {
+        const point = getSelected();
+        const isDriverView = activeKind === "driver" || point.kind === "driver";
+        const recommendations = isDriverView ? driverRecommendations : orderRecommendations;
+        document.getElementById("recommendTitle").textContent = isDriverView
+          ? "推荐订单 Top N"
+          : "推荐派单 Top N";
+        document.getElementById("recommendList").innerHTML = recommendations
+          .map(
+            (item, index) => `
+              <button class="candidate ${selectedCandidateName === item.name ? "active" : ""}" data-name="${item.name}">
+                <strong>#${index + 1} ${item.name}</strong>
+                <div class="row"><span>${isDriverView ? "目标司机" : "目标订单"}</span><b>${isDriverView ? point.title : point.title}</b></div>
+                <div class="row"><span>ETA</span><b>${item.eta}</b></div>
+                <div class="row"><span>负载惩罚</span><b>${item.penalty}</b></div>
+                <div class="row"><span>状态</span><b>${item.status}</b></div>
+                <div class="row"><span>结果</span><b>${item.outcome}</b></div>
+              </button>`
+          )
+          .join("");
+        document.querySelectorAll(".candidate").forEach((candidate) => {
+          candidate.addEventListener("click", () => {
+            selectedCandidateName = candidate.dataset.name;
+            dispatchStatus = {
+              kind: "info",
+              message: `已选择 ${selectedCandidateName}，请点击派单确认`
+            };
+            renderDetail();
+            renderRecommend();
+          });
+        });
+      }
+
+      function renderAll() {
+        document.querySelectorAll(".tabs button").forEach((button) => {
+          button.classList.toggle("active", button.dataset.kind === activeKind);
+        });
+        renderList();
+        renderMarkers();
+        renderDetail();
+        renderEta();
+        renderRecommend();
+      }
+
+      window.addEventListener("resize", updateViewportScale);
+      document.querySelectorAll(".tabs button").forEach((button) => {
+        button.addEventListener("click", () => {
+          activeKind = button.dataset.kind;
+          selectedId = points.find((point) => point.kind === activeKind)?.id || selectedId;
+          selectedCandidateName = null;
+          dispatchStatus = null;
+          renderAll();
+        });
+      });
+      document.querySelectorAll(".eta-toggle button").forEach((button) => {
+        button.addEventListener("click", () => {
+          etaMode = button.dataset.mode;
+          renderEta();
+        });
+      });
+      updateViewportScale();
+      renderAll();
+    </script>
+  </body>
+</html>
