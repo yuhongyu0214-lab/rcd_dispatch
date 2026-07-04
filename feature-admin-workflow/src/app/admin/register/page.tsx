@@ -2,13 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { isAdminRole } from "@/lib/auth/roles";
 
 import { RegisterForm } from "./components/register-form";
 
 export default async function AdminRegisterPage() {
   const currentUser = await getCurrentUser();
 
-  if (currentUser?.role === "admin") {
+  if (currentUser && isAdminRole(currentUser.role)) {
     redirect("/admin/map");
   }
 

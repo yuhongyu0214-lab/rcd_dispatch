@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { isAdminRole } from "@/lib/auth/roles";
 
 import { LoginForm } from "./components/login-form";
 
@@ -19,7 +20,7 @@ export default async function AdminLoginPage({
       ? searchParams.next
       : "/admin/import";
 
-  if (currentUser?.role === "admin") {
+  if (currentUser && isAdminRole(currentUser.role)) {
     redirect(nextPath);
   }
 

@@ -369,11 +369,11 @@ export async function geocode(
         ? await (prisma as unknown as {
             geocodeCache: {
               findUnique(args: {
-                where: { address: string };
+                where: { normalizedAddress: string };
               }): Promise<{ lat: number; lng: number } | null>;
             };
           }).geocodeCache.findUnique({
-            where: { address: normalized }
+            where: { normalizedAddress: normalized }
           })
         : null;
 
@@ -437,16 +437,16 @@ export async function geocode(
         const prismaWithCache = prisma as unknown as {
           geocodeCache: {
             upsert(args: {
-              where: { address: string };
+              where: { normalizedAddress: string };
               create: Record<string, unknown>;
               update: Record<string, unknown>;
             }): Promise<void>;
           };
         };
         await prismaWithCache.geocodeCache.upsert({
-          where: { address: normalized },
+          where: { normalizedAddress: normalized },
           create: {
-            address: normalized,
+            normalizedAddress: normalized,
             lat,
             lng
           },

@@ -25,7 +25,7 @@ const driverLog = createLogger("driver-workflow");
 // ============================================================================
 
 export async function POST(request: Request) {
-  const traceId = crypto.randomUUID();
+  const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
   const startTime = Date.now();
 
   // ---- 1. 鉴权 ----

@@ -2,18 +2,19 @@ import { type NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api-response";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { isAdminRole } from "@/lib/auth/roles";
 import { getMapBoardData } from "@/lib/map/points";
 import type { GetMapBoardParams } from "@/lib/map/points";
 
 export async function GET(request: NextRequest) {
-  const traceId = crypto.randomUUID();
+  const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
   const currentUser = await getCurrentUser();
 
   if (!currentUser) {
     return fail("未登录，请先登录后查看地图看板", { status: 401, traceId });
   }
 
-  if (currentUser.role !== "admin") {
+  if (!isAdminRole(currentUser.role)) {
     return fail("当前账号无权限查看地图看板", { status: 403, traceId });
   }
 

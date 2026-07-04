@@ -1,5 +1,6 @@
 import { fail, ok } from "@/lib/api-response";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { isAdminRole } from "@/lib/auth/roles";
 import { createLogger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 
@@ -32,14 +33,14 @@ const workflowLog = createLogger("admin-workflow");
 
 export async function POST(request: Request) {
   const startTime = Date.now();
-  const traceId = crypto.randomUUID();
+  const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
   const currentUser = await getCurrentUser();
 
   if (!currentUser) {
     return fail("未登录，请先登录", { status: 401, traceId });
   }
 
-  if (currentUser.role !== "admin") {
+  if (!isAdminRole(currentUser.role)) {
     return fail("当前账号无权限确认接单", { status: 403, traceId });
   }
 

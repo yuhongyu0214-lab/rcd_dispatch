@@ -3,8 +3,8 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const traceId = crypto.randomUUID();
+export async function GET(request: Request) {
+  const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
 
   try {
     await prisma.$queryRaw`SELECT 1`;

@@ -1,16 +1,17 @@
 import { fail, ok } from "@/lib/api-response";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { isAdminRole } from "@/lib/auth/roles";
 import { getImportResult } from "@/lib/import/orchestrators/get-import-result";
 
 export async function GET(request: Request) {
-  const traceId = crypto.randomUUID();
+  const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
   const currentUser = await getCurrentUser();
 
   if (!currentUser) {
     return fail("未登录，请先登录后查看导入结果", { status: 401, traceId });
   }
 
-  if (currentUser.role !== "admin") {
+  if (!isAdminRole(currentUser.role)) {
     return fail("当前账号无权限查看导入结果", { status: 403, traceId });
   }
 

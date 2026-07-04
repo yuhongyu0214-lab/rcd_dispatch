@@ -25,7 +25,7 @@ const DRIVER_ASSIGNMENT_STATUSES = ["ACTIVE", "ACCEPTED"] as const;
 // ============================================================================
 
 export async function GET(request: Request) {
-  const traceId = crypto.randomUUID();
+  const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
   const startTime = Date.now();
 
   try {

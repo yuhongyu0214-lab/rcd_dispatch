@@ -30,7 +30,7 @@ export async function POST(
   request: Request,
   context: { params: { id: string } }
 ) {
-  const traceId = crypto.randomUUID();
+  const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
   const orderId = context.params.id.trim();
 
   let body: DriverCompleteBody;

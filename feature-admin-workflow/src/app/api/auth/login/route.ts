@@ -4,7 +4,7 @@ import { verifyPassword } from "@/lib/auth/password";
 import { createSessionToken, getSessionCookieOptions } from "@/lib/auth/session";
 
 export async function POST(request: Request) {
-  const traceId = crypto.randomUUID();
+  const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
 
   try {
     const body = (await request.json()) as {

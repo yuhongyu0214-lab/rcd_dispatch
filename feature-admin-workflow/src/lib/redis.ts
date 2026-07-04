@@ -237,6 +237,14 @@ function getRedisClient(): RedisClientLike | null {
 }
 
 /**
+ * 检查 Redis 是否可用（轻量级，不做 ping）。
+ * 返回 false 表示 Redis 不可用，调用方应降级处理。
+ */
+export function isRedisAvailable(): boolean {
+  return !circuitBreaker.isDegraded && getRedisClientInternal() !== null;
+}
+
+/**
  * Redis 健康检查。
  * 返回 true 表示 Redis 可用。
  */

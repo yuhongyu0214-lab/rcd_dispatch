@@ -1,6 +1,6 @@
 import type { AssignmentStatus, DriverStatus, OrderType } from "@prisma/client";
 
-import { isDriverOnline } from "@/lib/redis";
+import { isDriverOnline, isRedisAvailable } from "@/lib/redis";
 
 import { dispatchLog } from "./log";
 import { DISPATCHABLE_DRIVER_STATUSES, isDoorOrder, isStoreOrder } from "./rules";
@@ -132,16 +132,15 @@ export async function filterDispatchCandidates(
       continue;
     }
 
-    // 2. Redis online status check (degraded: skip if Redis unavailable)
-    const online = await isDriverOnline(driverId);
-    if (!online) {
-      // When Redis is unavailable, isDriverOnline returns false.
-      // We check if this is a real offline or Redis degradation.
-      // For production, if Redis is degraded, we allow the driver through
-      // (the degraded mode returns false, but we still check DB status).
-      // We use the driver's DB isActive + status as fallback.
-      skippedReasons.set(driverId, "not_online_in_redis");
-      continue;
+    // 2. Redis online status check
+    // Redis 可用时严格检查在线状态；Redis 不可用时跳过在线检查，
+    // 依赖步骤 1 的 DB status 过滤，避免因 Redis 降级导致所有司机被排除。
+    if (isRedisAvailable()) {
+      const online = await isDriverOnline(driverId);
+      if (!online) {
+        skippedReasons.set(driverId, "not_online_in_redis");
+        continue;
+      }
     }
 
     // 3. Active assignment conflict check

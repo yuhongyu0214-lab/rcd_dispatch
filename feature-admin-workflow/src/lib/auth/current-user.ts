@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { prisma } from "@/lib/prisma";
 
+import { isAdminRole } from "./roles";
 import {
   AUTH_SESSION_COOKIE_NAME,
   type AuthSession,
@@ -79,7 +80,7 @@ export async function requireAdminPage(nextPath: string) {
     redirect(`/admin/login?next=${encodeURIComponent(nextPath)}`);
   }
 
-  if (currentUser.role !== "admin") {
+  if (!isAdminRole(currentUser.role)) {
     redirect("/");
   }
 

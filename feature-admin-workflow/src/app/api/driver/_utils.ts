@@ -2,6 +2,8 @@ import crypto from "crypto";
 
 import type { Prisma } from "@prisma/client";
 
+import { ADMIN_ROLES } from "@/lib/auth/roles";
+
 // ============================================================================
 // 坐标校验 — GCJ02 中国境内范围
 // ============================================================================
@@ -235,7 +237,7 @@ export function toDriverTaskDTO(order: DriverTaskOrder): DriverTaskDTO {
 
 export async function resolveSystemOperatorUserId(tx: Prisma.TransactionClient) {
   const user = await tx.user.findFirst({
-    where: { role: "admin" },
+    where: { role: { in: [...ADMIN_ROLES] } },
     orderBy: { createdAt: "asc" },
     select: { id: true }
   });

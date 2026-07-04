@@ -1,5 +1,6 @@
 import { fail, ok } from "@/lib/api-response";
 import { hashPassword } from "@/lib/auth/password";
+import { isAdminRole } from "@/lib/auth/roles";
 import { prisma } from "@/lib/prisma";
 
 function normalizePhoneAccount(account: string) {
@@ -7,13 +8,14 @@ function normalizePhoneAccount(account: string) {
 }
 
 export async function POST(request: Request) {
-  const traceId = crypto.randomUUID();
+  const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
 
   try {
     const body = (await request.json()) as {
       account?: string;
       name?: string;
       password?: string;
+      role?: string;
     };
     const account = normalizePhoneAccount(body.account ?? "");
     const password = body.password ?? "";
@@ -47,7 +49,7 @@ export async function POST(request: Request) {
         phone: account,
         name,
         password: passwordHash,
-        role: "admin"
+        role: body.role && isAdminRole(body.role) ? body.role : "admin"
       },
       select: {
         id: true,

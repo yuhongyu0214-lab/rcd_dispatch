@@ -1,5 +1,6 @@
 import { fail, ok } from "@/lib/api-response";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { isAdminRole } from "@/lib/auth/roles";
 import { toOrderDisplayDTO } from "@/lib/map/order-display-dto";
 import { prisma } from "@/lib/prisma";
 
@@ -7,14 +8,14 @@ export async function GET(
   _request: Request,
   { params }: { params: { orderId: string } }
 ) {
-  const traceId = crypto.randomUUID();
+  const traceId = _request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
   const currentUser = await getCurrentUser();
 
   if (!currentUser) {
     return fail("未登录，请先登录", { status: 401, traceId });
   }
 
-  if (currentUser.role !== "admin") {
+  if (!isAdminRole(currentUser.role)) {
     return fail("当前账号无权限查看订单详情", { status: 403, traceId });
   }
 
