@@ -15,14 +15,27 @@ export default async function AdminLoginPage({
   };
 }) {
   const currentUser = await getCurrentUser();
-  const nextPath =
-    searchParams.next && searchParams.next.startsWith("/admin")
-      ? searchParams.next
-      : "/admin/import";
+  const rawNext = searchParams.next ?? "";
 
-  if (currentUser && isAdminRole(currentUser.role)) {
-    redirect(nextPath);
+  // 已登录用户按角色分流
+  if (currentUser) {
+    // 司机 → 司机工作台
+    if (currentUser.driverId) {
+      redirect("/driver/tasks");
+    }
+    // 管理员/调度员 → 后台
+    if (isAdminRole(currentUser.role)) {
+      const adminPath =
+        rawNext.startsWith("/admin") ? rawNext : "/admin/import";
+      redirect(adminPath);
+    }
   }
+
+  // next 参数允许 admin 和 driver 两类路径
+  const nextPath =
+    rawNext.startsWith("/admin") || rawNext.startsWith("/driver")
+      ? rawNext
+      : "/admin/import";
 
   return (
     <main className="min-h-screen bg-slate-100 px-6 py-12 text-slate-900">

@@ -11,6 +11,7 @@ type LoginResponse =
         email: string;
         name: string;
         role: string;
+        driverId?: string;
       };
       error: null;
       traceId: string;
@@ -49,7 +50,12 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
         return;
       }
 
-      router.replace(nextPath);
+      // 角色分流：司机走 driver 工作台，管理员/调度员走 admin 后台
+      if (payload.data.driverId) {
+        router.replace("/driver/tasks");
+      } else {
+        router.replace(nextPath);
+      }
       router.refresh();
     } catch {
       setError("登录失败，请稍后重试");

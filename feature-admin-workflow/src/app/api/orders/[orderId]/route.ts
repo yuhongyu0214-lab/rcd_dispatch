@@ -1,8 +1,11 @@
 import { fail, ok } from "@/lib/api-response";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { isAdminRole } from "@/lib/auth/roles";
+import { createLogger } from "@/lib/logger";
 import { toOrderDisplayDTO } from "@/lib/map/order-display-dto";
 import { prisma } from "@/lib/prisma";
+
+const log = createLogger("orders-detail-api");
 
 export async function GET(
   _request: Request,
@@ -13,10 +16,6 @@ export async function GET(
 
   if (!currentUser) {
     return fail("未登录，请先登录", { status: 401, traceId });
-  }
-
-  if (!isAdminRole(currentUser.role)) {
-    return fail("当前账号无权限查看订单详情", { status: 403, traceId });
   }
 
   try {
@@ -43,6 +42,18 @@ export async function GET(
       return fail("订单不存在", { status: 404, traceId });
     }
 
+    // ---- 权限校验 ----
+    // 管理员/调度员可查看所有订单；司机只能查看自己被分配的订单
+    const isAdmin = isAdminRole(currentUser.role);
+    const isAssignedDriver =
+      currentUser.driverId != null &&
+      order.currentAssignment?.driverId === currentUser.driverId;
+
+    if (!isAdmin && !isAssignedDriver) {
+      return fail("当前账号无权限查看订单详情", { status: 403, traceId });
+    }
+
+    // ---- 操作日志 ----
     const logs = await prisma.operationLog.findMany({
       where: {
         entityType: "ORDER",
@@ -55,10 +66,22 @@ export async function GET(
       take: 50
     });
 
+    log.info("order_detail_succeeded", {
+      traceId,
+      orderId: order.id,
+      userId: currentUser.id,
+      role: isAdmin ? "admin" : "driver"
+    });
+
     return ok(
       {
         order: {
           ...toOrderDisplayDTO(order),
+          // 额外字段：H5 导航需要经纬度
+          pickupLat: order.pickupLat,
+          pickupLng: order.pickupLng,
+          returnLat: order.returnLat,
+          returnLng: order.returnLng,
           assignments: order.assignments
         },
         logs
@@ -67,6 +90,7 @@ export async function GET(
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "订单详情加载失败";
+    log.error("order_detail_error", { traceId, orderId: params.orderId, error: message });
     return fail(message, { status: 500, traceId });
   }
 }
