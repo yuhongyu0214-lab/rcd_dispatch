@@ -14,6 +14,7 @@ const { mockIsDriverOnline, mockGetCachedEta, mockCacheEta } = vi.hoisted(() => 
 }));
 
 vi.mock("@/lib/redis", () => ({
+  isRedisAvailable: vi.fn().mockReturnValue(false),
   isDriverOnline: mockIsDriverOnline,
   getCachedEta: mockGetCachedEta,
   cacheEta: mockCacheEta,

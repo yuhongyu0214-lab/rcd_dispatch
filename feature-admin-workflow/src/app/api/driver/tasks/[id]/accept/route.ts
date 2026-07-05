@@ -164,11 +164,11 @@ export async function POST(
           data: { status: "S4" }
         });
 
-        // 2i. 写操作日志（entityType=ASSIGNMENT）
+        // 2i. 写操作日志
         await tx.operationLog.create({
           data: {
-            entityType: "ASSIGNMENT",
-            entityId: order.currentAssignment.id,
+            entityType: "ORDER",
+            entityId: order.id,
             action: "ACCEPT",
             operatorUserId,
             metadataJson: {

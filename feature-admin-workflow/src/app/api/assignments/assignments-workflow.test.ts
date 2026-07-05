@@ -149,7 +149,8 @@ describe("assignments workflow routes", () => {
       currentAssignment: {
         driver: { id: "driver-old", name: "李强" },
         driverId: "driver-old",
-        id: "assignment-old"
+        id: "assignment-old",
+        status: "ACTIVE"
       },
       id: "order-1",
       orderNo: "D3832",
@@ -223,7 +224,8 @@ describe("assignments workflow routes", () => {
       currentAssignment: {
         driver: { id: "driver-1", name: "李强" },
         driverId: "driver-1",
-        id: "assignment-1"
+        id: "assignment-1",
+        status: "ACTIVE"
       },
       id: "order-1",
       orderNo: "D3832",
