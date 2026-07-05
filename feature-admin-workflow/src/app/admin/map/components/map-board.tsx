@@ -263,9 +263,11 @@ function loadAmap(amapKey: string, amapSecurityCode: string) {
     window.rcdAmapLoaderKey = loaderKey;
   }
 
-  window._AMapSecurityConfig = {
-    securityJsCode: amapSecurityCode
-  };
+  if (amapSecurityCode) {
+    window._AMapSecurityConfig = {
+      securityJsCode: amapSecurityCode
+    };
+  }
 
   if (!window.rcdAmapLoader) {
     window.rcdAmapLoader = new Promise<AMapNamespace>((resolve, reject) => {
@@ -811,9 +813,9 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
   const [recommendationLoading, setRecommendationLoading] = useState(false);
   const [recommendationError, setRecommendationError] = useState<string | null>(null);
   const [mapNotice, setMapNotice] = useState(
-    amapKey && amapSecurityCode
+    amapKey
       ? "正在加载高德地图"
-      : "未配置高德 JS Key 或安全密钥，已启用本地降级视图"
+      : "未配置高德 JS Key，已启用本地降级视图"
   );
 
   useEffect(() => {
@@ -1344,9 +1346,9 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
   }, [activeKind, filteredActivePoints, selectedPoint]);
 
   useEffect(() => {
-    if (!amapKey || !amapSecurityCode || !mapContainerRef.current) {
+    if (!amapKey || !mapContainerRef.current) {
       setAmapReady(false);
-      setMapNotice("未配置高德 JS Key 或安全密钥，已启用本地降级视图");
+      setMapNotice("未配置高德 JS Key，已启用本地降级视图");
       return;
     }
 
