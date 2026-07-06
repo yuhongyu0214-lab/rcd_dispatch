@@ -84,5 +84,7 @@ export type MapBoardPayload = {
   vehicles: MapVehiclePoint[];
   stores: MapStorePoint[];
   summary: MapBoardSummary;
+  /** 动态地图中心：从第一个有 GPS 的车辆计算，回退到 DEFAULT_MAP_CENTER */
+  mapCenter: { lat: number; lng: number };
   generatedAt: string;
 };

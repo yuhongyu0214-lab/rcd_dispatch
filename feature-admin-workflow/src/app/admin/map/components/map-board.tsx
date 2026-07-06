@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { MapBoardPayload, MapPoint, MapPointKind } from "@/lib/map/types";
+import { DEFAULT_MAP_CENTER } from "@/lib/map/constants";
 
 import styles from "./map-board.module.css";
 
@@ -52,6 +53,8 @@ type DispatchRecommendPayload =
 type AMapMap = {
   setFitView: (overlays?: AMapMarker[]) => void;
   setZoomAndCenter: (zoom: number, center: [number, number]) => void;
+  setCenter: (center: [number, number]) => void;
+  getCenter: () => [number, number];
   destroy: () => void;
 };
 
@@ -240,24 +243,26 @@ type DispatchStatus = {
 
 type MapBoardProps = {
   amapKey: string;
-  amapSecurityCode: string;
+  amapSecurityCode?: string;
 };
 
-function loadAmap(amapKey: string, amapSecurityCode: string) {
+function loadAmap(amapKey: string, amapSecurityCode?: string) {
   if (window.AMap) {
     return Promise.resolve(window.AMap);
   }
 
-  const loaderKey = `${amapKey}:${amapSecurityCode}`;
+  const loaderKey = `${amapKey}:${amapSecurityCode ?? ""}`;
 
   if (window.rcdAmapLoaderKey !== loaderKey) {
     window.rcdAmapLoader = undefined;
     window.rcdAmapLoaderKey = loaderKey;
   }
 
-  window._AMapSecurityConfig = {
-    securityJsCode: amapSecurityCode
-  };
+  if (amapSecurityCode) {
+    window._AMapSecurityConfig = {
+      securityJsCode: amapSecurityCode
+    };
+  }
 
   if (!window.rcdAmapLoader) {
     window.rcdAmapLoader = new Promise<AMapNamespace>((resolve, reject) => {
@@ -774,9 +779,9 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
   const [etaLoading, setEtaLoading] = useState(false);
   const [etaError, setEtaError] = useState<string | null>(null);
   const [mapNotice, setMapNotice] = useState(
-    amapKey && amapSecurityCode
+    amapKey
       ? "正在加载高德地图"
-      : "未配置高德 JS Key 或安全密钥，已启用本地降级视图"
+      : "未配置高德 JS Key，已启用本地降级视图"
   );
 
   useEffect(() => {
@@ -1393,9 +1398,9 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
   }, [activeKind, filteredActivePoints, selectedPoint]);
 
   useEffect(() => {
-    if (!amapKey || !amapSecurityCode || !mapContainerRef.current) {
+    if (!amapKey || !mapContainerRef.current) {
       setAmapReady(false);
-      setMapNotice("未配置高德 JS Key 或安全密钥，已启用本地降级视图");
+      setMapNotice("未配置高德 JS Key，已启用本地降级视图");
       return;
     }
 
@@ -1411,10 +1416,13 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
         }
 
         const isNewMap = !mapRef.current;
+        const mapCenter: [number, number] = payload?.mapCenter
+          ? [payload.mapCenter.lng, payload.mapCenter.lat]
+          : [DEFAULT_MAP_CENTER.lng, DEFAULT_MAP_CENTER.lat];
 
         if (isNewMap) {
           mapRef.current = new amap.Map(mapContainerRef.current, {
-            center: [121.4737, 31.2304],
+            center: mapCenter,
             zoom: 12,
             resizeEnable: true,
             viewMode: "2D",
@@ -1451,7 +1459,7 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
           hasFittedMapRef.current = true;
         } else {
           if (!hasFittedMapRef.current) {
-            mapRef.current?.setZoomAndCenter(12, [121.4737, 31.2304]);
+            mapRef.current?.setZoomAndCenter(12, mapCenter);
           }
         }
 
@@ -1468,7 +1476,7 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
     return () => {
       disposed = true;
     };
-  }, [activeKind, allPoints, amapKey, amapSecurityCode, focusedPointIds, selectedPoint]);
+  }, [activeKind, allPoints, amapKey, amapSecurityCode, focusedPointIds, payload, selectedPoint]);
 
   useEffect(() => {
     return () => {

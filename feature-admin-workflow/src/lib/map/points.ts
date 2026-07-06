@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { getDriverLocations } from "@/lib/redis";
 import type { DriverLocation } from "@/lib/redis";
 
+import { DEFAULT_MAP_CENTER } from "./constants";
 import { toOrderDisplayDTO } from "./order-display-dto";
 import type {
   MapBoardPayload,
@@ -19,16 +20,13 @@ import type {
   MapVehiclePoint
 } from "./types";
 
+export { DEFAULT_MAP_CENTER };
+
 export type GetMapBoardParams = {
   /** 按门店筛选点位（可选） */
   storeId?: string;
   /** 按对象类型筛选。不传则加载全部类型。 */
   objectTypes?: string[];
-};
-
-export const DEFAULT_MAP_CENTER = {
-  lat: 31.2304,
-  lng: 121.4737
 };
 
 const visibleOrderStatuses: OrderStatus[] = [
@@ -61,6 +59,37 @@ export function offsetCoordinate(
     lng: Number((base.lng + Math.cos(angle) * radius).toFixed(6)),
     source: "MOCK"
   };
+}
+
+/**
+ * 从点位数组中计算动态地图中心。
+ * 优先级分段查找：车辆真实GPS → 司机实时位置 → 订单坐标 → 门店坐标 → 上海默认
+ * 避免混排导致的回退点抢占（如车辆回退到司机位置时被误判为车辆GPS）。
+ */
+function computeDynamicCenter(
+  vehiclePoints: MapVehiclePoint[],
+  driverPoints: MapDriverPoint[],
+  orderPoints: MapOrderPoint[],
+  storePoints: MapStorePoint[]
+): { lat: number; lng: number } {
+  // 1. 车辆自身 GPS（排除回退到司机/默认的坐标）
+  const vehicleGps = vehiclePoints.find((p) => p.coordinate.source === "VEHICLE");
+  if (vehicleGps) return { lat: vehicleGps.coordinate.lat, lng: vehicleGps.coordinate.lng };
+
+  // 2. 司机实时位置（Redis 或 DB）
+  const driverPos = driverPoints.find((p) => p.coordinate.source === "REDIS" || p.coordinate.source === "DRIVER");
+  if (driverPos) return { lat: driverPos.coordinate.lat, lng: driverPos.coordinate.lng };
+
+  // 3. 订单真实坐标
+  const orderPos = orderPoints.find((p) => p.coordinate.source === "ORDER");
+  if (orderPos) return { lat: orderPos.coordinate.lat, lng: orderPos.coordinate.lng };
+
+  // 4. 门店真实 GPS
+  const storePos = storePoints.find((p) => p.coordinate.source === "STORE");
+  if (storePos) return { lat: storePos.coordinate.lat, lng: storePos.coordinate.lng };
+
+  // 5. 最终回退
+  return DEFAULT_MAP_CENTER;
 }
 
 export function buildMapSummary(
@@ -100,64 +129,51 @@ export async function getMapBoardData(
   const storeFilter = storeId ? { storeId } : ({} as Record<string, unknown>);
 
   const [orders, drivers, vehicles, stores] = await Promise.all([
-    shouldLoad("orders") || shouldLoad("alerts")
-      ? prisma.order.findMany({
-          where: {
-            status: { in: visibleOrderStatuses },
-            ...storeFilter
-          },
-          include: {
-            store: true,
-            vehicle: true
-          },
-          orderBy: [{ scheduledAt: "asc" }, { createdAt: "desc" }],
-          take: 200
-        })
-      : ([] as Awaited<ReturnType<typeof prisma.order.findMany>>),
-    shouldLoad("drivers") || shouldLoad("alerts")
-      ? prisma.driver.findMany({
-          where: {
-            isActive: true,
-            ...storeFilter
-          },
-          include: {
-            store: true
-          },
-          orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
-          take: 200
-        })
-      : ([] as Awaited<ReturnType<typeof prisma.driver.findMany>>),
-    shouldLoad("vehicles") || shouldLoad("alerts")
-      ? prisma.vehicle.findMany({
-          where: {
-            isActive: true,
-            ...storeFilter
-          },
-          include: {
-            store: true
-          },
-          orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
-          take: 200
-        })
-      : ([] as Awaited<ReturnType<typeof prisma.vehicle.findMany>>),
-    shouldLoad("stores")
-      ? prisma.store.findMany({
-          where: {
-            isActive: true
-          },
-          orderBy: [{ code: "asc" }],
-          take: 50
-        })
-      : ([] as Awaited<ReturnType<typeof prisma.store.findMany>>)
+    prisma.order.findMany({
+      where: {
+        status: { in: visibleOrderStatuses },
+        ...storeFilter
+      },
+      include: {
+        store: true,
+        vehicle: true
+      },
+      orderBy: [{ scheduledAt: "asc" }, { createdAt: "desc" }],
+      take: shouldLoad("orders") || shouldLoad("alerts") ? 200 : 0
+    }),
+    prisma.driver.findMany({
+      where: {
+        isActive: true,
+        ...storeFilter
+      },
+      include: {
+        store: true
+      },
+      orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
+      take: shouldLoad("drivers") || shouldLoad("alerts") ? 200 : 0
+    }),
+    prisma.vehicle.findMany({
+      where: {
+        isActive: true,
+        ...storeFilter
+      },
+      include: {
+        store: true
+      },
+      orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
+      take: shouldLoad("vehicles") || shouldLoad("alerts") ? 200 : 0
+    }),
+    prisma.store.findMany({
+      where: {
+        isActive: true
+      },
+      orderBy: [{ code: "asc" }],
+      take: shouldLoad("stores") ? 50 : 0
+    })
   ]);
 
-  // 类型窄化：Promise.all 的空数组回退导致 union type 丢失 include 信息
-  const _orders = orders as Array<typeof orders[number] & { store: { name: string }; vehicle: { licensePlate: string } | null }>;
-  const _drivers = drivers as Array<typeof drivers[number] & { store: { name: string } }>;
-  const _vehicles = vehicles as Array<typeof vehicles[number] & { store: { name: string } }>;
-
   // 按 storeId 对车辆分组（多场景使用）
-  const vehiclesByStore = _vehicles.reduce<Map<string, typeof _vehicles>>(
+  const vehiclesByStore = vehicles.reduce<Map<string, typeof vehicles>>(
     (grouped, vehicle) => {
       const storeVehicles = grouped.get(vehicle.storeId) ?? [];
       storeVehicles.push(vehicle);
@@ -227,7 +243,7 @@ export async function getMapBoardData(
       licensePlate: vehicle.licensePlate,
       vehicleType: vehicle.vehicleType,
       status: vehicle.status,
-      storeName: (vehicle as unknown as { store: { name: string } }).store.name,
+      storeName: vehicle.store.name,
       coordinate
     };
   });
@@ -238,7 +254,7 @@ export async function getMapBoardData(
   for (const order of orders) {
     if (!hasCoordinate(order.pickupLat, order.pickupLng)) continue;
 
-    const display = toOrderDisplayDTO(order as Parameters<typeof toOrderDisplayDTO>[0]);
+    const display = toOrderDisplayDTO(order);
 
     orderPoints.push({
       kind: "ORDER",
@@ -249,9 +265,9 @@ export async function getMapBoardData(
       pickupAddress: order.pickupAddress,
       returnAddress: order.returnAddress,
       scheduledAt: order.scheduledAt.toISOString(),
-      storeName: (order as unknown as { store: { name: string } }).store.name,
+      storeName: order.store.name,
       vehicleLabel:
-        order.licensePlateSnapshot ?? (order as unknown as { vehicle: { licensePlate: string } | null }).vehicle?.licensePlate ?? null,
+        order.licensePlateSnapshot ?? order.vehicle?.licensePlate ?? null,
       coordinate: {
         lat: order.pickupLat!,
         lng: order.pickupLng!,
@@ -308,7 +324,7 @@ export async function getMapBoardData(
       name: driver.name,
       phone: driver.phone,
       status: driver.status,
-      storeName: (driver as unknown as { store: { name: string } }).store.name,
+      storeName: driver.store.name,
       coordinate,
       lastSeenAt
     };
@@ -355,6 +371,9 @@ export async function getMapBoardData(
     };
   });
 
+  // 动态地图中心：从第一个真实 GPS 坐标计算，避免硬编码上海
+  const mapCenter = computeDynamicCenter(vehiclePoints, driverPoints, orderPoints, storePoints);
+
   return {
     orders: orderPoints,
     drivers: driverPoints,
@@ -366,6 +385,7 @@ export async function getMapBoardData(
       vehiclePoints,
       storePoints
     ),
+    mapCenter,
     generatedAt: new Date().toISOString()
   };
 }

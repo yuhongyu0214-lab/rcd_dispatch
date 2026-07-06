@@ -1,7 +1,7 @@
-import { cookies } from "next/headers";
 import Link from "next/link";
 
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { prisma } from "@/lib/prisma";
 
 import { CopyButton } from "../../components/copy-button";
 import { TaskActions } from "../../components/task-actions";
@@ -86,26 +86,57 @@ export default async function DriverTaskDetailPage({
   }
 
   const orderId = params.id;
-  const cookieHeader = cookies().toString();
-  const baseUrl =
-    process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
 
   let order: DetailResponse["data"]["order"] | null = null;
   let logs: DetailResponse["data"]["logs"] = [];
   let fetchError: string | null = null;
 
   try {
-    const res = await fetch(`${baseUrl}/api/orders/${orderId}`, {
-      headers: { cookie: cookieHeader },
-      cache: "no-store"
+    const dbOrder = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        store: { select: { name: true } },
+        vehicle: { select: { id: true, licensePlate: true, vehicleType: true } }
+      }
     });
 
-    if (res.ok) {
-      const json = (await res.json()) as DetailResponse;
-      order = json.data.order;
-      logs = json.data.logs;
+    if (!dbOrder) {
+      fetchError = "订单不存在";
     } else {
-      fetchError = "订单详情加载失败";
+      order = {
+        id: dbOrder.id,
+        orderNo: dbOrder.orderNo,
+        type: dbOrder.type,
+        status: dbOrder.status,
+        pickupAddress: dbOrder.pickupAddress,
+        pickupLat: dbOrder.pickupLat,
+        pickupLng: dbOrder.pickupLng,
+        returnAddress: dbOrder.returnAddress,
+        returnLat: dbOrder.returnLat,
+        returnLng: dbOrder.returnLng,
+        scheduledAt: dbOrder.scheduledAt.toISOString(),
+        storeName: dbOrder.store.name,
+        plate: dbOrder.licensePlateSnapshot ?? dbOrder.vehicle?.licensePlate ?? "未绑定车牌",
+        vehicle: dbOrder.vehicle
+          ? { id: dbOrder.vehicle.id, licensePlate: dbOrder.vehicle.licensePlate, vehicleType: dbOrder.vehicle.vehicleType }
+          : null
+      };
+
+      const dbLogs = await prisma.operationLog.findMany({
+        where: { entityType: "ORDER", entityId: orderId },
+        orderBy: { createdAt: "desc" },
+        include: { operatorUser: { select: { id: true, name: true } } },
+        take: 50
+      });
+
+      logs = dbLogs.map((log) => ({
+        id: log.id,
+        action: log.action,
+        reason: log.reason,
+        createdAt: log.createdAt.toISOString(),
+        operatorUser: { id: log.operatorUser.id, name: log.operatorUser.name },
+        metadataJson: log.metadataJson as Record<string, unknown> | null
+      }));
     }
   } catch {
     fetchError = "服务暂时不可用";
