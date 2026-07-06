@@ -150,7 +150,7 @@ describe("assignments workflow routes", () => {
         driver: { id: "driver-old", name: "李强" },
         driverId: "driver-old",
         id: "assignment-old",
-        status: "ACTIVE"
+        status: "ACTIVE",
       },
       id: "order-1",
       orderNo: "D3832",
@@ -225,7 +225,7 @@ describe("assignments workflow routes", () => {
         driver: { id: "driver-1", name: "李强" },
         driverId: "driver-1",
         id: "assignment-1",
-        status: "ACTIVE"
+        status: "ACTIVE",
       },
       id: "order-1",
       orderNo: "D3832",

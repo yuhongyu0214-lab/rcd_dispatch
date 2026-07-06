@@ -51,7 +51,7 @@ export type OrderDisplaySource = {
 export type OrderDisplayDTO = {
   id: string;
   orderNo: string;
-  rawOrderNo: string;
+  shortOrderNo: string;
   type: OrderType;
   typeText: string;
   status: OrderStatus;
@@ -188,8 +188,8 @@ export function toOrderDisplayDTO(dbOrder: OrderDisplaySource): OrderDisplayDTO 
 
   return {
     id: dbOrder.id,
-    orderNo: formatOrderDisplayNo(dbOrder.orderNo),
-    rawOrderNo: dbOrder.orderNo,
+    orderNo: dbOrder.orderNo,
+    shortOrderNo: formatOrderDisplayNo(dbOrder.orderNo),
     type: dbOrder.type,
     typeText: orderTypeText[dbOrder.type],
     status: dbOrder.status,

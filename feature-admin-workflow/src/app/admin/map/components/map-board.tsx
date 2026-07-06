@@ -204,14 +204,6 @@ const orderTypeLabels: Record<string, string> = {
 type TimeFilter = "ALL" | "2" | "4" | "6";
 type OrderDirectionFilter = "ALL" | "PICKUP" | "RETURN";
 type DispatchOutcome = "DISPATCHED" | "PENDING / NO_DRIVER" | "MANUAL / ETA_EXCEEDED";
-type EtaMode = "DRIVE" | "TRANSIT";
-
-type EtaPlan = {
-  rank: "主" | "备";
-  title: string;
-  description: string;
-  timeText: string;
-};
 
 type DispatchRecommendResult = {
   orderId: string;
@@ -263,11 +255,9 @@ function loadAmap(amapKey: string, amapSecurityCode: string) {
     window.rcdAmapLoaderKey = loaderKey;
   }
 
-  if (amapSecurityCode) {
-    window._AMapSecurityConfig = {
-      securityJsCode: amapSecurityCode
-    };
-  }
+  window._AMapSecurityConfig = {
+    securityJsCode: amapSecurityCode
+  };
 
   if (!window.rcdAmapLoader) {
     window.rcdAmapLoader = new Promise<AMapNamespace>((resolve, reject) => {
@@ -631,7 +621,7 @@ function pointMatchesKeyword(point: BoardPoint, keyword: string) {
       getOrderTypeText(point),
       point.returnAddress,
       point.vehicleLabel ?? "",
-      display?.rawOrderNo ?? "",
+      display?.shortOrderNo ?? "",
       display?.plate ?? "",
       display?.driverName ?? "",
       display?.source ?? "",
@@ -752,40 +742,6 @@ function getDriverLoadPenalty(status: string) {
   return loadPenaltyByStatus[status] ?? 30;
 }
 
-function getEtaPlans(mode: EtaMode): EtaPlan[] {
-  if (mode === "TRANSIT") {
-    return [
-      {
-        rank: "主",
-        title: "地铁 10 号线 + 步行",
-        description: "全程 38 分钟 · 地铁 29 分钟 · 步行 620 米",
-        timeText: "38m"
-      },
-      {
-        rank: "备",
-        title: "地铁 2 号线 + 公交",
-        description: "全程 46 分钟 · 地铁 31 分钟 · 步行 410 米",
-        timeText: "46m"
-      }
-    ];
-  }
-
-  return [
-    {
-      rank: "主",
-      title: "内环高架优先",
-      description: "开车 18 分钟 · 12.4 公里 · 当前最短",
-      timeText: "18m"
-    },
-    {
-      rank: "备",
-      title: "地面道路避堵",
-      description: "开车 24 分钟 · 10.8 公里 · 少收费",
-      timeText: "24m"
-    }
-  ];
-}
-
 export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<AMapMap | null>(null);
@@ -804,7 +760,6 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [amapReady, setAmapReady] = useState(false);
-  const [etaMode, setEtaMode] = useState<EtaMode>("DRIVE");
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [dispatching, setDispatching] = useState(false);
   const [dispatchStatus, setDispatchStatus] = useState<DispatchStatus | null>(null);
@@ -812,10 +767,16 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
     useState<DispatchRecommendResult | null>(null);
   const [recommendationLoading, setRecommendationLoading] = useState(false);
   const [recommendationError, setRecommendationError] = useState<string | null>(null);
+  const [realEtaData, setRealEtaData] = useState<{
+    etaMinutes: number;
+    distanceMeters: number;
+  } | null>(null);
+  const [etaLoading, setEtaLoading] = useState(false);
+  const [etaError, setEtaError] = useState<string | null>(null);
   const [mapNotice, setMapNotice] = useState(
-    amapKey
+    amapKey && amapSecurityCode
       ? "正在加载高德地图"
-      : "未配置高德 JS Key，已启用本地降级视图"
+      : "未配置高德 JS Key 或安全密钥，已启用本地降级视图"
   );
 
   useEffect(() => {
@@ -966,9 +927,8 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
         .slice(0, 3)
         .map((point, index) => {
           const loadPenalty = getDriverLoadPenalty(point.status);
-          const etaMinutes = 18 + index * 9 + Math.round(loadPenalty / 2);
-          const outcome: DispatchOutcome =
-            etaMinutes >= 120 ? "MANUAL / ETA_EXCEEDED" : "DISPATCHED";
+          const etaMinutes = -1;
+          const outcome: DispatchOutcome = "PENDING / NO_DRIVER";
 
           return {
             driver: point,
@@ -980,7 +940,40 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
         }),
     [payload?.drivers]
   );
-  const etaPlans = useMemo(() => getEtaPlans(etaMode), [etaMode]);
+  const etaPlans = useMemo(() => {
+    if (realEtaData) {
+      return [
+        {
+          rank: "主" as const,
+          title: "高德实时路径规划",
+          description: `驾车 ${realEtaData.etaMinutes} 分钟 · ${(realEtaData.distanceMeters / 1000).toFixed(1)} 公里`,
+          timeText: `${realEtaData.etaMinutes}m`,
+        },
+      ];
+    }
+    if (etaLoading) {
+      return [
+        {
+          rank: "主" as const,
+          title: "正在计算路径...",
+          description: "调用高德驾车路径规划 API",
+          timeText: "...",
+        },
+      ];
+    }
+    if (etaError) {
+      return [
+        {
+          rank: "主" as const,
+          title: "无法计算 ETA",
+          description: etaError,
+          timeText: "--",
+        },
+      ];
+    }
+    // 未选中订单+司机时不展示任何 ETA 数据
+    return [];
+  }, [realEtaData, etaLoading, etaError]);
   const recommendCandidates = useMemo<RecommendCandidate[]>(() => {
     const isDriverView = activeKind === "DRIVER" || selectedPoint?.kind === "DRIVER";
 
@@ -990,7 +983,7 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
 
       return (payload?.orders ?? []).slice(0, 3).map((point, index) => {
         const loadPenalty = index === 0 ? 0 : index * 7;
-        const etaMinutes = 18 + index * 11 + loadPenalty;
+        const etaMinutes = -1;
 
         return {
           id: point.id,
@@ -1000,7 +993,7 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
           loadPenalty,
           statusText: getPointStatus(point),
           targetText: targetDriverName,
-          outcome: etaMinutes >= 120 ? "MANUAL_CHECK" : "MATCHED",
+          outcome: "ETA 未计算",
           point
         };
       });
@@ -1065,6 +1058,60 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
     () => recommendCandidates.find((candidate) => candidate.id === selectedCandidateId) ?? null,
     [recommendCandidates, selectedCandidateId]
   );
+
+  // ── 真实 ETA 请求（选中订单 + 候选司机时调用高德驾车路径规划）──
+  useEffect(() => {
+    if (
+      !selectedPoint ||
+      selectedPoint.kind !== "ORDER" ||
+      !selectedCandidate
+    ) {
+      setRealEtaData(null);
+      setEtaError(null);
+      return;
+    }
+
+    let disposed = false;
+    setEtaLoading(true);
+    setEtaError(null);
+
+    fetch(
+      `/api/map/eta?orderId=${encodeURIComponent(selectedPoint.id)}&driverId=${encodeURIComponent(selectedCandidate.id)}`,
+      { cache: "no-store" }
+    )
+      .then((res) => res.json())
+      .then((result: {
+        success: boolean;
+        data?: { etaMinutes: number; distanceMeters: number; etaStatus?: string; failReason?: string };
+      }) => {
+        if (disposed) return;
+        const data = result.data;
+        if (result.success && data && data.etaStatus !== "FAILED") {
+          setRealEtaData({
+            etaMinutes: data.etaMinutes,
+            distanceMeters: data.distanceMeters,
+          });
+          setEtaError(null);
+        } else {
+          setRealEtaData(null);
+          setEtaError(data?.failReason ?? "高德 API 返回异常");
+        }
+      })
+      .catch(() => {
+        if (!disposed) {
+          setRealEtaData(null);
+          setEtaError("网络请求失败，请检查服务状态");
+        }
+      })
+      .finally(() => {
+        if (!disposed) setEtaLoading(false);
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, [selectedPoint, selectedCandidate]);
+
   const dispatchOrderPoint = selectedPoint?.kind === "ORDER" ? selectedPoint : null;
   const dispatchDriverPoint =
     dispatchOrderPoint && selectedCandidate?.point.kind === "DRIVER"
@@ -1346,9 +1393,9 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
   }, [activeKind, filteredActivePoints, selectedPoint]);
 
   useEffect(() => {
-    if (!amapKey || !mapContainerRef.current) {
+    if (!amapKey || !amapSecurityCode || !mapContainerRef.current) {
       setAmapReady(false);
-      setMapNotice("未配置高德 JS Key，已启用本地降级视图");
+      setMapNotice("未配置高德 JS Key 或安全密钥，已启用本地降级视图");
       return;
     }
 
@@ -1599,27 +1646,11 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
           <article className={styles.etaPanel} aria-label="导航预计到达">
             <div className={styles.etaHead}>
               <strong>导航预计到达</strong>
-              <div className={styles.etaToggle}>
-                <button
-                  className={etaMode === "DRIVE" ? styles.etaToggleActive : ""}
-                  type="button"
-                  onClick={() => setEtaMode("DRIVE")}
-                >
-                  驾车
-                </button>
-                <button
-                  className={etaMode === "TRANSIT" ? styles.etaToggleActive : ""}
-                  type="button"
-                  onClick={() => setEtaMode("TRANSIT")}
-                >
-                  公交地铁
-                </button>
-              </div>
             </div>
             <div className={styles.etaList}>
               {etaPlans.map((plan, index) => (
                 <div
-                  key={`${etaMode}-${plan.rank}`}
+                  key={plan.rank}
                   className={`${styles.etaOption} ${index === 0 ? styles.etaOptionPrimary : ""}`}
                 >
                   <span>{plan.rank}</span>
@@ -1835,7 +1866,7 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
                   </div>
                   <div className={styles.candidateRow}>
                     <span>ETA</span>
-                    <span>{candidate.etaMinutes}m</span>
+                    <span>{candidate.etaMinutes >= 0 ? `${candidate.etaMinutes}m` : "无法计算"}</span>
                   </div>
                   <div className={styles.candidateRow}>
                     <span>负载惩罚</span>

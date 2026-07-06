@@ -2,91 +2,92 @@
 
 ## 1. 本轮结论
 
-检查时间：2026-07-05
+检查时间：2026-06-29
 
-结论：Phase 11 (Stabilization) 通过。build/lint/test/prisma 全绿，7 步演示脚本全部验证通过。
+结论：当前本地预览、登录、地图、订单池、日志和 Supabase 连接均可用，可继续演示。
 
-## 2. 基线检查
+已补齐 1 条 `PENDING` 演示订单：
+
+| 后端订单号 | UI 展示号 | 状态 | 车牌 | 取车地址 | 还车地址 |
+|---|---|---|---|---|---|
+| `DEMO-20260629-001` | `D0001` | `PENDING` | `沪A12345` | 上海虹桥门店取车区 | 上海浦东新区张江路 100 号 |
+
+说明：订单池接口经过 demo_v12 展示 DTO 适配后，前端更可能显示 `D0001`；后端和数据库中真实订单号仍是 `DEMO-20260629-001`。
+
+## 2. 页面冒烟
 
 | 检查项 | 结果 | 说明 |
-|--------|:--:|------|
-| `pnpm lint` | ✅ | 0 warnings, 0 errors |
-| `npx prisma validate` | ✅ | Schema valid |
-| `pnpm test` | ✅ | 8/8 files, 27/27 tests passed |
-| `pnpm build` | ✅ | 28/28 pages compiled, 0 warnings |
+|---|---:|---|
+| `/admin/login` | 200 | 登录页可打开 |
+| `/admin/map` | 200 | 地图看板可打开 |
+| `/admin/orders?mode=orders` | 200 | 订单池可打开 |
+| `/admin/orders?mode=logs` | 200 | 日志页可打开 |
 
-## 3. Bug 修复记录
+## 3. API 冒烟
 
-| # | 文件 | 问题 | 类型 |
-|---|------|------|------|
-| 1 | `src/app/api/ingest/order/route.ts` | logger 参数顺序颠倒（payload, message）→（message, payload） | 编译阻断 |
-| 2 | `src/app/api/driver/tasks/[id]/accept/route.ts` | ACCEPT 日志 entityType 错误设为 "ASSIGNMENT"，管理员看不到接单日志 | 演示阻断 |
-| 3 | `src/app/api/driver/tasks/[id]/accept/route.ts` | ACCEPT 日志 entityId 错误设为 assignment.id，按订单 ID 查不到 | 演示阻断 |
+| 检查项 | 结果 | 说明 |
+|---|---:|---|
+| `GET /api/health` | 200 | `status = ok`，数据库 connected |
+| `POST /api/auth/login` | 200 | 默认管理员账号登录成功，响应带 `X-Trace-Id` |
+| `GET /api/orders` | 200 | 重置后固定演示订单为 4 条未完成订单 |
+| `GET /api/orders/logs` | 200 | 重置后固定演示订单关联 4 条操作日志 |
+| `GET /api/map` | 200 | 重置后地图看板可读取订单、司机和车辆数据 |
 
-## 4. 演示脚本验证（7 步）
+## 3.1 演示数据重置
 
-| Step | 内容 | 结果 | 详情 |
-|------|------|:--:|------|
-| 1 | 登录系统 | ✅ | POST /api/auth/login 返回 admin 用户，Cookie + X-Trace-Id 正常 |
-| 2 | 订单池 | ✅ | 3 条 PENDING 订单 + 4 位司机，含完整字段 |
-| 3 | 地图看板 | ✅ | 3 订单 + 4 司机 + 2 车辆 + 2 门店，坐标齐全 |
-| 4 | 推荐派单 | ✅ | Top N 返回含理由（同门店/当前空闲/ETA），MANUAL+ETA_EXCEEDED |
-| 5 | 手动派单/改派/撤回 | ✅ | PENDING→ASSIGNED→REASSIGN→WITHDRAW→PENDING，日志完整 |
-| 6 | 日志查询 | ✅ | operation_logs 写入 ASSIGN/REASSIGN/WITHDRAW/ACCEPT/COMPLETE |
-| 7 | 司机接单/完单 | ✅ | ACCEPTED → COMPLETED 流转正常，司机状态 S4→S1 切换正常 |
+当前已新增受控重置命令：
 
-## 5. 页面冒烟
+| 命令 | 用途 |
+|---|---|
+| `pnpm demo:reset` | dry-run，只查看固定演示数据的当前快照和重置范围 |
+| `pnpm demo:reset:apply` | 写入 Supabase，恢复固定演示数据 |
 
-| URL | 结果 | 说明 |
-|-----|:--:|------|
-| `/admin/login` | 200 | 登录页 |
-| `/admin/register` | 200 | 注册页（含司机绑定） |
-| `/admin/import` | 200 | 订单导入 |
-| `/admin/map` | 200 | 地图看板 |
-| `/admin/orders?mode=orders` | 200 | 订单池 |
-| `/admin/orders?mode=logs` | 200 | 日志查询 |
-| `/driver/tasks` | 200 | 司机工单列表（H5） |
-| `/driver/tasks/[id]` | 200 | 司机工单详情（H5） |
+重置脚本不会全库清空，只处理固定演示订单、司机、车辆、门店及其关联派单和操作日志。
 
-## 6. API 冒烟
-
-| 接口 | 方法 | 结果 |
-|------|------|:--:|
-| `/api/auth/login` | POST | 200 |
-| `/api/auth/register` | POST | 201 |
-| `/api/orders` | GET | 200 |
-| `/api/orders/logs` | GET | 200 |
-| `/api/map` | GET | 200 |
-| `/api/dispatch/recommend` | POST | 200 |
-| `/api/dispatch/confirm` | POST | 200 |
-| `/api/assignments/reassign` | POST | 200 |
-| `/api/assignments/withdraw` | POST | 200 |
-| `/api/driver/tasks` | GET | 200 |
-| `/api/driver/tasks/[id]/accept` | POST | 200 |
-| `/api/driver/tasks/[id]/complete` | POST | 200 |
-| `/api/driver/location` | POST | 200 |
-| `/api/stores` | GET | 200 |
-| `/api/health` | GET | 200 |
-
-## 7. 数据库快照（当前）
+## 4. Supabase 数据快照
 
 | 数据项 | 当前值 |
-|--------|------|
+|---|---|
 | admin 用户 | 3 |
 | 门店 | 2 |
 | 车辆 | 2 |
-| 订单 | 4（2 PENDING, 1 ACCEPTED, 1 COMPLETED） |
-| 司机 | 4（含 1 测试管理员） |
-| 操作日志 | 10+ |
+| 操作日志 | 固定演示订单关联 4 条 |
+| 订单状态 | `PENDING: 2`，`ASSIGNED: 2` |
+| 司机状态 | `S1: 1`，`S3: 2` |
+| 可接单候选 | 2 |
 
-## 8. 已知风险
+可接单候选：
 
-| 风险 | 影响 | 处理 |
-|------|------|------|
-| 高德 Key 未配置 | ETA 计算降级为 FALLBACK | 不阻断演示，手动派单可走 |
-| 演示数据被验收改变 | 固定链路状态不一致 | 执行 `pnpm demo:reset` 检查后 `pnpm demo:reset:apply` 恢复 |
-| 注册表单门店加载竞态 | storeId 为空时提交报错 | 已修复：submit 按钮在 alsoDriver && !storeId 时 disabled |
+| 订单号 | 订单状态 | Assignment 状态 | 司机 | 司机状态 | 是否可用于司机接单/完单 |
+|---|---|---|---|---|---|
+| `ORD-20260508-002` | `ASSIGNED` | `ACTIVE` | 张伟 | `S3` | 是 |
+| `ORD-20260508-003` | `ASSIGNED` | `ACTIVE` | 王强 | `S3` | 是 |
 
-## 9. 封板判断
+## 5. 演示建议
 
-✅ 可进入演示。建议演示前执行 `pnpm demo:reset` + `pnpm demo:reset:apply` 恢复干净数据。
+### 可以直接演示
+
+- 登录
+- 地图看板
+- 订单池
+- 日志查询：支持订单号、司机姓名、车牌号、traceId 模糊搜索；点击日志卡片后右侧展示时间轴明细
+- 已派单订单的司机接单/完单 API
+- 操作日志回查
+
+### 演示前建议关注
+
+固定演示数据已将 `ASSIGNED + ACTIVE assignment` 对应司机状态同步为 `S3`；李娜保持 `S1`，用于推荐派单和手动派单候选演示。
+
+## 6. 已知风险
+
+| 风险 | 影响 | 当前处理 |
+|---|---|---|
+| Supabase 事务偶发启动超时 | 派单、接单、完单可能失败一次 | 重启本地服务释放连接池后重试 |
+| `driver_locations` 表未落地 | 位置上报只保留契约 | 后续 data-model 扩展后再写库 |
+| 演示数据被人工验收改变 | 固定链路状态不一致 | 执行 `pnpm demo:reset` 后再按需执行 `pnpm demo:reset:apply` |
+
+## 7. 当前封板判断
+
+当前可进入演示前人工检查；如数据状态被多轮验收改变，先执行 `pnpm demo:reset:apply` 恢复固定数据。建议使用 `DEMO-20260629-001` 执行完整链路，并用日志页搜索 `张伟`、`DEMO-20260629-001`、`沪A12345` 验证日志联动：
+
+`PENDING -> 推荐派单/手动派单 -> ASSIGNED -> 司机接单 -> ACCEPTED -> 司机完单 -> COMPLETED -> 日志查询`

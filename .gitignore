@@ -36,3 +36,4 @@ Thumbs.db
 
 # npm lockfiles are not used in this pnpm-locked repo
 package-lock.json
+.pnpm-store/

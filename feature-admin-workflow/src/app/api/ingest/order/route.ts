@@ -2,6 +2,7 @@ import type { OrderType } from "@/types";
 import { fail, ok } from "@/lib/api-response";
 import { prisma } from "@/lib/prisma";
 import { createLogger } from "@/lib/logger";
+import { geocodeAddress } from "@/lib/import/services/geocode";
 
 const ingestLog = createLogger("order-ingest");
 
@@ -70,6 +71,21 @@ export async function POST(request: Request) {
       });
     }
 
+    // ── 地理编码（仅坐标缺失时调用，节省高德 API 额度）──
+    const needPickupGeo = body.pickupLat == null || body.pickupLng == null;
+    const needReturnGeo = body.returnLat == null || body.returnLng == null;
+
+    const [pickupGeo, returnGeo] = await Promise.all([
+      needPickupGeo ? geocodeAddress(body.pickupAddress, "取车地址") : null,
+      needReturnGeo ? geocodeAddress(body.returnAddress, "还车地址") : null,
+    ]);
+
+    // ── 坐标取值优先级：请求体显式传入 > 地理编码回退 ──
+    const pickupLat = body.pickupLat ?? (pickupGeo?.success ? pickupGeo.lat : null);
+    const pickupLng = body.pickupLng ?? (pickupGeo?.success ? pickupGeo.lng : null);
+    const returnLat = body.returnLat ?? (returnGeo?.success ? returnGeo.lat : null);
+    const returnLng = body.returnLng ?? (returnGeo?.success ? returnGeo.lng : null);
+
     // 写入 RDS
     const order = await prisma.order.create({
       data: {
@@ -82,11 +98,11 @@ export async function POST(request: Request) {
         vehicleTypeSnapshot: body.vehicleType ?? null,
         licensePlateSnapshot: body.licensePlate ?? null,
         pickupAddress: body.pickupAddress,
-        pickupLat: body.pickupLat ?? null,
-        pickupLng: body.pickupLng ?? null,
+        pickupLat,
+        pickupLng,
         returnAddress: body.returnAddress,
-        returnLat: body.returnLat ?? null,
-        returnLng: body.returnLng ?? null,
+        returnLat,
+        returnLng,
         scheduledAt: new Date(body.scheduledAt),
       }
     });
@@ -95,7 +111,8 @@ export async function POST(request: Request) {
       traceId,
       orderNo: order.orderNo,
       storeCode: body.storeCode,
-      channel: body.channel
+      channel: body.channel,
+      geocoded: pickupGeo?.success || returnGeo?.success || false,
     });
 
     return ok({

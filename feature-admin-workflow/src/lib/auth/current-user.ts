@@ -90,10 +90,6 @@ export async function requireAdminPage(nextPath: string) {
   return currentUser;
 }
 
-/**
- * 保护司机端页面：未登录跳转登录页，无 driverId 跳转首页。
- * 与 requireAdminPage 对称，但检查的是 driverId 而非 admin role。
- */
 export async function requireDriverPage() {
   const currentUser = await getCurrentUser();
 

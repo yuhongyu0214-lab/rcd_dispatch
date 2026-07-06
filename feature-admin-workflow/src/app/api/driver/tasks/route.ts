@@ -29,18 +29,29 @@ export async function GET(request: Request) {
   const startTime = Date.now();
 
   try {
-    // ---- 1. 鉴权（JWT > Cookie > query param 回退） ----
+    // ---- 1. 鉴权 ----
+    const driverId = await extractDriverId(request);
+
+    if (!driverId) {
+      // 兼容旧版：从 query params 直接获取
+      const url = new URL(request.url);
+      const queryDriverId = url.searchParams.get("driverId")?.trim();
+      if (!queryDriverId) {
+        return fail("请提供司机 ID（Authorization header 或 query 参数）", {
+          status: 401,
+          traceId
+        });
+      }
+      // eslint-disable-next-line
+      const _unused = driverId; // 标记使用 query 方式
+    }
+
     const url = new URL(request.url);
     const effectiveDriverId =
-      (await extractDriverId(request)) ??
-      url.searchParams.get("driverId")?.trim() ??
-      null;
+      await extractDriverId(request) ?? url.searchParams.get("driverId")?.trim();
 
     if (!effectiveDriverId) {
-      return fail("请提供司机 ID（Authorization header、Cookie 或 query 参数）", {
-        status: 401,
-        traceId
-      });
+      return fail("请提供司机 ID", { status: 401, traceId });
     }
 
     // ---- 2. 可选筛选参数 ----

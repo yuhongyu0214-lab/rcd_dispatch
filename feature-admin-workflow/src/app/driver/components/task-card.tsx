@@ -46,10 +46,12 @@ const STATUS_LABEL: Record<string, string> = {
 
 export function TaskCard({
   task,
-  driverId
+  driverId,
+  highlight = false,
 }: {
   task: TaskCardInput;
   driverId: string;
+  highlight?: boolean;
 }) {
   const typeInfo = TYPE_LABEL[task.type] ?? { text: task.type, color: "bg-slate-100 text-slate-600" };
   const showAccept = task.status === "ASSIGNED";
@@ -57,7 +59,11 @@ export function TaskCard({
   return (
     <Link
       href={`/driver/tasks/${task.taskId}`}
-      className="block rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition active:scale-[0.98]"
+      className={`block rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition active:scale-[0.98] ${
+        highlight
+          ? "ring-2 ring-blue-400 ring-offset-2 animate-new-task"
+          : ""
+      }`}
     >
       {/* 第一行：类型标签 + 车辆信息 */}
       <div className="flex items-center justify-between">

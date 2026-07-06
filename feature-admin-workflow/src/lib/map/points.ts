@@ -232,41 +232,15 @@ export async function getMapBoardData(
     };
   });
 
-  // ---- 订单点位 ----
-  const orderPoints: MapOrderPoint[] = orders.map((order, index) => {
+  // ---- 订单点位（仅渲染有真实坐标的订单；缺坐标不落图）----
+  const orderPoints: MapOrderPoint[] = [];
+
+  for (const order of orders) {
+    if (!hasCoordinate(order.pickupLat, order.pickupLng)) continue;
+
     const display = toOrderDisplayDTO(order as Parameters<typeof toOrderDisplayDTO>[0]);
-    const fallbackVehicle = (order as unknown as { vehicle: { licensePlate: string; gpsLat: number | null; gpsLng: number | null } | null }).vehicle ?? vehiclesByStore.get(order.storeId)?.[0];
-    let coordinate: MapCoordinate;
 
-    if (hasCoordinate(order.pickupLat, order.pickupLng)) {
-      coordinate = {
-        lat: order.pickupLat!,
-        lng: order.pickupLng!,
-        source: "ORDER" as const
-      };
-    } else if (hasCoordinate(fallbackVehicle?.gpsLat ?? null, fallbackVehicle?.gpsLng ?? null)) {
-      coordinate = {
-        lat: fallbackVehicle!.gpsLat!,
-        lng: fallbackVehicle!.gpsLng!,
-        source: "VEHICLE" as const
-      };
-    } else {
-      const storeDriverPos = storeDriverLocationIndex.get(order.storeId);
-      if (storeDriverPos?.hasGps) {
-        coordinate = {
-          lat: storeDriverPos.lat,
-          lng: storeDriverPos.lng,
-          source: "DRIVER" as const
-        };
-      } else {
-        coordinate = {
-          ...offsetCoordinate(DEFAULT_MAP_CENTER, index + vehiclePoints.length),
-          source: "FALLBACK" as const
-        };
-      }
-    }
-
-    return {
+    orderPoints.push({
       kind: "ORDER",
       id: order.id,
       orderNo: order.orderNo,
@@ -278,10 +252,14 @@ export async function getMapBoardData(
       storeName: (order as unknown as { store: { name: string } }).store.name,
       vehicleLabel:
         order.licensePlateSnapshot ?? (order as unknown as { vehicle: { licensePlate: string } | null }).vehicle?.licensePlate ?? null,
-      coordinate,
-      display
-    };
-  });
+      coordinate: {
+        lat: order.pickupLat!,
+        lng: order.pickupLng!,
+        source: "ORDER" as const,
+      },
+      display,
+    });
+  }
 
   // ---- 司机点位（Redis 优先）----
   const driverPoints: MapDriverPoint[] = drivers.map((driver, index) => {

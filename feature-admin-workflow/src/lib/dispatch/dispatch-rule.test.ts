@@ -7,17 +7,18 @@ import { rankDispatchCandidates } from "./sort";
 import type { DispatchCandidate } from "./types";
 
 // Mock Redis — use vi.hoisted() so mock fns are available when factory runs at hoist time
-const { mockIsDriverOnline, mockGetCachedEta, mockCacheEta } = vi.hoisted(() => ({
+const { mockIsDriverOnline, mockGetCachedEta, mockCacheEta, mockIsRedisAvailable } = vi.hoisted(() => ({
   mockIsDriverOnline: vi.fn().mockResolvedValue(true),
   mockGetCachedEta: vi.fn().mockResolvedValue(null),
-  mockCacheEta: vi.fn().mockResolvedValue(undefined)
+  mockCacheEta: vi.fn().mockResolvedValue(undefined),
+  mockIsRedisAvailable: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock("@/lib/redis", () => ({
-  isRedisAvailable: vi.fn().mockReturnValue(false),
   isDriverOnline: mockIsDriverOnline,
   getCachedEta: mockGetCachedEta,
   cacheEta: mockCacheEta,
+  isRedisAvailable: mockIsRedisAvailable,
   acquireDispatchLock: vi.fn().mockResolvedValue(true),
   releaseDispatchLock: vi.fn().mockResolvedValue(undefined),
   setDriverOnline: vi.fn(),

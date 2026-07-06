@@ -43,7 +43,7 @@ export function RegisterForm() {
 
   // 加载门店列表（供"同时作为司机"选择所属门店）
   useEffect(() => {
-    fetch("/api/stores")
+    fetch("/api/map")
       .then((r) => r.json())
       .then((p: { success: boolean; data?: { stores: StoreOption[] } }) => {
         if (p.success && p.data?.stores) {
@@ -187,7 +187,7 @@ export function RegisterForm() {
 
       <button
         type="submit"
-        disabled={submitting || (alsoDriver && !storeId)}
+        disabled={submitting}
         className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-900 px-5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300"
       >
         {submitting ? "注册中..." : "注册"}

@@ -33,9 +33,8 @@ export function middleware(request: NextRequest) {
 }
 
 /**
- * 拦截 API 路由 + 司机端 H5 页面。
- * API 路由需要 traceId 注入；司机端页面需要登录保护（由 requireDriverPage 兜底）。
+ * 仅拦截 API 路由，避免影响静态资源、NextAuth 页面等。
  */
 export const config = {
-  matcher: ["/api/:path*", "/driver/:path*"],
+  matcher: "/api/:path*",
 };
