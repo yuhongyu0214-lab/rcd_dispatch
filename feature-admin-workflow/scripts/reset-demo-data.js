@@ -7,10 +7,10 @@ const apply = process.argv.includes("--apply");
 const saltRounds = 10;
 
 const demoOrderNos = [
-  "DEMO-20260629-001",
-  "ORD-20260508-001",
-  "ORD-20260508-002",
-  "ORD-20260508-003"
+  "RC-20260629-001",
+  "RC-20260508-001",
+  "RC-20260508-002",
+  "RC-20260508-003"
 ];
 
 const demoDriverPhones = ["13800000001", "13800000002", "13800000003"];
@@ -318,7 +318,7 @@ async function resetDemoData() {
       await clearDemoChains(tx);
 
       const demoOrder = await upsertOrder(tx, {
-        orderNo: "DEMO-20260629-001",
+        orderNo: "RC-20260629-001",
         type: "STORE_PICKUP",
         status: "PENDING",
         storeId: base.shanghaiStore.id,
@@ -338,7 +338,7 @@ async function resetDemoData() {
       });
 
       await upsertOrder(tx, {
-        orderNo: "ORD-20260508-001",
+        orderNo: "RC-20260508-001",
         type: "STORE_PICKUP",
         status: "PENDING",
         storeId: base.shanghaiStore.id,
@@ -358,7 +358,7 @@ async function resetDemoData() {
       });
 
       const zhangOrder = await upsertOrder(tx, {
-        orderNo: "ORD-20260508-002",
+        orderNo: "RC-20260508-002",
         type: "DOOR_DELIVERY",
         status: "PENDING",
         storeId: base.shanghaiStore.id,
@@ -378,7 +378,7 @@ async function resetDemoData() {
       });
 
       const wangOrder = await upsertOrder(tx, {
-        orderNo: "ORD-20260508-003",
+        orderNo: "RC-20260508-003",
         type: "STORE_RETURN",
         status: "PENDING",
         storeId: base.hangzhouStore.id,

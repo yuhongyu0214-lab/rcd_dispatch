@@ -18,7 +18,7 @@ export default async function AdminLoginPage({
   const nextPath =
     searchParams.next && searchParams.next.startsWith("/admin")
       ? searchParams.next
-      : "/admin/import";
+      : "/admin/map";
 
   if (currentUser && isAdminRole(currentUser.role)) {
     redirect(nextPath);

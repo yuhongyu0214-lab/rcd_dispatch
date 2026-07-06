@@ -5,6 +5,30 @@ const prisma = new PrismaClient();
 const SALT_ROUNDS = 10;
 
 async function main() {
+  // 清理旧的演示订单号（ORD-* / DEMO-*），确保数据库只保留 RC-* 真实口径
+  const oldOrders = await prisma.order.findMany({
+    where: {
+      orderNo: { startsWith: "ORD-" }
+    },
+    select: { id: true, orderNo: true }
+  });
+  for (const old of oldOrders) {
+    await prisma.operationLog.deleteMany({ where: { entityType: "ORDER", entityId: old.id } });
+    await prisma.assignment.deleteMany({ where: { orderId: old.id } });
+    await prisma.order.delete({ where: { id: old.id } });
+  }
+  const oldDemoOrders = await prisma.order.findMany({
+    where: {
+      orderNo: { startsWith: "DEMO-" }
+    },
+    select: { id: true }
+  });
+  for (const old of oldDemoOrders) {
+    await prisma.operationLog.deleteMany({ where: { entityType: "ORDER", entityId: old.id } });
+    await prisma.assignment.deleteMany({ where: { orderId: old.id } });
+    await prisma.order.delete({ where: { id: old.id } });
+  }
+
   const adminPasswordHash = await bcrypt.hash("admin123", SALT_ROUNDS);
 
   await prisma.user.upsert({
@@ -147,7 +171,7 @@ async function main() {
   });
 
   await prisma.order.upsert({
-    where: { orderNo: "ORD-20260508-001" },
+    where: { orderNo: "RC-20260508-001" },
     update: {
       type: "STORE_PICKUP",
       status: "PENDING",
@@ -159,7 +183,7 @@ async function main() {
       scheduledAt: new Date("2026-05-08T09:00:00+08:00")
     },
     create: {
-      orderNo: "ORD-20260508-001",
+      orderNo: "RC-20260508-001",
       type: "STORE_PICKUP",
       status: "PENDING",
       storeId: shanghaiStore.id,
@@ -172,7 +196,7 @@ async function main() {
   });
 
   await prisma.order.upsert({
-    where: { orderNo: "ORD-20260508-002" },
+    where: { orderNo: "RC-20260508-002" },
     update: {
       type: "DOOR_DELIVERY",
       status: "PENDING",
@@ -184,7 +208,7 @@ async function main() {
       scheduledAt: new Date("2026-05-08T13:30:00+08:00")
     },
     create: {
-      orderNo: "ORD-20260508-002",
+      orderNo: "RC-20260508-002",
       type: "DOOR_DELIVERY",
       status: "PENDING",
       storeId: shanghaiStore.id,
@@ -197,7 +221,7 @@ async function main() {
   });
 
   await prisma.order.upsert({
-    where: { orderNo: "ORD-20260508-003" },
+    where: { orderNo: "RC-20260508-003" },
     update: {
       type: "STORE_RETURN",
       status: "PENDING",
@@ -209,7 +233,7 @@ async function main() {
       scheduledAt: new Date("2026-05-09T10:00:00+08:00")
     },
     create: {
-      orderNo: "ORD-20260508-003",
+      orderNo: "RC-20260508-003",
       type: "STORE_RETURN",
       status: "PENDING",
       storeId: hangzhouStore.id,

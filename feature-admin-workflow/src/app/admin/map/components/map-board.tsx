@@ -181,6 +181,9 @@ const SIGNAL_COLORS: Record<string, string> = {
 
 function getPointColor(point: BoardPoint): string {
   if (point.kind === "DRIVER") return SIGNAL_COLORS[getDriverSignalLevel(point)];
+  if (point.kind === "ORDER") {
+    return isPickupOrder(point.type) ? "var(--info)" : "var(--success)";
+  }
   return pointColors[point.kind];
 }
 
