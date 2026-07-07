@@ -5,10 +5,10 @@ import { createLogger } from "@/lib/logger";
 import { geocodeAddress } from "@/lib/import/services/geocode";
 import {
   buildGeocodeAddress,
-  isValidPilotCity,
+  isValidCoordinate,
   mapOrderStatusRaw,
   mapOrderTypeRaw,
-  PILOT_CITIES,
+  validateRequiredCity,
 } from "@/lib/ingest/normalize";
 
 const log = createLogger("browser-extension-ingest");
@@ -157,12 +157,12 @@ export async function POST(request: Request) {
       return fail(`门店不存在: ${storeCode}`, { status: 400, traceId });
     }
 
-    // ── 城市校验 ──
-    if (city && !isValidPilotCity(city)) {
-      return fail(`城市 "${city}" 不在试点范围内，首批仅支持：${PILOT_CITIES.join("、")}`, {
-        status: 400, traceId
-      });
+    // ── 城市必填校验 ──
+    const cityCheck = validateRequiredCity(city);
+    if (!cityCheck.valid) {
+      return fail(cityCheck.error, { status: 400, traceId });
     }
+    const cityValidated = cityCheck.city;
 
     // ── 订单类型映射（只从 orderTypeRaw 映射，不误用状态字段）──
     let orderType: OrderType;
@@ -186,12 +186,12 @@ export async function POST(request: Request) {
       parseDate(record.captured_at ?? "") ??
       new Date();
 
-    // ── 坐标取值优先级：页面显式传入 > 地理编码回退 ──
-    const hasExplicitPickup = record.pickupLat != null && record.pickupLng != null;
-    const hasExplicitReturn = record.returnLat != null && record.returnLng != null;
+    // ── 坐标取值优先级：页面显式传入(需通过校验) > 地理编码回退 ──
+    const hasExplicitPickup = isValidCoordinate(record.pickupLat, record.pickupLng);
+    const hasExplicitReturn = isValidCoordinate(record.returnLat, record.returnLng);
 
-    const pickupGeoInput = buildGeocodeAddress(pickupAddress, { province, city, district });
-    const returnGeoInput = buildGeocodeAddress(returnAddress, { province, city, district });
+    const pickupGeoInput = buildGeocodeAddress(pickupAddress, { province, city: cityValidated, district });
+    const returnGeoInput = buildGeocodeAddress(returnAddress, { province, city: cityValidated, district });
     const [pickupGeo, returnGeo] = await Promise.all([
       hasExplicitPickup
         ? null
@@ -242,7 +242,7 @@ export async function POST(request: Request) {
       orderType,
       orderStatus,
       storeCode,
-      city: city ?? null,
+      city: cityValidated,
       geocodePickupStatus,
       geocodeReturnStatus,
       driverName: record.driver_name,

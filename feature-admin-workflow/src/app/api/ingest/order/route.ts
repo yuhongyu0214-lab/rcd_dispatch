@@ -5,10 +5,10 @@ import { createLogger } from "@/lib/logger";
 import { geocodeAddress } from "@/lib/import/services/geocode";
 import {
   buildGeocodeAddress,
-  isValidPilotCity,
+  isValidCoordinate,
   mapOrderStatusRaw,
   mapOrderTypeRaw,
-  PILOT_CITIES,
+  validateRequiredCity,
 } from "@/lib/ingest/normalize";
 
 const ingestLog = createLogger("order-ingest");
@@ -66,14 +66,13 @@ export async function POST(request: Request) {
     // ── 订单状态映射：优先从外部原始状态映射，回退到 PENDING ──
     const orderStatus = mapOrderStatusRaw(body.orderStatusRaw) ?? "PENDING";
 
-    // ── 城市校验 ──
-    const province = body.province?.trim() || null;
-    const city = body.city?.trim();
-    if (city && !isValidPilotCity(city)) {
-      return fail(`城市 "${city}" 不在试点范围内，首批仅支持：${PILOT_CITIES.join("、")}`, {
-        status: 400, traceId
-      });
+    // ── 城市必填校验 ──
+    const cityCheck = validateRequiredCity(body.city);
+    if (!cityCheck.valid) {
+      return fail(cityCheck.error, { status: 400, traceId });
     }
+    const city = cityCheck.city;
+    const province = body.province?.trim() || null;
     const district = body.district?.trim() || null;
 
     // ── 门店匹配（优先 storeCode 否则 storeName）──
@@ -106,11 +105,9 @@ export async function POST(request: Request) {
     const pickupGeoInput = buildGeocodeAddress(body.pickupAddress, { province, city, district });
     const returnGeoInput = buildGeocodeAddress(body.returnAddress, { province, city, district });
 
-    // 坐标取值优先级：请求体显式传入 > 地理编码回退
-    const hasExplicitPickupCoord =
-      body.pickupLat != null && body.pickupLng != null;
-    const hasExplicitReturnCoord =
-      body.returnLat != null && body.returnLng != null;
+    // 坐标取值优先级：请求体显式传入(需通过校验) > 地理编码回退
+    const hasExplicitPickupCoord = isValidCoordinate(body.pickupLat, body.pickupLng);
+    const hasExplicitReturnCoord = isValidCoordinate(body.returnLat, body.returnLng);
 
     const [pickupGeo, returnGeo] = await Promise.all([
       hasExplicitPickupCoord

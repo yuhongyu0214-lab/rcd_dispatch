@@ -9,9 +9,24 @@ export const PILOT_CITIES = ["南昌市"] as const;
 
 export type PilotCity = (typeof PILOT_CITIES)[number];
 
-/** 校验城市是否在试点范围内 */
-export function isValidPilotCity(city: string): city is PilotCity {
-  return PILOT_CITIES.includes(city as PilotCity);
+/** 校验城市是否在试点范围内（city 为空或不在列表中均返回 false） */
+export function isValidPilotCity(city: string | null | undefined): city is PilotCity {
+  if (!city) return false;
+  return PILOT_CITIES.includes(city.trim() as PilotCity);
+}
+
+/** 校验 city 是否合法试点城市，不合法返回 400 错误信息 */
+export function validateRequiredCity(
+  city: string | null | undefined
+): { valid: true; city: string } | { valid: false; error: string } {
+  const trimmed = city?.trim() ?? "";
+  if (!trimmed) {
+    return { valid: false, error: "缺少必填字段 city（城市），请提供试点城市" };
+  }
+  if (!isValidPilotCity(trimmed)) {
+    return { valid: false, error: `城市 "${trimmed}" 不在试点范围内，首批仅支持：${PILOT_CITIES.join("、")}` };
+  }
+  return { valid: true, city: trimmed };
 }
 
 // ============================================================================
@@ -70,8 +85,8 @@ export function mapOrderTypeRaw(raw: string | null | undefined): OrderType | nul
 // ============================================================================
 
 /**
- * 拼接 province + city + district + address 用于地理编码，提高短地址命中率。
- * 如果地址已包含城市名或区县名，避免重复拼接。
+ * 逐段去重拼接：省 + 市 + 区 + 地址。
+ * 地址已包含某段时跳过该段，缺哪段补哪段，不因包含城市名就提前返回导致丢失区县。
  */
 export function buildGeocodeAddress(
   address: string,
@@ -85,14 +100,14 @@ export function buildGeocodeAddress(
   const cityName = context?.city?.trim() ?? "";
   const districtName = context?.district?.trim() ?? "";
 
-  // 地址已包含城市名，不重复拼接
-  if (cityName && address.includes(cityName)) {
-    return { fullAddress: address, cityParam: cityName };
-  }
+  // 逐段检查：地址未包含该段时才拼接（避免重复拼接，同时不丢失信息）
+  const prefix: string[] = [];
+  if (provinceName && !address.includes(provinceName)) prefix.push(provinceName);
+  if (cityName && !address.includes(cityName)) prefix.push(cityName);
+  if (districtName && !address.includes(districtName)) prefix.push(districtName);
 
-  // 拼接：省 + 城市 + 区县 + 地址（防同名地址误识别）
-  const parts = [provinceName, cityName, districtName, address].filter(Boolean);
-  return { fullAddress: parts.join(""), cityParam: cityName };
+  const fullAddress = prefix.length > 0 ? `${prefix.join("")}${address}` : address;
+  return { fullAddress, cityParam: cityName };
 }
 
 // ============================================================================
@@ -105,3 +120,32 @@ export type GeocodeIngestStatus =
   | "CITY_MISMATCH"
   | "MISSING_CITY"
   | "FROM_SOURCE";
+
+// ============================================================================
+// 坐标运行时校验
+// ============================================================================
+
+/** GCJ02 中国境内合法坐标范围 */
+const GCJ02_BOUNDS = {
+  latMin: 18,
+  latMax: 54,
+  lngMin: 73,
+  lngMax: 136,
+} as const;
+
+/**
+ * 校验坐标是否为有效 GCJ02 数值（有限数字 + 中国境内范围）。
+ * 返回 true 表示坐标合法可直写 RDS。
+ */
+export function isValidCoordinate(lat: unknown, lng: unknown): boolean {
+  if (lat == null || lng == null) return false;
+  const latNum = Number(lat);
+  const lngNum = Number(lng);
+  if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return false;
+  return (
+    latNum >= GCJ02_BOUNDS.latMin &&
+    latNum <= GCJ02_BOUNDS.latMax &&
+    lngNum >= GCJ02_BOUNDS.lngMin &&
+    lngNum <= GCJ02_BOUNDS.lngMax
+  );
+}
