@@ -907,6 +907,11 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
     () => [...getAllPoints(payload), ...getAlertPoints(payload)],
     [payload]
   );
+  /** 可落图的点位（排除 FALLBACK 无坐标订单，仅用于地图渲染和路线预览） */
+  const mapRenderablePoints = useMemo(
+    () => allPoints.filter((p) => p.coordinate.source !== "FALLBACK"),
+    [allPoints]
+  );
   const activePoints = useMemo(
     () => allPoints.filter((point) => point.kind === activeKind),
     [activeKind, allPoints]
@@ -1441,16 +1446,7 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
           markersByIdRef.current.clear();
         }
 
-        allPoints.forEach((point) => {
-          // 无坐标（FALLBACK）订单不落图，但保留在侧边栏列表
-          if (point.coordinate.source === "FALLBACK") {
-            const existing = markersByIdRef.current.get(point.id);
-            if (existing) {
-              existing.setMap(null);
-              markersByIdRef.current.delete(point.id);
-            }
-            return;
-          }
+        mapRenderablePoints.forEach((point) => {
           const pos: [number, number] = [point.coordinate.lng, point.coordinate.lat];
           const html = getMarkerContent(point, activeKind, selectedPoint, focusedPointIds);
           const existing = markersByIdRef.current.get(point.id);
@@ -1494,7 +1490,7 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
     return () => {
       disposed = true;
     };
-  }, [activeKind, allPoints, amapKey, amapSecurityCode, focusedPointIds, payload, selectedPoint]);
+  }, [activeKind, allPoints, amapKey, amapSecurityCode, focusedPointIds, mapRenderablePoints, payload, selectedPoint]);
 
   useEffect(() => {
     return () => {
@@ -1644,10 +1640,10 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
               {selectedPoint?.kind === "ORDER" && routePreviewTarget ? (
                 <div
                   className={styles.routePreview}
-                  style={getRoutePreviewStyle(selectedPoint, routePreviewTarget, allPoints)}
+                  style={getRoutePreviewStyle(selectedPoint, routePreviewTarget, mapRenderablePoints)}
                 />
               ) : null}
-              {allPoints.map((point) => (
+              {mapRenderablePoints.map((point) => (
                 <button
                   key={`${point.kind}-${point.id}`}
                   className={`${styles.fallbackPoint} ${styles[`point${point.kind}`]} ${
@@ -1657,7 +1653,7 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
                         ? styles.fallbackPointActive
                         : styles.fallbackPointDim
                   }`}
-                  style={getPointPosition(point, allPoints)}
+                  style={getPointPosition(point, mapRenderablePoints)}
                   type="button"
                   title={getPointTitle(point)}
                   onClick={() => setSelectedPoint(point)}

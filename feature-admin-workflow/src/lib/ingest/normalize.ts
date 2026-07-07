@@ -4,8 +4,8 @@ import type { OrderStatus, OrderType } from "@/types";
 // 城市字典（首批：南昌市试点）
 // ============================================================================
 
-/** 首批支持的城市列表 */
-export const PILOT_CITIES = ["杭州市"] as const;
+/** 首批支持的城市列表（与方案文档 DTO 示例保持一致：江西省/南昌市/青山湖区） */
+export const PILOT_CITIES = ["南昌市"] as const;
 
 export type PilotCity = (typeof PILOT_CITIES)[number];
 

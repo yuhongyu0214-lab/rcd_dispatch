@@ -33,6 +33,11 @@ interface ExtensionRecord {
   city?: string;
   district?: string;
   source?: string;
+  // 可选坐标（页面能拿到坐标则传）
+  pickupLat?: number | null;
+  pickupLng?: number | null;
+  returnLat?: number | null;
+  returnLng?: number | null;
   // 旧版 snake_case（兼容，逐步淘汰）
   order_number?: string;
   order_status_raw?: string;
@@ -181,20 +186,32 @@ export async function POST(request: Request) {
       parseDate(record.captured_at ?? "") ??
       new Date();
 
-    // ── 地理编码（拼接省市+区县，非阻塞）──
+    // ── 坐标取值优先级：页面显式传入 > 地理编码回退 ──
+    const hasExplicitPickup = record.pickupLat != null && record.pickupLng != null;
+    const hasExplicitReturn = record.returnLat != null && record.returnLng != null;
+
     const pickupGeoInput = buildGeocodeAddress(pickupAddress, { province, city, district });
     const returnGeoInput = buildGeocodeAddress(returnAddress, { province, city, district });
     const [pickupGeo, returnGeo] = await Promise.all([
-      geocodeAddress(pickupGeoInput.fullAddress, "取车地址", pickupGeoInput.cityParam || undefined),
-      geocodeAddress(returnGeoInput.fullAddress, "还车地址", returnGeoInput.cityParam || undefined),
+      hasExplicitPickup
+        ? null
+        : geocodeAddress(pickupGeoInput.fullAddress, "取车地址", pickupGeoInput.cityParam || undefined),
+      hasExplicitReturn
+        ? null
+        : geocodeAddress(returnGeoInput.fullAddress, "还车地址", returnGeoInput.cityParam || undefined),
     ]);
 
-    const geocodePickupStatus = pickupGeo.success
-      ? pickupGeo.geocodeStatus
-      : (pickupGeo.geocodeStatus ?? "FAILED");
-    const geocodeReturnStatus = returnGeo.success
-      ? returnGeo.geocodeStatus
-      : (returnGeo.geocodeStatus ?? "FAILED");
+    const pickupLat = record.pickupLat ?? (pickupGeo?.success ? pickupGeo.lat : null);
+    const pickupLng = record.pickupLng ?? (pickupGeo?.success ? pickupGeo.lng : null);
+    const returnLat = record.returnLat ?? (returnGeo?.success ? returnGeo.lat : null);
+    const returnLng = record.returnLng ?? (returnGeo?.success ? returnGeo.lng : null);
+
+    const geocodePickupStatus = hasExplicitPickup
+      ? "FROM_SOURCE"
+      : (pickupGeo?.geocodeStatus ?? "FAILED");
+    const geocodeReturnStatus = hasExplicitReturn
+      ? "FROM_SOURCE"
+      : (returnGeo?.geocodeStatus ?? "FAILED");
 
     // ── 写入 RDS ──
     const order = await prisma.order.create({
@@ -208,11 +225,11 @@ export async function POST(request: Request) {
         vehicleTypeSnapshot: record.car_model || null,
         licensePlateSnapshot: record.license_plate || null,
         pickupAddress,
-        pickupLat: pickupGeo.success ? pickupGeo.lat : null,
-        pickupLng: pickupGeo.success ? pickupGeo.lng : null,
+        pickupLat,
+        pickupLng,
         returnAddress,
-        returnLat: returnGeo.success ? returnGeo.lat : null,
-        returnLng: returnGeo.success ? returnGeo.lng : null,
+        returnLat,
+        returnLng,
         scheduledAt,
         geocodePickupStatus,
         geocodeReturnStatus,
