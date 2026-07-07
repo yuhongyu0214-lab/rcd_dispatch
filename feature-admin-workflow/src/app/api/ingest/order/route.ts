@@ -8,6 +8,7 @@ import {
   isValidPilotCity,
   mapOrderStatusRaw,
   mapOrderTypeRaw,
+  PILOT_CITIES,
 } from "@/lib/ingest/normalize";
 
 const ingestLog = createLogger("order-ingest");
@@ -66,9 +67,10 @@ export async function POST(request: Request) {
     const orderStatus = mapOrderStatusRaw(body.orderStatusRaw) ?? "PENDING";
 
     // ── 城市校验 ──
+    const province = body.province?.trim() || null;
     const city = body.city?.trim();
     if (city && !isValidPilotCity(city)) {
-      return fail(`城市 "${city}" 不在试点范围内，首批仅支持：杭州市`, {
+      return fail(`城市 "${city}" 不在试点范围内，首批仅支持：${PILOT_CITIES.join("、")}`, {
         status: 400, traceId
       });
     }
@@ -100,9 +102,9 @@ export async function POST(request: Request) {
       });
     }
 
-    // ── 地理编码（拼接城市提高短地址命中率）──
-    const pickupGeoInput = buildGeocodeAddress(city, district, body.pickupAddress);
-    const returnGeoInput = buildGeocodeAddress(city, district, body.returnAddress);
+    // ── 地理编码（拼接省市+区县提高短地址命中率）──
+    const pickupGeoInput = buildGeocodeAddress(body.pickupAddress, { province, city, district });
+    const returnGeoInput = buildGeocodeAddress(body.returnAddress, { province, city, district });
 
     // 坐标取值优先级：请求体显式传入 > 地理编码回退
     const hasExplicitPickupCoord =
@@ -160,6 +162,7 @@ export async function POST(request: Request) {
       orderType,
       orderStatus,
       storeCode: store.code,
+      province: province ?? null,
       city: city ?? null,
       geocodePickupStatus,
       geocodeReturnStatus,

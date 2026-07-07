@@ -248,12 +248,11 @@ export async function getMapBoardData(
     };
   });
 
-  // ---- 订单点位（仅渲染有真实坐标的订单；缺坐标不落图）----
+  // ---- 订单点位（所有订单进入列表，有坐标落图，缺坐标 FALLBACK 不落图）----
   const orderPoints: MapOrderPoint[] = [];
 
   for (const order of orders) {
-    if (!hasCoordinate(order.pickupLat, order.pickupLng)) continue;
-
+    const hasCoord = hasCoordinate(order.pickupLat, order.pickupLng);
     const display = toOrderDisplayDTO(order);
 
     orderPoints.push({
@@ -268,11 +267,9 @@ export async function getMapBoardData(
       storeName: order.store.name,
       vehicleLabel:
         order.licensePlateSnapshot ?? order.vehicle?.licensePlate ?? null,
-      coordinate: {
-        lat: order.pickupLat!,
-        lng: order.pickupLng!,
-        source: "ORDER" as const,
-      },
+      coordinate: hasCoord
+        ? { lat: order.pickupLat!, lng: order.pickupLng!, source: "ORDER" as const }
+        : { lat: 0, lng: 0, source: "FALLBACK" as const },
       display,
     });
   }

@@ -3,6 +3,13 @@ import { fail, ok } from "@/lib/api-response";
 import { prisma } from "@/lib/prisma";
 import { createLogger } from "@/lib/logger";
 import { geocodeAddress } from "@/lib/import/services/geocode";
+import {
+  buildGeocodeAddress,
+  isValidPilotCity,
+  mapOrderStatusRaw,
+  mapOrderTypeRaw,
+  PILOT_CITIES,
+} from "@/lib/ingest/normalize";
 
 const log = createLogger("browser-extension-ingest");
 
@@ -33,22 +40,12 @@ interface ExtensionRecord {
   order_source: string;
   order_status: string;
   captured_at: string;
-}
-
-/**
- * 从取车/还车地址文本推断订单类型
- */
-function inferOrderType(record: ExtensionRecord): OrderType {
-  const fullText = `${record.pickup_address ?? ""} ${record.pickup_store ?? ""} ${record.return_address ?? ""} ${record.return_store ?? ""}`;
-
-  // 送车上门：取车地址不是门店，是客户地址
-  if (fullText.includes("送车上门")) return "DOOR_DELIVERY";
-  // 商家上门取车：还车地址是客户地址
-  if (fullText.includes("商家上门取车")) return "DOOR_PICKUP";
-  // 到店还车
-  if (fullText.includes("到店还车")) return "STORE_RETURN";
-  // 默认：到店取车
-  return "STORE_PICKUP";
+  // 新增：地理编码和字段标准化所需
+  province?: string;
+  city?: string;
+  district?: string;
+  order_status_raw?: string;
+  order_type_raw?: string;
 }
 
 /**
@@ -141,28 +138,66 @@ export async function POST(request: Request) {
       return fail(`门店不存在: ${storeCode}`, { status: 400, traceId });
     }
 
-    // ── 订单类型推断 ──
-    const orderType = inferOrderType(record);
+    // ── 订单类型映射（优先外部原始文本，回退地址推断）──
+    let orderType: OrderType;
+    const mappedType =
+      mapOrderTypeRaw(record.order_type_raw) ??
+      mapOrderTypeRaw(record.order_status); // 兼容旧字段名
+    if (mappedType) {
+      orderType = mappedType;
+    } else {
+      // 回退：从地址文本推断
+      const fullText = `${record.pickup_address ?? ""} ${record.pickup_store ?? ""} ${record.return_address ?? ""} ${record.return_store ?? ""}`;
+      if (fullText.includes("送车上门")) orderType = "DOOR_DELIVERY";
+      else if (fullText.includes("商家上门取车")) orderType = "DOOR_PICKUP";
+      else if (fullText.includes("到店还车")) orderType = "STORE_RETURN";
+      else orderType = "STORE_PICKUP";
+    }
+
+    // ── 订单状态映射 ──
+    const orderStatus =
+      mapOrderStatusRaw(record.order_status_raw) ??
+      mapOrderStatusRaw(record.order_status) ??
+      "PENDING";
+
+    // ── 城市校验 ──
+    const city = record.city?.trim();
+    if (city && !isValidPilotCity(city)) {
+      return fail(`城市 "${city}" 不在试点范围内，首批仅支持：${PILOT_CITIES.join("、")}`, {
+        status: 400, traceId
+      });
+    }
+    const province = record.province?.trim() || null;
+    const district = record.district?.trim() || null;
 
     // ── 日期解析 ──
     const scheduledAt = parseDate(record.pickup_time) ??
       parseDate(record.captured_at) ??
       new Date();
 
-    // ── 地理编码（非阻塞，失败不影响入单）──
+    // ── 地理编码（拼接省市+区县，非阻塞）──
     const pickupAddress = record.pickup_address || record.pickup_store;
     const returnAddress = record.return_address || record.return_store;
+    const pickupGeoInput = buildGeocodeAddress(pickupAddress, { province, city, district });
+    const returnGeoInput = buildGeocodeAddress(returnAddress, { province, city, district });
     const [pickupGeo, returnGeo] = await Promise.all([
-      geocodeAddress(pickupAddress, "取车地址"),
-      geocodeAddress(returnAddress, "还车地址"),
+      geocodeAddress(pickupGeoInput.fullAddress, "取车地址", pickupGeoInput.cityParam || undefined),
+      geocodeAddress(returnGeoInput.fullAddress, "还车地址", returnGeoInput.cityParam || undefined),
     ]);
+
+    const geocodePickupStatus = pickupGeo.success
+      ? pickupGeo.geocodeStatus
+      : (pickupGeo.geocodeStatus ?? "FAILED");
+    const geocodeReturnStatus = returnGeo.success
+      ? returnGeo.geocodeStatus
+      : (returnGeo.geocodeStatus ?? "FAILED");
 
     // ── 字段映射 ──
     const order = await prisma.order.create({
       data: {
         orderNo: record.order_number,
         type: orderType,
-        status: "PENDING",
+        status: orderStatus,
         storeId: store.id,
         channel: record.order_source || "BROWSER_PLUGIN",
         driverNameSnapshot: record.driver_name || record.delivery_driver || null,
@@ -175,6 +210,8 @@ export async function POST(request: Request) {
         returnLat: returnGeo.success ? returnGeo.lat : null,
         returnLng: returnGeo.success ? returnGeo.lng : null,
         scheduledAt,
+        geocodePickupStatus,
+        geocodeReturnStatus,
       },
     });
 
@@ -182,10 +219,13 @@ export async function POST(request: Request) {
       traceId,
       orderNo: order.orderNo,
       orderType,
+      orderStatus,
       storeCode,
+      city: city ?? null,
+      geocodePickupStatus,
+      geocodeReturnStatus,
       driverName: record.driver_name,
       licensePlate: record.license_plate,
-      geocoded: pickupGeo.success || returnGeo.success,
     });
 
     return ok(

@@ -1,11 +1,11 @@
 import type { OrderStatus, OrderType } from "@/types";
 
 // ============================================================================
-// 城市字典（首批：杭州市试点）
+// 城市字典（首批：南昌市试点）
 // ============================================================================
 
 /** 首批支持的城市列表 */
-export const PILOT_CITIES = ["杭州市"] as const;
+export const PILOT_CITIES = ["南昌市"] as const;
 
 export type PilotCity = (typeof PILOT_CITIES)[number];
 
@@ -70,24 +70,28 @@ export function mapOrderTypeRaw(raw: string | null | undefined): OrderType | nul
 // ============================================================================
 
 /**
- * 拼接城市 + 区县 + 地址用于地理编码，提高短地址命中率。
- * 如果地址已包含城市名，避免重复拼接。
+ * 拼接 province + city + district + address 用于地理编码，提高短地址命中率。
+ * 如果地址已包含城市名或区县名，避免重复拼接。
  */
 export function buildGeocodeAddress(
-  city: string | null | undefined,
-  district: string | null | undefined,
-  address: string
+  address: string,
+  context?: {
+    province?: string | null;
+    city?: string | null;
+    district?: string | null;
+  }
 ): { fullAddress: string; cityParam: string } {
-  const cityName = city?.trim() ?? "";
-  const districtName = district?.trim() ?? "";
+  const provinceName = context?.province?.trim() ?? "";
+  const cityName = context?.city?.trim() ?? "";
+  const districtName = context?.district?.trim() ?? "";
 
   // 地址已包含城市名，不重复拼接
   if (cityName && address.includes(cityName)) {
     return { fullAddress: address, cityParam: cityName };
   }
 
-  // 拼接：城市 + 区县 + 地址
-  const parts = [cityName, districtName, address].filter(Boolean);
+  // 拼接：省 + 城市 + 区县 + 地址（防同名地址误识别）
+  const parts = [provinceName, cityName, districtName, address].filter(Boolean);
   return { fullAddress: parts.join(""), cityParam: cityName };
 }
 

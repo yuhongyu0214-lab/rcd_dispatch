@@ -1436,6 +1436,15 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
         }
 
         allPoints.forEach((point) => {
+          // 无坐标（FALLBACK）订单不落图，但保留在侧边栏列表
+          if (point.coordinate.source === "FALLBACK") {
+            const existing = markersByIdRef.current.get(point.id);
+            if (existing) {
+              existing.setMap(null);
+              markersByIdRef.current.delete(point.id);
+            }
+            return;
+          }
           const pos: [number, number] = [point.coordinate.lng, point.coordinate.lat];
           const html = getMarkerContent(point, activeKind, selectedPoint, focusedPointIds);
           const existing = markersByIdRef.current.get(point.id);
