@@ -201,10 +201,11 @@ export async function POST(request: Request) {
         : geocodeAddress(returnGeoInput.fullAddress, "还车地址", returnGeoInput.cityParam || undefined),
     ]);
 
-    const pickupLat = record.pickupLat ?? (pickupGeo?.success ? pickupGeo.lat : null);
-    const pickupLng = record.pickupLng ?? (pickupGeo?.success ? pickupGeo.lng : null);
-    const returnLat = record.returnLat ?? (returnGeo?.success ? returnGeo.lat : null);
-    const returnLng = record.returnLng ?? (returnGeo?.success ? returnGeo.lng : null);
+    // 显式坐标通过 isValidCoordinate 校验后才使用 FROM_SOURCE，否则从 geocode 取值
+    const pickupLat = hasExplicitPickup ? Number(record.pickupLat) : (pickupGeo?.success ? pickupGeo.lat : null);
+    const pickupLng = hasExplicitPickup ? Number(record.pickupLng) : (pickupGeo?.success ? pickupGeo.lng : null);
+    const returnLat = hasExplicitReturn ? Number(record.returnLat) : (returnGeo?.success ? returnGeo.lat : null);
+    const returnLng = hasExplicitReturn ? Number(record.returnLng) : (returnGeo?.success ? returnGeo.lng : null);
 
     const geocodePickupStatus = hasExplicitPickup
       ? "FROM_SOURCE"

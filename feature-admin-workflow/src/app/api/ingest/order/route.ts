@@ -118,10 +118,11 @@ export async function POST(request: Request) {
         : geocodeAddress(returnGeoInput.fullAddress, "还车地址", returnGeoInput.cityParam || undefined),
     ]);
 
-    const pickupLat = body.pickupLat ?? (pickupGeo?.success ? pickupGeo.lat : null);
-    const pickupLng = body.pickupLng ?? (pickupGeo?.success ? pickupGeo.lng : null);
-    const returnLat = body.returnLat ?? (returnGeo?.success ? returnGeo.lat : null);
-    const returnLng = body.returnLng ?? (returnGeo?.success ? returnGeo.lng : null);
+    // 显式坐标通过 isValidCoordinate 校验后才使用 FROM_SOURCE，否则从 geocode 取值
+    const pickupLat = hasExplicitPickupCoord ? Number(body.pickupLat) : (pickupGeo?.success ? pickupGeo.lat : null);
+    const pickupLng = hasExplicitPickupCoord ? Number(body.pickupLng) : (pickupGeo?.success ? pickupGeo.lng : null);
+    const returnLat = hasExplicitReturnCoord ? Number(body.returnLat) : (returnGeo?.success ? returnGeo.lat : null);
+    const returnLng = hasExplicitReturnCoord ? Number(body.returnLng) : (returnGeo?.success ? returnGeo.lng : null);
 
     const geocodePickupStatus = hasExplicitPickupCoord
       ? "FROM_SOURCE"
