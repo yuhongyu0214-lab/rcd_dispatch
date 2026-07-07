@@ -79,6 +79,8 @@ export type MapBoardSummary = {
 };
 
 export type MapBoardPayload = {
+  /** 所有可见订单（含无坐标），用于侧边栏列表 */
+  allOrders: OrderDisplayDTO[];
   orders: MapOrderPoint[];
   drivers: MapDriverPoint[];
   vehicles: MapVehiclePoint[];

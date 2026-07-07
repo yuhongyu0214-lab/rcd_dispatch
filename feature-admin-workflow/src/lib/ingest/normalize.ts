@@ -1,11 +1,11 @@
 import type { OrderStatus, OrderType } from "@/types";
 
 // ============================================================================
-// 城市字典（首批：南昌市试点）
+// 城市字典（首批：杭州市试点）
 // ============================================================================
 
-/** 首批支持的城市列表（与方案文档 DTO 示例保持一致：江西省/南昌市/青山湖区） */
-export const PILOT_CITIES = ["南昌市"] as const;
+/** 首批支持的城市列表（杭州市试点（浙江省，amapCity="杭州"）） */
+export const PILOT_CITIES = ["杭州市"] as const;
 
 export type PilotCity = (typeof PILOT_CITIES)[number];
 
@@ -149,3 +149,12 @@ export function isValidCoordinate(lat: unknown, lng: unknown): boolean {
     lngNum <= GCJ02_BOUNDS.lngMax
   );
 }
+
+// ============================================================================
+// 可见订单状态（地图看板 + 订单列表共用）
+// ============================================================================
+
+/** 地图看板和订单列表中应展示的订单状态 */
+export const VISIBLE_ORDER_STATUSES = [
+  "PENDING", "RECOMMENDING", "ASSIGNED", "ACCEPTED", "IN_PROGRESS"
+] as const;

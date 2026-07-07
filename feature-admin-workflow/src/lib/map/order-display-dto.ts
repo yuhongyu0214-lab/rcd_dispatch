@@ -38,6 +38,8 @@ export type OrderDisplaySource = {
   channel?: string | null;
   driverNameSnapshot?: string | null;
   vehicleTypeSnapshot?: string | null;
+  pickupLat?: number | null;
+  pickupLng?: number | null;
   pickupAddress: string;
   returnAddress: string;
   scheduledAt: Date | string;
@@ -63,6 +65,7 @@ export type OrderDisplayDTO = {
   licensePlateSnapshot: string | null;
   driverId: string | null;
   driverName: string | null;
+  hasCoordinate: boolean;
   pickupName: string;
   returnName: string;
   pickupAddress: string;
@@ -184,6 +187,7 @@ export function toOrderDisplayDTO(dbOrder: OrderDisplaySource): OrderDisplayDTO 
   const plate =
     dbOrder.licensePlateSnapshot ?? dbOrder.vehicle?.licensePlate ?? "未绑定车牌";
   const driverName =
+  const hasCoordinate = typeof dbOrder.pickupLat === "number" && typeof dbOrder.pickupLng === "number" && Number.isFinite(dbOrder.pickupLat) && Number.isFinite(dbOrder.pickupLng);
     dbOrder.currentAssignment?.driver.name ?? dbOrder.driverNameSnapshot ?? null;
 
   return {
@@ -224,6 +228,7 @@ export function toOrderDisplayDTO(dbOrder: OrderDisplaySource): OrderDisplayDTO 
         }
       : null,
     currentAssignment: dbOrder.currentAssignment ?? null,
+    hasCoordinate,
     store: dbOrder.store
   };
 }
