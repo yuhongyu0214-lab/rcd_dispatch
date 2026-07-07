@@ -5,7 +5,7 @@ import type { OrderStatus, OrderType } from "@/types";
 // ============================================================================
 
 /** 首批支持的城市列表 */
-export const PILOT_CITIES = ["南昌市"] as const;
+export const PILOT_CITIES = ["杭州市"] as const;
 
 export type PilotCity = (typeof PILOT_CITIES)[number];
 

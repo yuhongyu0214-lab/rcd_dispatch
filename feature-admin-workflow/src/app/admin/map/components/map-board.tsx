@@ -699,8 +699,10 @@ function filterPoints(
 }
 
 function getPointPositionPercent(point: BoardPoint, points: BoardPoint[]) {
-  const lats = points.map((item) => item.coordinate.lat);
-  const lngs = points.map((item) => item.coordinate.lng);
+  // 排除 FALLBACK（无坐标）点位，避免 lat:0/lng:0 拉偏地图视口
+  const realPoints = points.filter((p) => p.coordinate.source !== "FALLBACK");
+  const lats = realPoints.map((item) => item.coordinate.lat);
+  const lngs = realPoints.map((item) => item.coordinate.lng);
   const minLat = Math.min(...lats);
   const maxLat = Math.max(...lats);
   const minLng = Math.min(...lngs);
@@ -1140,8 +1142,12 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
       return null;
     }
 
+    // 无坐标（FALLBACK）的订单不计算司机距离
+    if (selectedPoint.coordinate.source === "FALLBACK") return null;
+
     return payload.drivers
       .filter((point) => point.status !== "OFFLINE" && point.status !== "UNAVAILABLE")
+      .filter((point) => point.coordinate.source !== "FALLBACK")
       .map((point) => ({
         point,
         distance: Math.hypot(

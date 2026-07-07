@@ -23,29 +23,34 @@ const log = createLogger("browser-extension-ingest");
  * 不需要登录态，通过 Ingest Key 鉴权。
  */
 
-/** 插件 POST 过来的原始 JSON 结构 */
+/** 插件 POST 过来的原始 JSON 结构（兼容旧 snake_case + 推荐 camelCase DTO） */
 interface ExtensionRecord {
-  order_number: string;
-  driver_name: string;
-  pickup_time: string;
-  delivery_driver: string;
-  return_time: string;
-  return_driver: string;
-  car_model: string;
-  license_plate: string;
-  pickup_store: string;
-  pickup_address: string;
-  return_store: string;
-  return_address: string;
-  order_source: string;
-  order_status: string;
-  captured_at: string;
-  // 新增：地理编码和字段标准化所需
+  // 推荐 DTO（camelCase，优先使用）
+  orderNo?: string;
+  orderStatusRaw?: string;
+  orderTypeRaw?: string;
   province?: string;
   city?: string;
   district?: string;
+  source?: string;
+  // 旧版 snake_case（兼容，逐步淘汰）
+  order_number?: string;
   order_status_raw?: string;
   order_type_raw?: string;
+  driver_name?: string;
+  pickup_time?: string;
+  delivery_driver?: string;
+  return_time?: string;
+  return_driver?: string;
+  car_model?: string;
+  license_plate?: string;
+  pickup_store?: string;
+  pickup_address?: string;
+  return_store?: string;
+  return_address?: string;
+  order_source?: string;
+  order_status?: string;
+  captured_at?: string;
 }
 
 /**
@@ -102,26 +107,35 @@ export async function POST(request: Request) {
     const body = await request.json();
     const record = body as ExtensionRecord;
 
+    // ── 字段读取（优先 camelCase DTO，回退 snake_case 兼容）──
+    const orderNo = record.orderNo ?? record.order_number;
+    const orderStatusRaw = record.orderStatusRaw ?? record.order_status_raw;
+    const orderTypeRaw = record.orderTypeRaw ?? record.order_type_raw;
+    const province = record.province?.trim() || null;
+    const city = record.city?.trim();
+    const district = record.district?.trim() || null;
+    const pickupAddress = record.pickup_address || record.pickup_store || "";
+    const returnAddress = record.return_address || record.return_store || "";
+    const source = record.source ?? record.order_source ?? "BROWSER_PLUGIN";
+
     // ── 必填字段校验 ──
-    if (!record.order_number) {
-      return fail("缺少必填字段: order_number（订单号）", { status: 400, traceId });
+    if (!orderNo) {
+      return fail("缺少必填字段: orderNo / order_number（订单号）", { status: 400, traceId });
     }
-    if (!record.pickup_address && !record.pickup_store) {
+    if (!pickupAddress) {
       return fail("缺少取车地址", { status: 400, traceId });
     }
-    if (!record.return_address && !record.return_store) {
+    if (!returnAddress) {
       return fail("缺少还车地址", { status: 400, traceId });
     }
 
     // ── 去重 ──
     const existing = await prisma.order.findUnique({
-      where: { orderNo: record.order_number },
+      where: { orderNo },
       select: { id: true, orderNo: true },
     });
     if (existing) {
-      return fail(`订单 ${record.order_number} 已存在，跳过`, {
-        status: 409, traceId,
-      });
+      return fail(`订单 ${orderNo} 已存在，跳过`, { status: 409, traceId });
     }
 
     // ── 门店查找 ──
@@ -138,46 +152,36 @@ export async function POST(request: Request) {
       return fail(`门店不存在: ${storeCode}`, { status: 400, traceId });
     }
 
-    // ── 订单类型映射（优先外部原始文本，回退地址推断）──
+    // ── 城市校验 ──
+    if (city && !isValidPilotCity(city)) {
+      return fail(`城市 "${city}" 不在试点范围内，首批仅支持：${PILOT_CITIES.join("、")}`, {
+        status: 400, traceId
+      });
+    }
+
+    // ── 订单类型映射（只从 orderTypeRaw 映射，不误用状态字段）──
     let orderType: OrderType;
-    const mappedType =
-      mapOrderTypeRaw(record.order_type_raw) ??
-      mapOrderTypeRaw(record.order_status); // 兼容旧字段名
+    const mappedType = mapOrderTypeRaw(orderTypeRaw);
     if (mappedType) {
       orderType = mappedType;
     } else {
       // 回退：从地址文本推断
-      const fullText = `${record.pickup_address ?? ""} ${record.pickup_store ?? ""} ${record.return_address ?? ""} ${record.return_store ?? ""}`;
+      const fullText = `${pickupAddress} ${returnAddress}`;
       if (fullText.includes("送车上门")) orderType = "DOOR_DELIVERY";
       else if (fullText.includes("商家上门取车")) orderType = "DOOR_PICKUP";
       else if (fullText.includes("到店还车")) orderType = "STORE_RETURN";
       else orderType = "STORE_PICKUP";
     }
 
-    // ── 订单状态映射 ──
-    const orderStatus =
-      mapOrderStatusRaw(record.order_status_raw) ??
-      mapOrderStatusRaw(record.order_status) ??
-      "PENDING";
-
-    // ── 城市校验 ──
-    const city = record.city?.trim();
-    if (city && !isValidPilotCity(city)) {
-      return fail(`城市 "${city}" 不在试点范围内，首批仅支持：${PILOT_CITIES.join("、")}`, {
-        status: 400, traceId
-      });
-    }
-    const province = record.province?.trim() || null;
-    const district = record.district?.trim() || null;
+    // ── 订单状态映射（只从 orderStatusRaw 映射）──
+    const orderStatus = mapOrderStatusRaw(orderStatusRaw) ?? "PENDING";
 
     // ── 日期解析 ──
-    const scheduledAt = parseDate(record.pickup_time) ??
-      parseDate(record.captured_at) ??
+    const scheduledAt = parseDate(record.pickup_time ?? "") ??
+      parseDate(record.captured_at ?? "") ??
       new Date();
 
     // ── 地理编码（拼接省市+区县，非阻塞）──
-    const pickupAddress = record.pickup_address || record.pickup_store;
-    const returnAddress = record.return_address || record.return_store;
     const pickupGeoInput = buildGeocodeAddress(pickupAddress, { province, city, district });
     const returnGeoInput = buildGeocodeAddress(returnAddress, { province, city, district });
     const [pickupGeo, returnGeo] = await Promise.all([
@@ -192,14 +196,14 @@ export async function POST(request: Request) {
       ? returnGeo.geocodeStatus
       : (returnGeo.geocodeStatus ?? "FAILED");
 
-    // ── 字段映射 ──
+    // ── 写入 RDS ──
     const order = await prisma.order.create({
       data: {
-        orderNo: record.order_number,
+        orderNo,
         type: orderType,
         status: orderStatus,
         storeId: store.id,
-        channel: record.order_source || "BROWSER_PLUGIN",
+        channel: source,
         driverNameSnapshot: record.driver_name || record.delivery_driver || null,
         vehicleTypeSnapshot: record.car_model || null,
         licensePlateSnapshot: record.license_plate || null,
