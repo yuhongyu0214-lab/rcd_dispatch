@@ -5,6 +5,7 @@ import {
 } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { VISIBLE_ORDER_STATUSES } from "@/lib/ingest/normalize";
 import { getDriverLocations } from "@/lib/redis";
 import type { DriverLocation } from "@/lib/redis";
 
