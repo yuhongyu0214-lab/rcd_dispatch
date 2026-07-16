@@ -50,13 +50,13 @@ Redis/Tair          高德           Web/司机端
 | `externalOrderId` | string | 来源内唯一 ID | Adapter 已有，Order 尚未持久化 |
 | `orderNo` | string | 用户可见订单号 | `Order.orderNo` |
 | `sourceVersion` | string | 外部版本或更新时间 | V2 新增 |
-| `businessType` | enum | 门店取/还、送车、上门取车 | `Order.type` |
+| `businessType` | enum | 锁定沿用 V1 值：`STORE_PICKUP / STORE_RETURN / DOOR_DELIVERY / DOOR_PICKUP` | `Order.type` |
 | `promisedPickupAt` | datetime | 承诺取车时间 | 当前 `scheduledAt` |
 | `pickupAddress` | string | 取车地址原文 | 已有 |
 | `deliveryAddress` | string | 送达地址原文 | 当前 `returnAddress`，V2 统一语义 |
 | `storeCode` | string | 归属门店编码 | 当前通过 `storeId` 关联 |
 | `sourceStatusRaw` | string | 外部原始状态 | V2 新增 |
-| `receivedAt` | datetime | 系统接收时间 | 建议独立保存 |
+| `receivedAt` | datetime | 必填；由服务端接收时生成，UTC 存储，不接受外部传入 | V2 新增 |
 
 ### 3.2 可选字段
 
@@ -120,8 +120,8 @@ validate(raw) → normalize(raw) → map(raw) → CanonicalOrder
 | `OrderSourceEvent` | 来源、外部 ID、版本、接收结果、原始 JSON 摘要 | 幂等、追溯和 API 联调 |
 | `DriverShift` | 上下班时间和当班状态 | 是否参与调度不能只靠位置判断 |
 | `OrderServicePlan` | 五个模块选择、总时长、修改版本 | 用受控枚举 + JSONB，避免五张配置表 |
-| `DispatchAlert` | 不可行预警、处理状态、解决方式 | 预警需持续展示，不能只写日志 |
-| `DriverLocationSample` | 按策略采样的历史位置 | Redis 只存最新位置，不能事后追溯 |
+| `DispatchAlert` | 不可行预警、处理状态（`OPEN / RESOLVED`）、解决方式 | 预警需持续展示，不能只写日志 |
+| `DriverLocationSample` | 按§7.1 冻结口径采样的历史位置 | Redis 只存最新位置，不能事后追溯 |
 
 为保持精简，V2 不建立“模块字典表”和“全天排程表”。A/B/C 由有效 Assignment 的计划顺序派生。
 
@@ -165,6 +165,30 @@ dispatch:lock:{driverId}
 order:lock:{orderId}
 dispatch:snapshot:{driverId}:{planVersion}
 ```
+
+### 7.1 位置有效性与采样口径（冻结）
+
+按当前前台 H5 能力冻结以下数值：
+
+| 口径 | 冻结值 |
+|---|---|
+| 前台当班目标上报间隔 | 30 秒，最长不超过 60 秒 |
+| 位置过期 | `capturedAt` 距当前时间超过 120 秒：标注过期并排除调度 |
+| 位置无效 | 定位精度大于 100 米：视为无效样本 |
+| 时钟校验 | 客户端时间超前服务端 30 秒以上：拒绝该样本 |
+| Redis 最新位置 TTL | 180 秒 |
+| PostgreSQL 采样条件 | 距上次落库满 120 秒、移动超过 200 米、或发生出发/到达/完成/上下班事件，任一满足即保存 |
+| 历史位置保留 | 默认 90 天 |
+
+H5 进入后台后不承诺持续定位；超过 120 秒自然转为过期。不得拿旧位置冒充实时位置。
+
+### 7.2 ETA 缓存与重算口径（冻结）
+
+| 口径 | 冻结值 |
+|---|---|
+| ETA 缓存 | 默认 60 秒；允许范围 30–120 秒 |
+| 重排触发阈值 | 每次真实 ETA 重算与上次有效值比较，绝对变化超过 10 分钟触发局部重排 |
+| ETA 计算时机 | 原始 30 秒位置上报不必次次调用高德；司机移动达到 200 米、缓存到期、业务事件（出发/到达/完成/订单变化/班次变化/模块变化）或 10 分钟基线校验时再计算 |
 
 ## 8. 高德调用边界
 
@@ -220,16 +244,25 @@ dispatch:snapshot:{driverId}:{planVersion}
 
 ## 12. 实施顺序
 
+与总体 Gate 架构对齐（详见《PRD V2 并行开发与分阶段验收设计》）：
+
 ```text
-V2 文档冻结
-→ CanonicalOrder/API 契约
-→ data-model-v2 迁移设计与回滚 SQL
-→ OrderSourceAdapter V2
-→ 实时位置与班次
-→ A/B/C 调度引擎
-→ Web 调度台
-→ 司机执行接口
-→ 预警、日志与稳定性验证
+Gate 0：V2 文档冻结（含 CanonicalOrder 与 API 契约的文档级冻结）
+→ Gate 1：data-model-v2 迁移设计与回滚 SQL
+→ Gate 2：已冻结契约落成 TypeScript DTO、错误类型和契约测试
+→ 并行线 1A OrderSourceAdapter V2
+→ 并行线 1B 实时位置与班次
+→ 并行线 1C A/B/C 调度核心
+→ Gate 3 调度事务集成
+→ Web 调度台 / 司机执行接口 / 预警与观测
+→ 迁移验证、端到端验证与稳定化
 ```
 
 不得在 schema 冻结前直接把 V2 状态塞进现有页面或 API。
+
+## 13. 版本记录
+
+| 版本 | 日期 | 内容 |
+|---|---|---|
+| V2.0 | 2026-07-13 | 冻结边界、CanonicalOrder、最小数据模型、重排一致性与迁移流程 |
+| V2.0-r1 | 2026-07-17 | Gate 0 审查修订：`receivedAt` 定为服务端生成必填；`businessType` 锁定 V1 枚举值；新增 §7.1 位置口径与 §7.2 ETA 口径；`DispatchAlert` 状态定为 `OPEN/RESOLVED`；§12 与总体 Gate 架构对齐 |

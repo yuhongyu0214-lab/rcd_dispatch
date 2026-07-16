@@ -1,7 +1,7 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准，等待书面复核
+> 状态：总体架构已批准；Gate -1 已通过验收，当前处于 Gate 0（文档冻结审查）
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
@@ -520,6 +520,10 @@ Gate 3 只能由单一实现线完成，禁止多个 Agent 同时修改调度提
 ## 13. 当前启动状态
 
 - 已批准：总体并行架构、串行闸门、两轮并行、并行验证、稳定化和逐轮验收模式。
-- 当前首个工作阶段：Gate -1。
-- 当前执行限制：`develop` 存在未提交改动，必须先完成归属和基线整理。
-- 下一动作：用户复核本文档；复核通过后，在新的命令行开发界面执行 Gate -1。
+- Gate -1：已于 2026-07-16 通过验收。基线 `develop` SHA：`37ee8a3`（已推送 `origin/develop`）。
+  - 工作区干净、测试（45/45）/lint/build（29/29 页面）全部通过。
+  - V2 文档分支 `feature/v2-baseline` 命名合规，已绑定远程跟踪（`origin/feature/v2-baseline`）。
+  - Gate -1 产生的 9 个提交身份已统一，develop 已推送。
+- 当前工作阶段：Gate 0（V2 规则与契约文档冻结审查）。
+- 当前执行限制：Gate 0 通过前，禁止创建 Gate 1 或第一轮并行开发分支。
+- 下一动作：完成 Gate 0 文档审查（占位符、相互矛盾、双重解释清零），合入 `develop` 后进入 Gate 1。

@@ -6,28 +6,53 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 # 人车单调度系统 (RCD Dispatch)
 
-汽车租赁可视化调度平台 MVP。链路：订单导入 → 地图看板 → 推荐派单 → 调度闭环。
+汽车租赁可视化调度平台。V1 链路：订单导入 → 地图看板 → 推荐派单 → 调度闭环。当前正在向 PRD V2（实时滚动调度 + A/B/C 工单时间轴）兼容演进。
 
-## 项目架构
+## 文档优先级（V2 生效后）
 
-- **多 worktree 并行开发**，每个 `feature-*` 目录是一个独立的 git worktree，对应一个开发阶段
+1. `docs/versions/v2.0/` 下的 V2 文档（PRD、数据架构、项目规则、API 契约、领域词汇、兼容矩阵）。
+2. 本文件中不与 V2 冲突的工程铁律（下方标注）。
+3. V1 文档与本文件的 V1 阶段描述，仅用于维护现有 V1 代码和历史追溯。
+
+冲突裁决：数据安全与不可逆操作 > V2 规则 > 本文件工程铁律 > 已冻结契约 > V1 历史规则 > 原型与临时说明。
+
+## V2 开发流程（当前主线）
+
+V2 按串行闸门 + 受控并行推进，完整定义见 `docs/superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md`：
+
+```
+Gate -1 基线整理（已通过，develop @ 37ee8a3）
+→ Gate 0 文档冻结 → Gate 1 Schema 与迁移 → Gate 2 DTO/API 契约落地
+→ 第一轮并行（订单来源 / 实时位置 / 调度核心）→ Gate 3 调度事务集成
+→ 第二轮并行（Web / 司机接口 / 观测）→ 迁移与端到端验证 → Gate 4 稳定化
+```
+
+- 每个 Gate 通过验收后才能创建下一阶段分支；不得提前建分支。
+- V2 分支命名 `feature/v2-*`；合并路径仍为 `feature/* → develop → main`。
+- 每个分支只能修改自己的独占文件范围；Schema、公共 DTO、共享样式、logger、调度事务各有唯一所有者线。
+
+## 项目架构【工程铁律：继续有效】
+
+- **多 worktree 并行开发**，每个 `feature-*` 目录是一个独立的 git worktree
+- 正式应用代码位于 `feature-admin-workflow/`
 - 包管理器锁定 `pnpm@10.11.0`，禁止用 npm/yarn
-- API 统一响应格式：`lib/api-response.ts` 导出 `ok()` / `fail()`，含 `traceId`
+- API 统一响应格式：`lib/api-response.ts` 导出 `ok()` / `fail()`，含 `traceId`（V2 结构化 error 见 API 契约 V2）
 - 高德 API 服务端 Key 用于路径规划（ETA 计算），JS Key 用于地图前端渲染
 - 默认管理员账号：`admin@dispatch.dev` / `admin123`
 
-## 技术栈（锁定）
+## 技术栈（锁定）【工程铁律：继续有效】
 
 - 全栈：Next.js 14 (App Router) + TypeScript
 - UI：Tailwind CSS + shadcn/ui
 - 数据库：PostgreSQL + Prisma ORM（迁移用 `prisma migrate dev`，查看用 `npx prisma studio`）
 - 地图：高德 API（服务端 Key：`AMAP_SERVER_KEY`；前端 Key：`NEXT_PUBLIC_AMAP_JS_KEY`）
-- 日志：Pino（stdout 输出，Railway 采集）
+- 日志：Pino（stdout 输出），禁止 `console.log`
 - 测试：Vitest（`pnpm test`，`@` 路径别名 = `./src`）
+- 实时/短期数据用 Redis/Tair；业务事实只存 PostgreSQL
 
 ---
 
-## 全局铁律（所有阶段必须遵守）
+## 全局铁律（所有阶段必须遵守）【工程铁律：继续有效】
 
 ### 分支与合并
 
@@ -63,7 +88,9 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ---
 
-## 阶段执行顺序（固定，不可调换）
+## V1 阶段执行顺序【V1 维护流程：已被 V2 Gate 流程取代，仅用于维护 V1 存量代码】
+
+以下 1–11 阶段是 V1 的开发主线，已全部完成。V2 新功能不使用这些阶段名；修复 V1 存量 bug 时仍按原阶段的文件范围执行。
 
 ```
 1.docs-prd → 2.repo-bootstrap → 3.data-model → 4.order-import → 5.map-board
@@ -193,4 +220,4 @@ docs/              # 业务文档（仅 docs-prd 阶段修改）
 
 ### 环境变量（.env.local 必须项）
 
-`DATABASE_URL` / `SHADOW_DATABASE_URL` / `NEXTAUTH_SECRET` / `AMAP_SERVER_KEY`
+`DATABASE_URL` / `SHADOW_DATABASE_URL` / `AUTH_SESSION_SECRET` / `AMAP_SERVER_KEY`

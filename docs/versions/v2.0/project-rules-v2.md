@@ -113,10 +113,10 @@
 
 ## 6. API 与状态规则
 
-- V2 API 契约必须单独版本化，不直接改写 `demo-v12-api-contract.md`。
+- V2 API 契约以 [api-contract-v2.md](api-contract-v2.md) 为唯一权威版本，不直接改写 `demo-v12-api-contract.md`。
 - 内部路径保持稳定，通过 DTO 兼容，不把外部 API 结构透传给页面。
 - 并发冲突返回 409 和当前 `planVersion`。
-- 非法状态流转返回 400，并包含 `currentStatus` 和 `targetStatus`。
+- 非法状态流转返回 400，并包含 `currentStatus` 和 `targetStatus`（流转矩阵见 PRD V2 §10.1）。
 - 外部依赖故障返回可理解错误，详细原因写结构化日志。
 - 所有时间使用带时区 ISO 8601；数据库统一存 UTC，前端按 Asia/Shanghai 展示。
 
@@ -150,3 +150,4 @@
 | 版本 | 日期 | 内容 |
 |---|---|---|
 | V2.0 | 2026-07-13 | 汇总代码一致性、设计变量、设计规则及 V1/V2 冲突裁决 |
+| V2.0-r1 | 2026-07-17 | Gate 0 审查修订：§6 指向 api-contract-v2.md 唯一权威版本，补充流转矩阵引用 |

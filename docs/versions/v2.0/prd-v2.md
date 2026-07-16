@@ -94,6 +94,23 @@
 - 以订单承诺取车时间作为约束，预计迟到不得超过 30 分钟。
 - 若任何安排都会超过 30 分钟，订单进入“确认无法准时”预警。
 
+### 5.1 可行性判定（冻结）
+
+```text
+slackMinutes = promisedPickupAt - projectedPickupAt
+（安全余量 = 承诺取车时间 - 预计到达取车点时间，单位分钟）
+```
+
+| 可行性 | 判定 |
+|---|---|
+| `UNKNOWN` | 尚未计算，或缺有效位置/ETA |
+| `NORMAL` | `slackMinutes >= 10` |
+| `AT_RISK` | `-30 <= slackMinutes < 10` |
+| `INFEASIBLE` | `slackMinutes < -30` |
+
+- 采用 10 分钟安全余量，避免 0–10 分钟出现定义空档。
+- 可行性只有以上四个值；预警的处理状态（`OPEN / RESOLVED`）属于 `DispatchAlert`，不属于可行性维度。
+
 ## 6. 自动滚动调度
 
 ### 6.1 候选范围
@@ -150,12 +167,12 @@
 
 ## 8. 不可行订单处理闭环
 
-1. 建立或更新 `INFEASIBLE` 预警。
+1. 建立或更新 `INFEASIBLE` 预警（`DispatchAlert`，状态 `OPEN`）。
 2. 地图、订单池、司机时间轴和预警中心显示特殊标注。
 3. 调度员可直接修改取车时间、取车地点或送达地点。
 4. 修改无需二次确认，保存后立即生效并重算 ETA。
 5. 日志记录修改人、时间、原值、新值、原因和 traceId。
-6. 新方案可行后预警转为已解决，历史记录保留。
+6. 新方案可行后，预警状态转为 `RESOLVED`，历史记录保留；订单可行性按 5.1 重新计算为 `NORMAL`、`AT_RISK` 或 `UNKNOWN`。
 
 预警是需要处理的业务对象，不得只写一条普通日志。
 
@@ -200,9 +217,31 @@ UNASSIGNED / PLANNED / EN_ROUTE → CANCELLED
 
 | 维度 | 枚举 |
 |---|---|
-| 可行性 | `NORMAL / AT_RISK / INFEASIBLE / RESOLVED` |
+| 可行性 | `UNKNOWN / NORMAL / AT_RISK / INFEASIBLE`（判定见 5.1） |
 | 锁定 | `NONE / AUTO_FROZEN / MANUAL_LOCKED` |
-| 槽位 | `A / B / C / UNASSIGNED` |
+| 槽位 | `NONE / A / B / C`（`NONE` 表示未占任何槽位，避免与执行状态 `UNASSIGNED` 同名） |
+
+预警处理状态 `OPEN / RESOLVED` 属于 `DispatchAlert` 实体，不是订单维度。
+
+### 10.1 状态流转矩阵（冻结）
+
+| 当前状态 | 操作 | 目标状态 | 允许角色 | 副作用 | 非法时响应 |
+|---|---|---|---|---|---|
+| `UNASSIGNED` | 自动分配 | `PLANNED` | 调度引擎 | 建立 Assignment、写入槽位与计划时间、递增 `planVersion`、日志 | — |
+| `UNASSIGNED` | 手动分配 | `PLANNED` | 调度员 | 同上，且锁定 = `MANUAL_LOCKED`，记录原因 | — |
+| `PLANNED` | 撤回/释放 | `UNASSIGNED` | 调度员、调度引擎（下班释放） | 槽位 = `NONE`、锁定 = `NONE`、触发重排、日志 | — |
+| `PLANNED` | 改派 | `PLANNED`（新司机） | 调度员 | 旧 Assignment 结链、新 Assignment 建立、记录原因与前后值、触发重排 | — |
+| `PLANNED` | 出发 | `EN_ROUTE` | 司机（仅本人工单） | 锁定 = `AUTO_FROZEN`、记录 `departedAt`、开启导航、刷新 ETA | 400 |
+| `EN_ROUTE` | 改派 | `PLANNED`（新司机） | 调度员 | 必须记录原因；原司机任务释放；触发重排 | — |
+| `EN_ROUTE` | 到达 | `IN_SERVICE` | 司机（仅本人工单） | 记录 `arrivedAt`、实际计时开始、此后任何角色改派均被服务端拒绝 | 400 |
+| `IN_SERVICE` | 改派 | — | 任何角色 | 禁止 | 400，含 `currentStatus/targetStatus` |
+| `IN_SERVICE` | 完成 | `COMPLETED` | 司机（仅本人工单） | 记录 `completedAt`、实际计时结束、以手机实时位置为下一工单 ETA 起点、触发重排 | 400 |
+| `UNASSIGNED / PLANNED / EN_ROUTE` | 取消 | `CANCELLED` | 来源系统（经 Adapter）、调度员 | 释放司机与槽位、触发重排、日志 | — |
+| `IN_SERVICE / COMPLETED` | 取消 | — | 任何角色 | 禁止 | 400，含 `currentStatus/targetStatus` |
+| `COMPLETED / CANCELLED` | 任何流转 | — | 任何角色 | 终态，禁止流转 | 400 |
+
+- 矩阵未列出的任何流转组合一律非法，返回 400 并包含 `currentStatus` 和 `targetStatus`。
+- 重复提交已生效的同一流转（如重复点击“到达”）按幂等处理，见 API 契约 V2。
 
 V1 的状态暂不删除，在数据迁移阶段通过兼容层映射。
 
@@ -257,3 +296,4 @@ V1 的状态暂不删除，在数据迁移阶段通过兼容层映射。
 | 版本 | 日期 | 内容 |
 |---|---|---|
 | V2.0 | 2026-07-13 | 冻结实时滚动调度、A/B/C、模块、预警、权限、定位与外部 API 边界 |
+| V2.0-r1 | 2026-07-17 | Gate 0 审查修订：新增 5.1 可行性判定（slack 模型 + `UNKNOWN`）、10.1 状态流转矩阵；槽位枚举改 `NONE/A/B/C`；`RESOLVED` 移出可行性并归入 `DispatchAlert` |
