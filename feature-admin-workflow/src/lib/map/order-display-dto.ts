@@ -187,8 +187,8 @@ export function toOrderDisplayDTO(dbOrder: OrderDisplaySource): OrderDisplayDTO 
   const plate =
     dbOrder.licensePlateSnapshot ?? dbOrder.vehicle?.licensePlate ?? "未绑定车牌";
   const driverName =
-  const hasCoordinate = typeof dbOrder.pickupLat === "number" && typeof dbOrder.pickupLng === "number" && Number.isFinite(dbOrder.pickupLat) && Number.isFinite(dbOrder.pickupLng);
     dbOrder.currentAssignment?.driver.name ?? dbOrder.driverNameSnapshot ?? null;
+  const hasCoordinate = typeof dbOrder.pickupLat === "number" && typeof dbOrder.pickupLng === "number" && Number.isFinite(dbOrder.pickupLat) && Number.isFinite(dbOrder.pickupLng);
 
   return {
     id: dbOrder.id,
