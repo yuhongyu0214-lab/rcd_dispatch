@@ -38,6 +38,14 @@ interface ExtensionRecord {
   pickupLng?: number | null;
   returnLat?: number | null;
   returnLng?: number | null;
+  pickupAddress?: string;
+  returnAddress?: string;
+  scheduledAt?: string;
+  driverName?: string;
+  vehicleType?: string;
+  licensePlate?: string;
+  storeName?: string;
+  capturedAt?: string;
   // 旧版 snake_case（兼容，逐步淘汰）
   order_number?: string;
   order_status_raw?: string;
@@ -56,6 +64,35 @@ interface ExtensionRecord {
   order_source?: string;
   order_status?: string;
   captured_at?: string;
+}
+
+type IngestResult =
+  | { success: true; orderNo: string; id: string; status: string; type: string }
+  | { success: false; orderNo: string; reason: string };
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "OPTIONS, POST",
+  "Access-Control-Allow-Headers": "Content-Type, X-Ingest-Key, Authorization, X-Trace-Id",
+  "Access-Control-Max-Age": "86400",
+} as const;
+
+function withCors(response: Response) {
+  for (const [key, value] of Object.entries(corsHeaders)) {
+    response.headers.set(key, value);
+  }
+  return response;
+}
+
+export async function OPTIONS(request: Request) {
+  const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
+  return new Response(null, {
+    status: 204,
+    headers: {
+      ...corsHeaders,
+      "X-Trace-Id": traceId,
+    },
+  });
 }
 
 /**
@@ -95,23 +132,8 @@ function parseDate(raw: string): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
-export async function POST(request: Request) {
-  const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
-
-  // 轻量鉴权（支持两种格式：X-Ingest-Key 和 Authorization: Bearer）
-  const ingestKey =
-    request.headers.get("X-Ingest-Key") ??
-    request.headers.get("Authorization")?.replace(/^Bearer\s+/i, "") ??
-    "";
-
-  if (!ingestKey || ingestKey !== process.env.INGEST_API_KEY) {
-    return fail("无效的 Ingest Key", { status: 401, traceId });
-  }
-
+async function ingestOne(record: ExtensionRecord, traceId: string): Promise<IngestResult> {
   try {
-    const body = await request.json();
-    const record = body as ExtensionRecord;
-
     // ── 字段读取（优先 camelCase DTO，回退 snake_case 兼容）──
     const orderNo = record.orderNo ?? record.order_number;
     const orderStatusRaw = record.orderStatusRaw ?? record.order_status_raw;
@@ -119,19 +141,19 @@ export async function POST(request: Request) {
     const province = record.province?.trim() || null;
     const city = record.city?.trim();
     const district = record.district?.trim() || null;
-    const pickupAddress = record.pickup_address || record.pickup_store || "";
-    const returnAddress = record.return_address || record.return_store || "";
+    const pickupAddress = record.pickupAddress || record.pickup_address || record.pickup_store || "";
+    const returnAddress = record.returnAddress || record.return_address || record.return_store || "";
     const source = record.source ?? record.order_source ?? "BROWSER_PLUGIN";
 
     // ── 必填字段校验 ──
     if (!orderNo) {
-      return fail("缺少必填字段: orderNo / order_number（订单号）", { status: 400, traceId });
+      return { success: false, orderNo: "", reason: "缺少必填字段: orderNo / order_number（订单号）" };
     }
     if (!pickupAddress) {
-      return fail("缺少取车地址", { status: 400, traceId });
+      return { success: false, orderNo, reason: "缺少取车地址" };
     }
     if (!returnAddress) {
-      return fail("缺少还车地址", { status: 400, traceId });
+      return { success: false, orderNo, reason: "缺少还车地址" };
     }
 
     // ── 去重 ──
@@ -140,27 +162,25 @@ export async function POST(request: Request) {
       select: { id: true, orderNo: true },
     });
     if (existing) {
-      return fail(`订单 ${orderNo} 已存在，跳过`, { status: 409, traceId });
+      return { success: false, orderNo, reason: `订单 ${orderNo} 已存在，跳过` };
     }
 
     // ── 门店查找 ──
-    const storeName = record.pickup_store || record.return_store || "";
+    const storeName = record.storeName || record.pickup_store || record.return_store || "";
     const storeCode = await resolveStoreCode(storeName);
     if (!storeCode) {
-      return fail(`无法匹配门店: ${storeName}，请先在系统中创建对应门店`, {
-        status: 400, traceId,
-      });
+      return { success: false, orderNo, reason: `无法匹配门店: ${storeName}，请先在系统中创建对应门店` };
     }
 
     const store = await prisma.store.findUnique({ where: { code: storeCode } });
     if (!store) {
-      return fail(`门店不存在: ${storeCode}`, { status: 400, traceId });
+      return { success: false, orderNo, reason: `门店不存在: ${storeCode}` };
     }
 
     // ── 城市必填校验 ──
     const cityCheck = validateRequiredCity(city);
     if (!cityCheck.valid) {
-      return fail(cityCheck.error, { status: 400, traceId });
+      return { success: false, orderNo, reason: cityCheck.error };
     }
     const cityValidated = cityCheck.city;
 
@@ -182,7 +202,9 @@ export async function POST(request: Request) {
     const orderStatus = mapOrderStatusRaw(orderStatusRaw) ?? "PENDING";
 
     // ── 日期解析 ──
-    const scheduledAt = parseDate(record.pickup_time ?? "") ??
+    const scheduledAt = parseDate(record.scheduledAt ?? "") ??
+      parseDate(record.pickup_time ?? "") ??
+      parseDate(record.capturedAt ?? "") ??
       parseDate(record.captured_at ?? "") ??
       new Date();
 
@@ -222,9 +244,9 @@ export async function POST(request: Request) {
         status: orderStatus,
         storeId: store.id,
         channel: source,
-        driverNameSnapshot: record.driver_name || record.delivery_driver || null,
-        vehicleTypeSnapshot: record.car_model || null,
-        licensePlateSnapshot: record.license_plate || null,
+        driverNameSnapshot: record.driverName || record.driver_name || record.delivery_driver || null,
+        vehicleTypeSnapshot: record.vehicleType || record.car_model || null,
+        licensePlateSnapshot: record.licensePlate || record.license_plate || null,
         pickupAddress,
         pickupLat,
         pickupLng,
@@ -246,24 +268,57 @@ export async function POST(request: Request) {
       city: cityValidated,
       geocodePickupStatus,
       geocodeReturnStatus,
-      driverName: record.driver_name,
-      licensePlate: record.license_plate,
+      driverName: record.driverName || record.driver_name,
+      licensePlate: record.licensePlate || record.license_plate,
     });
 
-    return ok(
-      {
-        id: order.id,
-        orderNo: order.orderNo,
-        status: order.status,
-        type: orderType,
-        driverName: record.driver_name,
-        licensePlate: record.license_plate,
-      },
-      { traceId }
-    );
+    return { success: true, id: order.id, orderNo: order.orderNo, status: order.status, type: orderType };
   } catch (error) {
     const message = error instanceof Error ? error.message : "入单失败";
     log.error("插件入单异常", { traceId, error: message });
-    return fail(message, { status: 500, traceId });
+    return { success: false, orderNo: record.orderNo ?? record.order_number ?? "", reason: message };
+  }
+}
+
+export async function POST(request: Request) {
+  const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
+
+  // 轻量鉴权（支持两种格式：X-Ingest-Key 和 Authorization: Bearer）
+  const ingestKey =
+    request.headers.get("X-Ingest-Key") ??
+    request.headers.get("Authorization")?.replace(/^Bearer\s+/i, "") ??
+    "";
+
+  if (!ingestKey || ingestKey !== process.env.INGEST_API_KEY) {
+    return withCors(fail("无效的 Ingest Key", { status: 401, traceId }));
+  }
+
+  try {
+    const body = await request.json();
+    const records = Array.isArray(body) ? body as ExtensionRecord[] : [body as ExtensionRecord];
+
+    if (records.length === 0) {
+      return withCors(fail("请求体为空，未收到订单数据", { status: 400, traceId }));
+    }
+
+    const results: IngestResult[] = [];
+    for (const record of records) {
+      results.push(await ingestOne(record, traceId));
+    }
+
+    const successCount = results.filter((r) => r.success).length;
+    const failed = results.length - successCount;
+
+    return withCors(ok({
+      total: results.length,
+      success: successCount,
+      skipped: 0,
+      failed,
+      results,
+    }, { traceId }));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "入单失败";
+    log.error("插件入单请求异常", { traceId, error: message });
+    return withCors(fail(message, { status: 500, traceId }));
   }
 }
