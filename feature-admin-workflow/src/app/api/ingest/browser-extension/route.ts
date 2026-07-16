@@ -68,17 +68,47 @@ interface ExtensionRecord {
 
 type IngestResult =
   | { success: true; orderNo: string; id: string; status: string; type: string }
-  | { success: false; orderNo: string; reason: string };
+  | { success: false; orderNo: string; reason: string; skipped?: boolean };
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "OPTIONS, POST",
-  "Access-Control-Allow-Headers": "Content-Type, X-Ingest-Key, Authorization, X-Trace-Id",
-  "Access-Control-Max-Age": "86400",
-} as const;
+/** 单次请求最大记录数，防止无界批量耗尽数据库与地理编码配额 */
+const MAX_BATCH_RECORDS = 200;
 
-function withCors(response: Response) {
-  for (const [key, value] of Object.entries(corsHeaders)) {
+/** 请求体实际字节上限（1 MiB），以读取后的真实长度为准，不信任 Content-Length */
+const MAX_BODY_BYTES = 1024 * 1024;
+
+/** CORS 白名单：从 INGEST_ALLOWED_ORIGINS 读取（逗号分隔），未配置时拒绝所有跨域来源 */
+function getAllowedOrigins(): string[] {
+  return (process.env.INGEST_ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+/**
+ * 解析请求 Origin 与白名单的匹配结果：
+ * - 无 Origin 头（curl / 服务端调用）：非浏览器上下文，无需 CORS 头，放行
+ * - Origin 在白名单：返回该 Origin 用于回显
+ * - Origin 不在白名单：拒绝
+ */
+function resolveCorsOrigin(request: Request): { allowed: boolean; origin: string | null } {
+  const origin = request.headers.get("Origin");
+  if (!origin) return { allowed: true, origin: null };
+  return { allowed: getAllowedOrigins().includes(origin), origin };
+}
+
+function buildCorsHeaders(origin: string | null): Record<string, string> {
+  if (!origin) return {};
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "OPTIONS, POST",
+    "Access-Control-Allow-Headers": "Content-Type, X-Ingest-Key, Authorization, X-Trace-Id",
+    "Access-Control-Max-Age": "86400",
+    Vary: "Origin",
+  };
+}
+
+function withCors(response: Response, origin: string | null) {
+  for (const [key, value] of Object.entries(buildCorsHeaders(origin))) {
     response.headers.set(key, value);
   }
   return response;
@@ -86,10 +116,14 @@ function withCors(response: Response) {
 
 export async function OPTIONS(request: Request) {
   const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
+  const cors = resolveCorsOrigin(request);
+  if (!cors.allowed) {
+    return new Response(null, { status: 403, headers: { "X-Trace-Id": traceId } });
+  }
   return new Response(null, {
     status: 204,
     headers: {
-      ...corsHeaders,
+      ...buildCorsHeaders(cors.origin),
       "X-Trace-Id": traceId,
     },
   });
@@ -156,13 +190,13 @@ async function ingestOne(record: ExtensionRecord, traceId: string): Promise<Inge
       return { success: false, orderNo, reason: "缺少还车地址" };
     }
 
-    // ── 去重 ──
+    // ── 去重（数据库已存在 → 计入 skipped，不算失败）──
     const existing = await prisma.order.findUnique({
       where: { orderNo },
       select: { id: true, orderNo: true },
     });
     if (existing) {
-      return { success: false, orderNo, reason: `订单 ${orderNo} 已存在，跳过` };
+      return { success: false, orderNo, reason: `订单 ${orderNo} 已存在，跳过`, skipped: true };
     }
 
     // ── 门店查找 ──
@@ -283,6 +317,13 @@ async function ingestOne(record: ExtensionRecord, traceId: string): Promise<Inge
 export async function POST(request: Request) {
   const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
 
+  // ── CORS 白名单校验：Origin 存在但不在白名单 → 403 ──
+  const cors = resolveCorsOrigin(request);
+  if (!cors.allowed) {
+    log.warn("插件入单被拒绝：Origin 不在白名单", { traceId, origin: cors.origin });
+    return fail("来源不被允许", { status: 403, traceId });
+  }
+
   // 轻量鉴权（支持两种格式：X-Ingest-Key 和 Authorization: Bearer）
   const ingestKey =
     request.headers.get("X-Ingest-Key") ??
@@ -290,35 +331,64 @@ export async function POST(request: Request) {
     "";
 
   if (!ingestKey || ingestKey !== process.env.INGEST_API_KEY) {
-    return withCors(fail("无效的 Ingest Key", { status: 401, traceId }));
+    return withCors(fail("无效的 Ingest Key", { status: 401, traceId }), cors.origin);
   }
 
   try {
-    const body = await request.json();
+    // ── 请求体实际大小限制（读取后按真实字节数校验，不信任 Content-Length）──
+    const rawBody = await request.text();
+    const bodyBytes = new TextEncoder().encode(rawBody).byteLength;
+    if (bodyBytes > MAX_BODY_BYTES) {
+      log.warn("插件入单被拒绝：请求体超限", { traceId, bodyBytes, limit: MAX_BODY_BYTES });
+      return withCors(
+        fail(`请求体过大（${bodyBytes} 字节），上限 ${MAX_BODY_BYTES} 字节`, { status: 413, traceId }),
+        cors.origin
+      );
+    }
+
+    const body = JSON.parse(rawBody);
     const records = Array.isArray(body) ? body as ExtensionRecord[] : [body as ExtensionRecord];
 
     if (records.length === 0) {
-      return withCors(fail("请求体为空，未收到订单数据", { status: 400, traceId }));
+      return withCors(fail("请求体为空，未收到订单数据", { status: 400, traceId }), cors.origin);
     }
 
+    // ── 批次上限 ──
+    if (records.length > MAX_BATCH_RECORDS) {
+      log.warn("插件入单被拒绝：批次超限", { traceId, count: records.length, limit: MAX_BATCH_RECORDS });
+      return withCors(
+        fail(`单次最多 ${MAX_BATCH_RECORDS} 条订单，当前 ${records.length} 条，请分批提交`, { status: 413, traceId }),
+        cors.origin
+      );
+    }
+
+    // ── 批次内去重：同一订单号在本批出现多次时，后续记录计入 skipped ──
+    const seenInBatch = new Set<string>();
     const results: IngestResult[] = [];
     for (const record of records) {
+      const orderNo = record.orderNo ?? record.order_number;
+      if (orderNo && seenInBatch.has(orderNo)) {
+        results.push({ success: false, orderNo, reason: `订单 ${orderNo} 在本批次中重复，跳过`, skipped: true });
+        continue;
+      }
+      if (orderNo) seenInBatch.add(orderNo);
       results.push(await ingestOne(record, traceId));
     }
 
     const successCount = results.filter((r) => r.success).length;
-    const failed = results.length - successCount;
+    const skippedCount = results.filter((r) => !r.success && r.skipped).length;
+    const failed = results.length - successCount - skippedCount;
 
     return withCors(ok({
       total: results.length,
       success: successCount,
-      skipped: 0,
+      skipped: skippedCount,
       failed,
       results,
-    }, { traceId }));
+    }, { traceId }), cors.origin);
   } catch (error) {
     const message = error instanceof Error ? error.message : "入单失败";
     log.error("插件入单请求异常", { traceId, error: message });
-    return withCors(fail(message, { status: 500, traceId }));
+    return withCors(fail(message, { status: 500, traceId }), cors.origin);
   }
 }
