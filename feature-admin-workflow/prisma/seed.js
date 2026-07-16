@@ -5,30 +5,6 @@ const prisma = new PrismaClient();
 const SALT_ROUNDS = 10;
 
 async function main() {
-  // 清理旧的演示订单号（ORD-* / DEMO-*），确保数据库只保留 RC-* 真实口径
-  const oldOrders = await prisma.order.findMany({
-    where: {
-      orderNo: { startsWith: "ORD-" }
-    },
-    select: { id: true, orderNo: true }
-  });
-  for (const old of oldOrders) {
-    await prisma.operationLog.deleteMany({ where: { entityType: "ORDER", entityId: old.id } });
-    await prisma.assignment.deleteMany({ where: { orderId: old.id } });
-    await prisma.order.delete({ where: { id: old.id } });
-  }
-  const oldDemoOrders = await prisma.order.findMany({
-    where: {
-      orderNo: { startsWith: "DEMO-" }
-    },
-    select: { id: true }
-  });
-  for (const old of oldDemoOrders) {
-    await prisma.operationLog.deleteMany({ where: { entityType: "ORDER", entityId: old.id } });
-    await prisma.assignment.deleteMany({ where: { orderId: old.id } });
-    await prisma.order.delete({ where: { id: old.id } });
-  }
-
   const adminPasswordHash = await bcrypt.hash("admin123", SALT_ROUNDS);
 
   await prisma.user.upsert({

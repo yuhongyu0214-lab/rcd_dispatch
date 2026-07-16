@@ -20,6 +20,7 @@ export type CurrentUser = {
 
 export async function findUserForLogin(account: string) {
   const normalizedAccount = account.trim().toLowerCase();
+
   const where = normalizedAccount.includes("@")
     ? { email: normalizedAccount }
     : { phone: normalizedAccount };

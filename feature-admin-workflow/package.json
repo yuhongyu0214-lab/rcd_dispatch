@@ -9,8 +9,6 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
-    "demo:reset": "dotenv -e .env.local -- node scripts/reset-demo-data.js",
-    "demo:reset:apply": "dotenv -e .env.local -- node scripts/reset-demo-data.js --apply",
     "db:migrate": "dotenv -e .env.local -- prisma migrate dev --name data_model_core",
     "db:seed": "dotenv -e .env.local -- prisma db seed",
     "db:studio": "dotenv -e .env.local -- prisma studio"

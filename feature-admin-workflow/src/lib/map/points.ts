@@ -30,13 +30,6 @@ export type GetMapBoardParams = {
   objectTypes?: string[];
 };
 
-const visibleOrderStatuses: OrderStatus[] = [
-  OrderStatus.PENDING,
-  OrderStatus.RECOMMENDING,
-  OrderStatus.ASSIGNED,
-  OrderStatus.ACCEPTED,
-  OrderStatus.IN_PROGRESS
-];
 
 function hasCoordinate(lat: number | null, lng: number | null) {
   return (
@@ -132,7 +125,7 @@ export async function getMapBoardData(
   const [orders, drivers, vehicles, stores] = await Promise.all([
     prisma.order.findMany({
       where: {
-        status: { in: visibleOrderStatuses },
+        status: { in: VISIBLE_ORDER_STATUSES as unknown as OrderStatus[] },
         ...storeFilter
       },
       include: {
@@ -251,6 +244,7 @@ export async function getMapBoardData(
 
   // ---- 订单点位（所有订单进入列表，有坐标落图，缺坐标 FALLBACK 不落图）----
   const orderPoints: MapOrderPoint[] = [];
+  const allOrders = orders.map((order) => toOrderDisplayDTO(order));
 
   for (const order of orders) {
     const hasCoord = hasCoordinate(order.pickupLat, order.pickupLng);
@@ -373,6 +367,7 @@ export async function getMapBoardData(
   const mapCenter = computeDynamicCenter(vehiclePoints, driverPoints, orderPoints, storePoints);
 
   return {
+    allOrders,
     orders: orderPoints,
     drivers: driverPoints,
     vehicles: vehiclePoints,

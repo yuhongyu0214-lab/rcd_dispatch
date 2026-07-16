@@ -28,6 +28,10 @@ Thumbs.db
 .git-feature-data-model/
 **/.git
 **/.git/
+!.gitmodules
+!feature-data-model/.git
+!feature-docs-prd/.git
+!feature-repo-bootstrap/.git
 .git.worktree.bak
 
 # Local AI/tool settings
@@ -37,3 +41,9 @@ Thumbs.db
 # npm lockfiles are not used in this pnpm-locked repo
 package-lock.json
 .pnpm-store/
+
+# TypeScript build artifacts
+*.tsbuildinfo
+
+# Brainstorming artifacts
+.superpowers/
