@@ -122,6 +122,43 @@ describe("browser-extension ingest route", () => {
       expect(prisma.order.create).not.toHaveBeenCalled();
     });
 
+    it("stops reading a streaming body as soon as the limit is exceeded", async () => {
+      // 8 个 256 KiB 分片（共 2 MiB）：读到第 5 片（1.25 MiB）即超限，应取消而不是读完
+      const chunk = new TextEncoder().encode("a".repeat(256 * 1024));
+      const totalChunks = 8;
+      let chunksPulled = 0;
+      let cancelled = false;
+
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (chunksPulled >= totalChunks) {
+            controller.close();
+            return;
+          }
+          chunksPulled += 1;
+          controller.enqueue(chunk);
+        },
+        cancel() {
+          cancelled = true;
+        }
+      });
+
+      const response = await POST(
+        new Request("http://localhost/api/ingest/browser-extension", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Ingest-Key": INGEST_KEY },
+          body: stream,
+          // @ts-expect-error Node fetch 需要 duplex 才能使用流式 body
+          duplex: "half"
+        })
+      );
+
+      expect(response.status).toBe(413);
+      expect(cancelled).toBe(true);
+      expect(chunksPulled).toBeLessThan(totalChunks);
+      expect(prisma.order.create).not.toHaveBeenCalled();
+    });
+
     it("rejects an empty batch with 400", async () => {
       const response = await POST(buildRequest([]));
       const body = await response.json();
@@ -171,6 +208,18 @@ describe("browser-extension ingest route", () => {
       expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
     });
 
+    it("rejects requests carrying an Origin when no whitelist is configured", async () => {
+      delete process.env.INGEST_ALLOWED_ORIGINS;
+
+      const response = await POST(
+        buildRequest([buildRecord("RC-CORS-4")], { Origin: ALLOWED_ORIGIN })
+      );
+
+      expect(response.status).toBe(403);
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
+      expect(prisma.order.create).not.toHaveBeenCalled();
+    });
+
     it("answers OPTIONS preflight from a whitelisted origin with 204", async () => {
       const response = await OPTIONS(
         new Request("http://localhost/api/ingest/browser-extension", {
@@ -215,6 +264,25 @@ describe("browser-extension ingest route", () => {
       expect(body.data.failed).toBe(0);
       expect(prisma.order.create).toHaveBeenCalledTimes(1);
     });
+
+    it("counts a concurrent P2002 unique violation as skipped, not failed", async () => {
+      // findUnique 未命中，但 create 时另一并发请求已写入同一订单号
+      vi.mocked(prisma.order.create).mockRejectedValue(
+        Object.assign(new Error("Unique constraint failed on the fields: (`orderNo`)"), {
+          code: "P2002"
+        })
+      );
+
+      const response = await POST(buildRequest([buildRecord("RC-RACE-1")]));
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.data.success).toBe(0);
+      expect(body.data.skipped).toBe(1);
+      expect(body.data.failed).toBe(0);
+      expect(body.data.results[0].skipped).toBe(true);
+      expect(body.data.results[0].reason).toContain("并发写入");
+    });
   });
 
   describe("mixed batch", () => {
@@ -251,13 +319,50 @@ describe("browser-extension ingest route", () => {
   });
 
   describe("auth", () => {
-    it("rejects a missing or wrong ingest key with 401", async () => {
+    it("rejects a wrong ingest key with 401", async () => {
       const response = await POST(
         buildRequest([buildRecord("RC-AUTH-1")], { "X-Ingest-Key": "wrong-key" })
       );
 
       expect(response.status).toBe(401);
       expect(prisma.order.create).not.toHaveBeenCalled();
+    });
+
+    it("rejects a request with no ingest key at all with 401", async () => {
+      const response = await POST(
+        new Request("http://localhost/api/ingest/browser-extension", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify([buildRecord("RC-AUTH-2")])
+        })
+      );
+
+      expect(response.status).toBe(401);
+      expect(prisma.order.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("compatibility and tracing", () => {
+    it("accepts a single object body (non-array) for backward compatibility", async () => {
+      const response = await POST(buildRequest(buildRecord("RC-SINGLE-1")));
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.data.total).toBe(1);
+      expect(body.data.success).toBe(1);
+      expect(body.data.results[0].orderNo).toBe("RC-SINGLE-1");
+    });
+
+    it("uses the incoming X-Trace-Id consistently in body and response header", async () => {
+      const traceId = "trace-consistency-check-001";
+      const response = await POST(
+        buildRequest([buildRecord("RC-TRACE-1")], { "X-Trace-Id": traceId })
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.traceId).toBe(traceId);
+      expect(response.headers.get("X-Trace-Id")).toBe(traceId);
     });
   });
 });

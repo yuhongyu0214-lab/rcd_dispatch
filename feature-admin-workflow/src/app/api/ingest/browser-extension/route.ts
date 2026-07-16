@@ -73,8 +73,51 @@ type IngestResult =
 /** 单次请求最大记录数，防止无界批量耗尽数据库与地理编码配额 */
 const MAX_BATCH_RECORDS = 200;
 
-/** 请求体实际字节上限（1 MiB），以读取后的真实长度为准，不信任 Content-Length */
+/** 请求体实际字节上限（1 MiB），流式累计校验，不信任 Content-Length */
 const MAX_BODY_BYTES = 1024 * 1024;
+
+/**
+ * 流式读取请求体并累计字节数：一旦超过 maxBytes 立即取消读取并返回，
+ * 避免把超大请求整体读进内存后再判断。
+ */
+async function readBodyWithLimit(
+  request: Request,
+  maxBytes: number
+): Promise<{ ok: true; text: string } | { ok: false; bytesRead: number }> {
+  const body = request.body;
+  if (!body) return { ok: true, text: "" };
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let bytesRead = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytesRead += value.byteLength;
+      if (bytesRead > maxBytes) {
+        await reader.cancel();
+        return { ok: false, bytesRead };
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const merged = new Uint8Array(bytesRead);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { ok: true, text: new TextDecoder().decode(merged) };
+}
+
+/** Prisma P2002 唯一约束冲突：findUnique 与 create 之间的并发窗口写入同一订单号 */
+function isUniqueConstraintError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2002";
+}
 
 /** CORS 白名单：从 INGEST_ALLOWED_ORIGINS 读取（逗号分隔），未配置时拒绝所有跨域来源 */
 function getAllowedOrigins(): string[] {
@@ -270,28 +313,37 @@ async function ingestOne(record: ExtensionRecord, traceId: string): Promise<Inge
       ? "FROM_SOURCE"
       : (returnGeo?.geocodeStatus ?? "FAILED");
 
-    // ── 写入 RDS ──
-    const order = await prisma.order.create({
-      data: {
-        orderNo,
-        type: orderType,
-        status: orderStatus,
-        storeId: store.id,
-        channel: source,
-        driverNameSnapshot: record.driverName || record.driver_name || record.delivery_driver || null,
-        vehicleTypeSnapshot: record.vehicleType || record.car_model || null,
-        licensePlateSnapshot: record.licensePlate || record.license_plate || null,
-        pickupAddress,
-        pickupLat,
-        pickupLng,
-        returnAddress,
-        returnLat,
-        returnLng,
-        scheduledAt,
-        geocodePickupStatus,
-        geocodeReturnStatus,
-      },
-    });
+    // ── 写入 RDS（并发下同一订单号可能穿过 findUnique 检查，P2002 视为重复 → skipped）──
+    let order;
+    try {
+      order = await prisma.order.create({
+        data: {
+          orderNo,
+          type: orderType,
+          status: orderStatus,
+          storeId: store.id,
+          channel: source,
+          driverNameSnapshot: record.driverName || record.driver_name || record.delivery_driver || null,
+          vehicleTypeSnapshot: record.vehicleType || record.car_model || null,
+          licensePlateSnapshot: record.licensePlate || record.license_plate || null,
+          pickupAddress,
+          pickupLat,
+          pickupLng,
+          returnAddress,
+          returnLat,
+          returnLng,
+          scheduledAt,
+          geocodePickupStatus,
+          geocodeReturnStatus,
+        },
+      });
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        log.warn("插件入单并发重复", { traceId, orderNo });
+        return { success: false, orderNo, reason: `订单 ${orderNo} 已存在（并发写入），跳过`, skipped: true };
+      }
+      throw error;
+    }
 
     log.info("插件入单成功", {
       traceId,
@@ -335,18 +387,17 @@ export async function POST(request: Request) {
   }
 
   try {
-    // ── 请求体实际大小限制（读取后按真实字节数校验，不信任 Content-Length）──
-    const rawBody = await request.text();
-    const bodyBytes = new TextEncoder().encode(rawBody).byteLength;
-    if (bodyBytes > MAX_BODY_BYTES) {
-      log.warn("插件入单被拒绝：请求体超限", { traceId, bodyBytes, limit: MAX_BODY_BYTES });
+    // ── 请求体流式大小限制：超过上限立即取消读取，不整体载入内存 ──
+    const bodyRead = await readBodyWithLimit(request, MAX_BODY_BYTES);
+    if (!bodyRead.ok) {
+      log.warn("插件入单被拒绝：请求体超限", { traceId, bytesRead: bodyRead.bytesRead, limit: MAX_BODY_BYTES });
       return withCors(
-        fail(`请求体过大（${bodyBytes} 字节），上限 ${MAX_BODY_BYTES} 字节`, { status: 413, traceId }),
+        fail(`请求体过大（已读取 ${bodyRead.bytesRead} 字节即超限），上限 ${MAX_BODY_BYTES} 字节`, { status: 413, traceId }),
         cors.origin
       );
     }
 
-    const body = JSON.parse(rawBody);
+    const body = JSON.parse(bodyRead.text);
     const records = Array.isArray(body) ? body as ExtensionRecord[] : [body as ExtensionRecord];
 
     if (records.length === 0) {
