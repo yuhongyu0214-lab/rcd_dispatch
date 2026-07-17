@@ -10,11 +10,21 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## 文档优先级（V2 生效后）
 
-1. `docs/versions/v2.0/` 下的 V2 文档（PRD、数据架构、项目规则、API 契约、领域词汇、兼容矩阵）。
-2. 本文件中不与 V2 冲突的工程铁律（下方标注）。
-3. V1 文档与本文件的 V1 阶段描述，仅用于维护现有 V1 代码和历史追溯。
+文档权威**按领域拆分**（唯一口径见 `docs/versions/README.md`，此处为同一内容）：
 
-冲突裁决：数据安全与不可逆操作 > V2 规则 > 本文件工程铁律 > 已冻结契约 > V1 历史规则 > 原型与临时说明。
+```text
+工程纪律                → 本文件（工程铁律部分）
+产品行为                → docs/versions/v2.0/prd-v2.md
+数据模型                → docs/versions/v2.0/data-architecture-v2.md
+术语与枚举              → docs/versions/v2.0/domain-glossary-v2.md
+HTTP 契约               → docs/versions/v2.0/api-contract-v2.md
+迁移与兼容              → docs/versions/v2.0/v1-v2-compatibility-matrix.md
+代码一致性与设计系统    → docs/versions/v2.0/project-rules-v2.md
+```
+
+- 数据安全与不可逆操作原则高于以上一切。
+- V1 文档与本文件的 V1 阶段描述仅用于维护现有 V1 代码和历史追溯；原型与临时说明不得反向定义规则。
+- 同一事项在两份文档中冲突、且无法按领域判断归属时：暂停实现并升级裁决，不得自行取舍。
 
 ## V2 开发流程（当前主线）
 

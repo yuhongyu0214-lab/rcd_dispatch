@@ -113,9 +113,15 @@ slackMinutes = promisedPickupAt - projectedPickupAt
 
 ## 6. 自动滚动调度
 
-### 6.1 候选范围
+### 6.1 候选范围（冻结）
 
-- 只考虑已上班、定位有效、未处于不可用状态的司机。
+```text
+候选司机 = onShift = true
+        && availability = AVAILABLE
+        && locationFreshness = FRESH
+```
+
+- 三条件缺一不可：当班（班次）、可用（`DriverAvailability`，调度员设置的人为停派开关）、定位有效（位置新鲜度）。
 - 车辆信息可展示，但不进入过滤和评分。
 - 已有 A/B/C 的锁定状态和执行状态必须被尊重。
 
@@ -157,6 +163,7 @@ slackMinutes = promisedPickupAt - projectedPickupAt
 - 调度员有手动分配和改派权限。
 - 手动分配后进入 `MANUAL_LOCKED`，算法不得覆盖，直到解除或司机出发。
 - 司机下班时，所有尚未出发的自动或手动锁定工单释放并重新调度。
+- 调度员可将司机设为不可用（`availability = UNAVAILABLE`）：未出发工单全部释放并重排；执行中（已出发/已到达）工单继续执行到完成；恢复可用需调度员再次设置。
 
 ### 7.3 司机权限
 
@@ -229,14 +236,14 @@ UNASSIGNED / PLANNED / EN_ROUTE → CANCELLED
 |---|---|---|---|---|---|
 | `UNASSIGNED` | 自动分配 | `PLANNED` | 调度引擎 | 建立 Assignment、写入槽位与计划时间、递增 `planVersion`、日志 | — |
 | `UNASSIGNED` | 手动分配 | `PLANNED` | 调度员 | 同上，且锁定 = `MANUAL_LOCKED`，记录原因 | — |
-| `PLANNED` | 撤回/释放 | `UNASSIGNED` | 调度员、调度引擎（下班释放） | 槽位 = `NONE`、锁定 = `NONE`、触发重排、日志 | — |
+| `PLANNED` | 撤回/释放 | `UNASSIGNED` | 调度员、调度引擎（下班或设为不可用时释放） | 槽位 = `NONE`、锁定 = `NONE`、触发重排、日志 | — |
 | `PLANNED` | 改派 | `PLANNED`（新司机） | 调度员 | 旧 Assignment 结链、新 Assignment 建立、记录原因与前后值、触发重排 | — |
 | `PLANNED` | 出发 | `EN_ROUTE` | 司机（仅本人工单） | 锁定 = `AUTO_FROZEN`、记录 `departedAt`、开启导航、刷新 ETA | 400 |
 | `EN_ROUTE` | 改派 | `PLANNED`（新司机） | 调度员 | 必须记录原因；原司机任务释放；触发重排 | — |
 | `EN_ROUTE` | 到达 | `IN_SERVICE` | 司机（仅本人工单） | 记录 `arrivedAt`、实际计时开始、此后任何角色改派均被服务端拒绝 | 400 |
 | `IN_SERVICE` | 改派 | — | 任何角色 | 禁止 | 400，含 `currentStatus/targetStatus` |
 | `IN_SERVICE` | 完成 | `COMPLETED` | 司机（仅本人工单） | 记录 `completedAt`、实际计时结束、以手机实时位置为下一工单 ETA 起点、触发重排 | 400 |
-| `UNASSIGNED / PLANNED / EN_ROUTE` | 取消 | `CANCELLED` | 来源系统（经 Adapter）、调度员 | 释放司机与槽位、触发重排、日志 | — |
+| `UNASSIGNED / PLANNED / EN_ROUTE` | 取消 | `CANCELLED` | 来源系统（经 Adapter）、调度员 | 释放司机与槽位、递增受影响司机 `planVersion`、`OPEN` 预警转 `RESOLVED`、触发重排、日志（端点与幂等语义见 API 契约 V2 §2.1） | — |
 | `IN_SERVICE / COMPLETED` | 取消 | — | 任何角色 | 禁止 | 400，含 `currentStatus/targetStatus` |
 | `COMPLETED / CANCELLED` | 任何流转 | — | 任何角色 | 终态，禁止流转 | 400 |
 
@@ -297,3 +304,4 @@ V1 的状态暂不删除，在数据迁移阶段通过兼容层映射。
 |---|---|---|
 | V2.0 | 2026-07-13 | 冻结实时滚动调度、A/B/C、模块、预警、权限、定位与外部 API 边界 |
 | V2.0-r1 | 2026-07-17 | Gate 0 审查修订：新增 5.1 可行性判定（slack 模型 + `UNKNOWN`）、10.1 状态流转矩阵；槽位枚举改 `NONE/A/B/C`；`RESOLVED` 移出可行性并归入 `DispatchAlert` |
+| V2.0-r2 | 2026-07-17 | Gate 0 二轮返修：6.1 冻结候选司机三条件公式（当班 + 可用 + 定位有效）；7.2 补司机不可用行为；10.1 取消行补副作用与契约引用 |

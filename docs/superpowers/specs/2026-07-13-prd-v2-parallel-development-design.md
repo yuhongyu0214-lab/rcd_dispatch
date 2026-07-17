@@ -95,6 +95,8 @@ Gate 2 本身不是并行阶段。只有 Gate 2 已合入 `develop` 且验证通
 允许范围：
 
 - `AGENTS.md`
+- `docs/versions/README.md`（文档注册表与权威顺序入口）
+- `docs/versions/v1/README.md`（V1 历史索引的链接修复）
 - `docs/versions/v2.0/**`
 - `docs/superpowers/specs/**`
 

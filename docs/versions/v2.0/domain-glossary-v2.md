@@ -2,7 +2,7 @@
 
 > 词汇版本：`RCD-GLOSSARY-V2.0-20260717`
 > 状态：Gate 0 文档级冻结候选
-> 规则：本文件是 V2 术语的唯一权威定义；其他文档与本表冲突时，先修订对齐再冻结，不允许并存两种定义
+> 权威范围：术语与枚举定义（见《文档版本总入口》按领域权威顺序）；其他文档与本表冲突时，先修订对齐再冻结，不允许并存两种定义
 
 ## 1. 业务核心
 
@@ -51,7 +51,11 @@
 | `CanonicalOrder` | 内部唯一标准订单格式；外部字段进入引擎前的必经映射目标 |
 | `OrderSourceAdapter` | 来源翻译器：`validate → normalize → map → CanonicalOrder`；外部字段和外部枚举终止于此层 |
 | `OrderSourceEvent` | 一次来源投递的持久记录（来源、外部 ID、版本、结果、原始 JSON 摘要） |
-| 幂等键 | `(sourceSystem, externalOrderId, sourceVersion)`；orderNo 不得单独作为幂等键 |
+| `IngestEnvelope` | 来源投递的输入信封：`sourceSystem` + 原始记录数组；结构冻结见 API 契约 V2 §2.3 |
+| `sourceSystem` | 冻结枚举：`HALUO / PLUGIN / API / V1_IMPORT`；`V1_IMPORT` 仅用于迁移回填，不接受在线投递。外部渠道名在 Adapter 内规范化为本枚举 |
+| Order 唯一键 | `(sourceSystem, externalOrderId)`；同一来源的一个外部订单在内部只有一条订单快照 |
+| Event 唯一键（幂等键） | `(sourceSystem, externalOrderId, sourceVersion)`；orderNo 不得单独作为幂等键 |
+| 版本覆盖规则 | 同版本重放返回已有结果（`replayed`）；新版本更新快照；旧版本晚到不覆盖快照，计入 `skipped`（`STALE_VERSION`），仅记录来源事件 |
 | `businessType` | 锁定沿用 V1 值：`STORE_PICKUP / STORE_RETURN / DOOR_DELIVERY / DOOR_PICKUP` |
 | `sourceStatusRaw` | 外部原始状态字符串；只存证，不直接写入内部执行状态 |
 | `receivedAt` | 服务端接收时间；服务端生成，UTC 存储，不接受外部传入 |
@@ -60,9 +64,11 @@
 
 | 术语 | 定义 |
 |---|---|
-| 当班 / 班次 | `DriverShift`；司机上班到下班的区间。是否参与调度以班次 + 位置有效性判定，不只靠位置 |
-| 位置新鲜度 | `FRESH`（capturedAt ≤ 120 秒）/ `STALE`（> 120 秒，排除调度并明确标注）/ `NONE`（无样本） |
-| 无效样本 | 精度 > 100 米，或客户端时间超前服务端 > 30 秒；拒收不入库 |
+| 当班 / 班次 | `DriverShift`；司机上班到下班的区间。是否参与调度以班次 + 可用性 + 位置有效性判定，不只靠位置 |
+| 可用性 | `DriverAvailability = AVAILABLE / UNAVAILABLE`；调度员设置的人为停派开关，独立于班次。`UNAVAILABLE` 不参与任何候选计算 |
+| 候选司机 | `onShift = true` 且 `availability = AVAILABLE` 且 `locationFreshness = FRESH`，三条件缺一不可 |
+| 位置新鲜度 | `FRESH`（capturedAt ≤ 120 秒）/ `STALE`（已接收样本随时间老化 > 120 秒，排除调度并明确标注）/ `NONE`（无样本） |
+| 无效样本 | 精度 > 100 米、客户端时间超前服务端 > 30 秒，或接收时 capturedAt 已早于服务端 120 秒以上；三者均拒收不入库 |
 | 位置采样 | 落库条件：距上次满 120 秒、移动超 200 米、或出发/到达/完成/上下班事件，任一满足即保存；默认保留 90 天 |
 
 数值口径的唯一权威出处：数据架构 V2 §7.1 / §7.2。
@@ -71,7 +77,7 @@
 
 | 术语 | 定义 |
 |---|---|
-| `planVersion` | 司机计划的乐观锁版本号；每次重排递增；写操作携带 `expectedPlanVersion`，不匹配返回 409 |
+| `planVersion` | 司机计划聚合的乐观锁版本号：每名司机一个计数器，归属司机计划聚合根，不属于单个 Assignment。该司机计划的任何变化（重排/分配/改派/撤回/取消释放/解锁）均递增一次。单司机写操作携带 `expectedPlanVersion`；改派同时携带 `expectedFromPlanVersion` 与 `expectedToPlanVersion`；不匹配返回 409 |
 | 调度短锁 | Redis `dispatch:lock:{driverId}` / `order:lock:{orderId}`，5–15 秒，防并发重排 |
 | 局部重排 | 只重排受事件影响的司机 A/B/C，不做全天全局最优 |
 | 基线校验 | 每 10 分钟对全部计划做一次校验性重算 |
@@ -81,3 +87,4 @@
 | 版本 | 日期 | 内容 |
 |---|---|---|
 | V2.0 | 2026-07-17 | Gate 0 首次冻结 |
+| V2.0-r1 | 2026-07-17 | Gate 0 二轮返修：`planVersion` 归属司机计划聚合；新增 `DriverAvailability` 与候选司机三条件；新增 `IngestEnvelope`、`sourceSystem` 枚举、Order/Event 唯一键与版本覆盖规则；无效样本补“接收即过期”情形 |
