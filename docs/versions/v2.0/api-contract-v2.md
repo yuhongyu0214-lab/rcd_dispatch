@@ -10,7 +10,7 @@
 ### 1.1 路径与版本
 
 - V2 全部新接口位于 `/api/v2/**`，与 V1 路径（`/api/orders` 等）物理隔离。
-- V1 接口在兼容窗口内保持可用，不因 V2 上线而破坏。
+- V1 **读**接口在兼容窗口内保持可用（经兼容层单向读 V2 事实）；V1 **写**接口在 V2 状态机切换开关开启后停用（410）。两个时点的冻结定义见兼容矩阵 §7：切换开关开启 ≠ 兼容窗口关闭。
 - 契约变更只允许向后兼容扩展；删除字段或改变语义必须升级 major 版本（`/api/v3/**`）。
 
 ### 1.2 统一响应
@@ -56,15 +56,31 @@
 
 - ETA 不可用不是 503：调度接口正常返回，DTO 内 `etaAvailable: false` 并附 `etaUnavailableReason`；禁止假 ETA。
 
-### 1.6 幂等（冻结）
+### 1.6 幂等与版本携带（冻结）
+
+**命令分类与 `planVersion` 携带规则**：
+
+```text
+计划编辑命令：分配 / 改派 / 撤回 / 解锁
+→ 客户端必须携带 expectedPlanVersion
+  （改派为 expectedFromPlanVersion + expectedToPlanVersion 双版本）
+→ 不匹配返回 409 PLAN_VERSION_CONFLICT
+
+业务事实或控制命令：取消 / 可用性设置 / 上下班 / 出发 / 到达 / 完成 /
+                    订单资料修改（PATCH /api/v2/orders/{orderId}）
+→ 不要求客户端携带任何版本
+→ 服务端对受影响订单和司机取短锁，在事务内读取、校验并递增
+  受影响司机的 planVersion
+```
 
 | 场景 | 幂等键 / 策略 |
 |---|---|
 | 订单接入 | Event 唯一键 `(sourceSystem, externalOrderId, sourceVersion)`；同版本重复到达返回已有处理结果（`replayed: true`）；新版本更新快照并生成来源事件；旧版本晚到不覆盖快照，计入 `skipped`（reason `STALE_VERSION`），仅记录来源事件（见数据架构 §3.3） |
 | 司机执行事件（出发/到达/完成） | 状态机幂等：重复提交已生效的同一流转，返回 200 且 `data.replayed = true`；提交矩阵外流转返回 400 `ILLEGAL_TRANSITION` |
-| 调度写操作（分配/撤回/解锁） | 请求携带 `expectedPlanVersion`（该工单所属/目标司机的计划版本）；不匹配返回 409 和 `currentPlanVersion`，客户端刷新后重试 |
+| 计划编辑命令（分配/撤回/解锁） | 携带 `expectedPlanVersion`（该工单所属/目标司机的计划版本）；不匹配返回 409 和 `currentPlanVersion`，客户端刷新后重试 |
 | 改派 | 同时改变两名司机的计划，携带 `expectedFromPlanVersion`（原司机）与 `expectedToPlanVersion`（目标司机）；任一不匹配返回 409 和两个当前版本；两版本在同一事务中校验并各自递增 |
-| 订单取消 | 状态机幂等：订单已是 `CANCELLED` 时重复取消返回 200 且 `data.replayed = true`；不要求 `expectedPlanVersion`（取消是订单命令而非计划编辑，服务端以事务 + 短锁保证一致） |
+| 订单取消 | 状态机幂等：订单已是 `CANCELLED` 时重复取消返回 200 且 `data.replayed = true` |
+| 可用性设置 | 幂等：重复设置为当前相同值返回 200 且 `data.replayed = true`，无任何副作用（不重复释放工单、不触发重排） |
 | 位置上报 | 按 `(driverId, capturedAt)` 去重，重复样本静默忽略并计入 `skipped` |
 
 `planVersion` 归属司机计划聚合（每名司机一个计数器），不属于单个 Assignment；定义见词汇表 §6 与数据架构 §6。
@@ -75,7 +91,7 @@
 |---|---|---|
 | `dispatcher` | 会话登录（沿用现有 auth，角色 admin） | 调度员 Web |
 | `driver` | 会话登录（绑定 driverId） | 司机 H5；只能操作自己的资源 |
-| `ingest` | `X-Ingest-Key` 或 `Authorization: Bearer`，Origin 白名单 | 订单来源（插件/外部 API） |
+| `ingest` | `X-Ingest-Key` 或 `Authorization: Bearer`，Origin 白名单；**每个凭证绑定唯一 `sourceSystem`**，投递的 `IngestEnvelope.sourceSystem` 与凭证绑定不一致返回 403 `FORBIDDEN`（防止来源冒充写入他源唯一键空间） | 订单来源（插件/外部 API） |
 | `system` | 服务端内部调用，不暴露公网 | 调度引擎、定时校验 |
 
 ## 2. 接口清单
@@ -90,7 +106,7 @@
 | PATCH | `/api/v2/orders/{orderId}` | 修改 `promisedPickupAt` / `pickupAddress` / `deliveryAddress`；`reason` 必填；立即重算 |
 | POST | `/api/v2/orders/{orderId}/cancel` | 取消订单 `{ reason }`；合法前置状态 `UNASSIGNED / PLANNED / EN_ROUTE`；副作用见下方“取消语义” |
 | GET | `/api/v2/drivers` | 司机列表；含班次状态、可用性、位置新鲜度、A/B/C 摘要 |
-| PATCH | `/api/v2/drivers/{driverId}/availability` | 设置 `{ availability: AVAILABLE 或 UNAVAILABLE, reason }`；设为 `UNAVAILABLE` 时未出发工单全部释放并触发重排，执行中（`EN_ROUTE`/`IN_SERVICE`）工单继续执行到完成 |
+| PATCH | `/api/v2/drivers/{driverId}/availability` | 设置 `{ availability: AVAILABLE 或 UNAVAILABLE, reason }`；设为 `UNAVAILABLE` 时未出发工单全部释放并触发重排，执行中（`EN_ROUTE`/`IN_SERVICE`）工单继续执行到完成；重复设置相同值返回 200 且 `data.replayed = true`，无副作用（§1.6） |
 | GET | `/api/v2/drivers/{driverId}/plan` | 该司机 A/B/C 时间轴（含 `planVersion`、衔接 ETA、模块时长、迟到风险） |
 | POST | `/api/v2/assignments` | 手动分配 `{ orderId, driverId, reason, expectedPlanVersion }` → `MANUAL_LOCKED`；`expectedPlanVersion` 为目标司机计划版本 |
 | POST | `/api/v2/assignments/{assignmentId}/reassign` | 改派 `{ toDriverId, reason, expectedFromPlanVersion, expectedToPlanVersion }`；`toDriverId` 等于当前司机返回 400；`IN_SERVICE` 服务端拒绝 |
@@ -138,7 +154,8 @@ IngestEnvelope:
   sourceSystem: HALUO | PLUGIN | API      // V1_IMPORT 仅迁移回填，在线投递被拒（400）
   records: IngestRecord[]                  // 1–200 条
 
-IngestRecord（原始来源记录，字段语义与 CanonicalOrder §3 对应）:
+IngestRecord（规范化接入 DTO：字段为 Canonical 命名，由来源侧或 Adapter 完成
+             规范化，不是外部原文透传；字段语义与 CanonicalOrder §3 对应）:
   必填: externalOrderId, sourceVersion, sourceStatusRaw,
         orderNo, businessType, promisedPickupAt,
         pickupAddress, deliveryAddress, storeCode
@@ -147,10 +164,13 @@ IngestRecord（原始来源记录，字段语义与 CanonicalOrder §3 对应）
         storeName, city, district, remark, cancelledAt
 ```
 
-- `receivedAt` 由服务端生成，输入中出现即忽略；`sourceVersion` 必须可按字典序比较新旧（数据架构 §3.3）。
+- `receivedAt` 由服务端生成，输入中出现即忽略；`sourceVersion` 必须符合数据架构 §3.3 冻结格式（UTC `Z` 固定毫秒精度 ISO 8601 或零填充定长序号）。
+- 凭证与来源绑定：`sourceSystem` 必须等于当前 ingest 凭证绑定的来源，否则整批 403 `FORBIDDEN`（§1.7）。
 - 唯一键与版本覆盖规则按数据架构 §3.3 执行：同版本 → 返回已有处理结果（`replayed`）并计入 `skipped`；新版本 → 更新快照；旧版本晚到 → `skipped`（reason `STALE_VERSION`），不覆盖快照。
-- **来源取消**：新版本记录中 `sourceStatusRaw` 映射为“已取消”或携带 `cancelledAt` 时，Adapter 生成内部取消命令，按 §2.1 取消语义与 PRD 10.1 矩阵执行；订单已处于 `IN_SERVICE / COMPLETED` 时不改变内部执行状态，只记录来源事件并建立人工跟进日志。
+- **来源取消**：新版本记录中 `sourceStatusRaw` 映射为“已取消”或携带 `cancelledAt` 时，Adapter 生成内部取消命令，按 §2.1 取消语义与 PRD 10.1 矩阵执行。
+- **来源取消遇终态/不可取消状态（冻结）**：订单已处于 `IN_SERVICE / COMPLETED` 时——来源事件照常接收并记录（来源事实入库不被拒绝）；内部取消命令**不执行**，订单执行状态保持不变；该记录计入 `success`，reason `FOLLOW_UP_REQUIRED`；**不返回整批 400**；同时写入人工跟进操作日志。矩阵的 400 只约束内部状态流转命令，不约束来源事实入库。
 - 外部原始状态仅写入 `sourceStatusRaw` 与来源事件，不得直接映射为内部执行状态之外的写入。
+- **`sourceStatusRaw` 存储边界（冻结）**：`sourceStatusRaw` 可经过 Adapter 流转，但**仅持久化到 `OrderSourceEvent`**；`Order` 快照和任何调度 DTO（§3）不保存、不暴露该字段。
 - 重复（库内已存在同幂等键、批内重复、旧版本晚到）计入 `skipped`，不计入 `failed`。
 
 ### 2.4 系统（system）
@@ -248,3 +268,4 @@ lat, lng, accuracyMeters, capturedAt
 |---|---|---|
 | V2.0 | 2026-07-17 | Gate 0 首次冻结：路径、DTO、角色权限、状态流转引用、幂等、planVersion、错误码、traceId、时间格式与分页 |
 | V2.0-r1 | 2026-07-17 | Gate 0 二轮返修：`planVersion` 归属司机计划聚合，改派改为双版本（`expectedFromPlanVersion/expectedToPlanVersion`）；新增订单取消端点与取消语义；冻结 `IngestEnvelope` 与版本覆盖规则；新增 `DriverAvailability` 字段与设置端点；health 拆分匿名存活/内部 readiness；413 details 改 `observedBytes`；位置拒收补 `EXPIRED_AT_RECEIPT` |
+| V2.0-r2 | 2026-07-17 | Gate 0 三轮返修：§1.6 冻结命令两分类（计划编辑命令带 `expected*`，业务事实/控制命令服务端事务内递增）；§2.3 冻结来源取消遇终态的返回语义（`success` + `FOLLOW_UP_REQUIRED`，不整批 400）与 `sourceStatusRaw` 存储边界（仅 `OrderSourceEvent`）；§1.1 区分 V1 读/写接口存续时点；§1.7 ingest 凭证绑定唯一 `sourceSystem`；可用性设置幂等 `replayed` |

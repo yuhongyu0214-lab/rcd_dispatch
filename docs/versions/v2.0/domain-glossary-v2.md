@@ -51,13 +51,13 @@
 | `CanonicalOrder` | 内部唯一标准订单格式；外部字段进入引擎前的必经映射目标 |
 | `OrderSourceAdapter` | 来源翻译器：`validate → normalize → map → CanonicalOrder`；外部字段和外部枚举终止于此层 |
 | `OrderSourceEvent` | 一次来源投递的持久记录（来源、外部 ID、版本、结果、原始 JSON 摘要） |
-| `IngestEnvelope` | 来源投递的输入信封：`sourceSystem` + 原始记录数组；结构冻结见 API 契约 V2 §2.3 |
+| `IngestEnvelope` | 来源投递的输入信封：`sourceSystem` + 规范化接入记录（`IngestRecord`）数组；结构冻结见 API 契约 V2 §2.3 |
 | `sourceSystem` | 冻结枚举：`HALUO / PLUGIN / API / V1_IMPORT`；`V1_IMPORT` 仅用于迁移回填，不接受在线投递。外部渠道名在 Adapter 内规范化为本枚举 |
 | Order 唯一键 | `(sourceSystem, externalOrderId)`；同一来源的一个外部订单在内部只有一条订单快照 |
 | Event 唯一键（幂等键） | `(sourceSystem, externalOrderId, sourceVersion)`；orderNo 不得单独作为幂等键 |
 | 版本覆盖规则 | 同版本重放返回已有结果（`replayed`）；新版本更新快照；旧版本晚到不覆盖快照，计入 `skipped`（`STALE_VERSION`），仅记录来源事件 |
 | `businessType` | 锁定沿用 V1 值：`STORE_PICKUP / STORE_RETURN / DOOR_DELIVERY / DOOR_PICKUP` |
-| `sourceStatusRaw` | 外部原始状态字符串；只存证，不直接写入内部执行状态 |
+| `sourceStatusRaw` | 外部原始状态字符串；可经过 Adapter，但仅持久化到 `OrderSourceEvent` 存证——`Order` 快照与调度 DTO 不保存、不暴露；不直接写入内部执行状态 |
 | `receivedAt` | 服务端接收时间；服务端生成，UTC 存储，不接受外部传入 |
 
 ## 5. 位置与班次
@@ -77,7 +77,7 @@
 
 | 术语 | 定义 |
 |---|---|
-| `planVersion` | 司机计划聚合的乐观锁版本号：每名司机一个计数器，归属司机计划聚合根，不属于单个 Assignment。该司机计划的任何变化（重排/分配/改派/撤回/取消释放/解锁）均递增一次。单司机写操作携带 `expectedPlanVersion`；改派同时携带 `expectedFromPlanVersion` 与 `expectedToPlanVersion`；不匹配返回 409 |
+| `planVersion` | 司机计划聚合的乐观锁版本号：每名司机一个计数器，归属司机计划聚合根，不属于单个 Assignment。该司机计划的任何变化（重排/分配/改派/撤回/取消释放/解锁/班次或可用性引起的释放）均递增一次。版本携带分两类（冻结）：**计划编辑命令**（分配/改派/撤回/解锁）由客户端携带 `expectedPlanVersion`（改派为 `expectedFromPlanVersion` + `expectedToPlanVersion`），不匹配返回 409；**业务事实或控制命令**（取消/可用性/上下班/出发/到达/完成/订单资料修改）不要求客户端版本，服务端在事务内加锁读取、校验并递增 |
 | 调度短锁 | Redis `dispatch:lock:{driverId}` / `order:lock:{orderId}`，5–15 秒，防并发重排 |
 | 局部重排 | 只重排受事件影响的司机 A/B/C，不做全天全局最优 |
 | 基线校验 | 每 10 分钟对全部计划做一次校验性重算 |
@@ -88,3 +88,4 @@
 |---|---|---|
 | V2.0 | 2026-07-17 | Gate 0 首次冻结 |
 | V2.0-r1 | 2026-07-17 | Gate 0 二轮返修：`planVersion` 归属司机计划聚合；新增 `DriverAvailability` 与候选司机三条件；新增 `IngestEnvelope`、`sourceSystem` 枚举、Order/Event 唯一键与版本覆盖规则；无效样本补“接收即过期”情形 |
+| V2.0-r2 | 2026-07-17 | Gate 0 三轮返修：`planVersion` 版本携带规则冻结为命令两分类；`sourceStatusRaw` 存储边界（仅 `OrderSourceEvent`）；`IngestRecord` 定性为规范化接入 DTO |

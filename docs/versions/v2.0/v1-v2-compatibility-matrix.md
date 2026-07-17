@@ -15,7 +15,7 @@ V1 `OrderStatus`（8 值）→ V2 `executionStatus`（6 值）+ 正交维度：
 | `RECOMMENDING` | `UNASSIGNED` | 同上 | V2 无“推荐中”暂态；Top N 推荐流程废止 |
 | `ASSIGNED` | `PLANNED` | 锁定按 1.1 规则回填 | 已派未执行 |
 | `ACCEPTED` | `PLANNED` | 同上 | V2 无接单确认环节，接单语义合并进 `PLANNED` |
-| `IN_PROGRESS` | `IN_SERVICE` | 锁定 `AUTO_FROZEN` | V1 无出发/到达之分；迁移时统一按“已到达”处理，`arrivedAt` 取 V1 开始时间 |
+| `IN_PROGRESS` | `IN_SERVICE` | 锁定 `AUTO_FROZEN` | V1 无出发/到达之分；迁移时统一按“已到达”处理，`arrivedAt` 按 §1.3 回填链取值 |
 | `COMPLETED` | `COMPLETED` | — | 直接映射 |
 | `RECYCLED` | `UNASSIGNED` | 槽位 `NONE`、锁定 `NONE` | V1 回收＝释放回池 |
 | `CANCELLED` | `CANCELLED` | — | 直接映射 |
@@ -32,6 +32,20 @@ V1 `OrderStatus`（8 值）→ V2 `executionStatus`（6 值）+ 正交维度：
 
 - 存量订单迁移时可行性一律初始化为 `UNKNOWN`，由 V2 引擎首次重算后写入真实值。
 - 不为历史订单伪造 slack 值。
+
+### 1.3 `IN_PROGRESS → IN_SERVICE` 的 `arrivedAt` 回填链（冻结）
+
+现有 V1 `Assignment` 没有开始时间字段（仅 `assignedAt / acceptedAt / withdrawnAt / recycledAt / completedAt`），代码中也没有稳定写入 START 时间的独立字段。`arrivedAt` 按以下优先级取第一个可用值：
+
+```text
+1. 该订单当前 Assignment 关联的 OperationLog 中
+   最后一条 START 动作的记录时间（createdAt）
+2. Assignment.acceptedAt
+3. Order.updatedAt
+```
+
+- 使用第 2 或第 3 优先级时，必须在迁移生成的 `OrderSourceEvent`（payload 摘要）或迁移日志中记录 `migrationFallback: arrivedAt=<acceptedAt|orderUpdatedAt>` 标识。
+- 不为历史工单伪造更精确的到达时间；三级均不可用属于数据异常，该订单转人工核对清单，不自动迁移为 `IN_SERVICE`。
 
 ## 2. 司机状态映射
 
@@ -112,9 +126,16 @@ V1 `DriverStatus`（6 值）→ V2 班次 + 可用性 + 位置新鲜度 + 执行
 
 ## 7. 兼容窗口纪律
 
-- V1 页面和接口在兼容窗口内可运行；窗口关闭以迁移验证（并行验证 3A）通过 + 用户批准为准。
-- **V1 写接口处置（冻结）**：V2 状态机切换开关开启前，V1 写接口照常工作于 V1 状态机；开关开启后，V1 写接口（派单、改派、撤回、接单、回收、导入等）一律停用并返回明确错误（HTTP 410 + 指引信息），**不做命令转译**，不存在“V1 写请求翻译为 V2 命令”的路径。
-- 兼容层只做单向翻译（V1 读 V2 事实），不允许 V1 写路径绕过 V2 状态机。
+**兼容窗口内有两个独立时点（冻结）**：
+
+| 时点 | 定义 | V1 写接口 | V1 读接口与页面 |
+|---|---|---|---|
+| ① V2 状态机切换开关开启 | V2 成为唯一事实状态机 | 一律停用：返回 HTTP 410 + 指引信息，**不做命令转译** | 继续可用，经兼容层单向翻译读 V2 事实 |
+| ② 兼容窗口关闭 | 迁移验证（并行验证 3A）通过 + 用户批准 | （已停用） | 整体下线 |
+
+- 切换开关开启 **≠** 兼容窗口关闭；两个时点分别验收。
+- 时点 ① 之前，V1 写接口照常工作于 V1 状态机。
+- 兼容层只做单向翻译（V1 读 V2 事实），不允许 V1 写路径绕过 V2 状态机；不存在“V1 写请求翻译为 V2 命令”的路径。
 - 禁止为“看起来统一”提前删除 V1 文件、枚举或状态。
 
 ## 8. 版本记录
@@ -123,3 +144,4 @@ V1 `DriverStatus`（6 值）→ V2 班次 + 可用性 + 位置新鲜度 + 执行
 |---|---|---|
 | V2.0 | 2026-07-17 | Gate 0 首次冻结：状态/司机/Assignment/字段/规则/日志动作映射与兼容窗口纪律 |
 | V2.0-r1 | 2026-07-17 | Gate 0 二轮返修：`REASSIGN → MANUAL_LOCKED` 定稿；`UNAVAILABLE` 拆为 `onShift=false + availability=UNAVAILABLE`；`COMPLETED` Assignment 归入历史链记录；§4.1 `channel → sourceSystem` 映射表定稿；§4.2 回填标记定为 `sourceVersion="v1-migration"`（不新增字段）；§7 冻结 V1 写接口停用不转译 |
+| V2.0-r2 | 2026-07-17 | Gate 0 三轮返修：新增 §1.3 `arrivedAt` 回填链（START 日志 → `acceptedAt` → `Order.updatedAt` + `migrationFallback` 标识，三级不可用转人工核对）；§7 冻结兼容窗口两个独立时点（切换开关 ≠ 窗口关闭，V1 读接口存续至窗口关闭） |
