@@ -1,7 +1,7 @@
 # 人车单 V2 API 契约
 
 > 契约版本：`RCD-API-V2.0-20260717`
-> 状态：Gate 0 文档级冻结候选；等待正式冻结验收
+> 状态：Gate 0 已冻结
 > 实施约束：本文件只冻结契约，不含任何代码；TypeScript DTO、错误类型和契约测试在 Gate 2 落地
 > 上游依据：[PRD V2](prd-v2.md) · [数据架构 V2](data-architecture-v2.md) · [项目规则 V2](project-rules-v2.md)
 

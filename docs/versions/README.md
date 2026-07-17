@@ -15,12 +15,12 @@
 
 | 范围 | 当前版本 | 状态 | 入口 |
 |---|---|---|---|
-| 产品需求 | V2.0 | Gate 0 冻结候选 | [PRD V2](v2.0/prd-v2.md) |
-| 数据架构 | V2.0 | Gate 0 冻结候选 | [数据架构 V2](v2.0/data-architecture-v2.md) |
+| 产品需求 | V2.0 | Gate 0 已冻结 | [PRD V2](v2.0/prd-v2.md) |
+| 数据架构 | V2.0 | Gate 0 已冻结 | [数据架构 V2](v2.0/data-architecture-v2.md) |
 | 代码与设计约束 | V2.0 | 当前有效 | [项目规则 V2](v2.0/project-rules-v2.md) |
-| API 契约 | V2.0 | Gate 0 冻结候选 | [API 契约 V2](v2.0/api-contract-v2.md) |
-| 领域词汇 | V2.0 | Gate 0 冻结候选 | [领域词汇 V2](v2.0/domain-glossary-v2.md) |
-| V1→V2 兼容映射 | V2.0 | Gate 0 冻结候选 | [兼容矩阵](v2.0/v1-v2-compatibility-matrix.md) |
+| API 契约 | V2.0 | Gate 0 已冻结 | [API 契约 V2](v2.0/api-contract-v2.md) |
+| 领域词汇 | V2.0 | Gate 0 已冻结 | [领域词汇 V2](v2.0/domain-glossary-v2.md) |
+| V1→V2 兼容映射 | V2.0 | Gate 0 已冻结 | [兼容矩阵](v2.0/v1-v2-compatibility-matrix.md) |
 | V1 产品与开发主线 | V1.x | 历史只读 | [V1 历史索引](v1/README.md) |
 
 ## 文档权威顺序（按领域拆分，唯一权威口径）
