@@ -58,19 +58,19 @@
 
 ### 1.6 幂等与版本携带（冻结）
 
-**命令分类与 `planVersion` 携带规则**：
+**命令分类与 `planVersion` 携带规则（封闭式，冻结）**：
 
 ```text
-计划编辑命令：分配 / 改派 / 撤回 / 解锁
-→ 客户端必须携带 expectedPlanVersion
+只有 分配 / 改派 / 撤回 / 解锁 四类计划编辑命令
+要求客户端携带 expected*PlanVersion
   （改派为 expectedFromPlanVersion + expectedToPlanVersion 双版本）
-→ 不匹配返回 409 PLAN_VERSION_CONFLICT
+  不匹配返回 409 PLAN_VERSION_CONFLICT
 
-业务事实或控制命令：取消 / 可用性设置 / 上下班 / 出发 / 到达 / 完成 /
-                    订单资料修改（PATCH /api/v2/orders/{orderId}）
-→ 不要求客户端携带任何版本
-→ 服务端对受影响订单和司机取短锁，在事务内读取、校验并递增
-  受影响司机的 planVersion
+除此之外，所有业务事实、控制命令和系统重排触发
+（包括但不限于：取消 / 可用性设置 / 上下班 / 出发 / 到达 / 完成 /
+  订单资料修改 / 服务模块修改 / 位置变化 / 订单接入 / 周期基线校验）
+均不携带客户端版本，由服务端对受影响订单和司机取短锁，
+在事务内读取、校验并递增受影响司机的 planVersion
 ```
 
 | 场景 | 幂等键 / 策略 |
@@ -131,7 +131,7 @@
 | GET | `/api/v2/driver/map` | 所有上班司机位置（全局位置视图，不含他人订单详情） |
 | GET | `/api/v2/driver/tasks` | 本人 A/B/C 详情 |
 | GET | `/api/v2/driver/orders/unassigned` | 未分配订单列表（只读） |
-| PUT | `/api/v2/driver/tasks/{assignmentId}/modules` | 设置服务模块组合（多选，无顺序）；执行中允许修改；立即重算并写日志 |
+| PUT | `/api/v2/driver/tasks/{assignmentId}/modules` | 设置服务模块组合（多选，无顺序）；执行中允许修改；立即重算并写日志；属业务事实命令，**不携带 `expectedPlanVersion`**（§1.6 封闭式分类），版本由服务端事务内递增 |
 | POST | `/api/v2/driver/tasks/{assignmentId}/depart` | 出发：`PLANNED → EN_ROUTE`，锁定 `AUTO_FROZEN` |
 | POST | `/api/v2/driver/tasks/{assignmentId}/arrive` | 到达：`EN_ROUTE → IN_SERVICE`，实际计时开始 |
 | POST | `/api/v2/driver/tasks/{assignmentId}/complete` | 完成：`IN_SERVICE → COMPLETED`，触发重排 |
@@ -269,3 +269,4 @@ lat, lng, accuracyMeters, capturedAt
 | V2.0 | 2026-07-17 | Gate 0 首次冻结：路径、DTO、角色权限、状态流转引用、幂等、planVersion、错误码、traceId、时间格式与分页 |
 | V2.0-r1 | 2026-07-17 | Gate 0 二轮返修：`planVersion` 归属司机计划聚合，改派改为双版本（`expectedFromPlanVersion/expectedToPlanVersion`）；新增订单取消端点与取消语义；冻结 `IngestEnvelope` 与版本覆盖规则；新增 `DriverAvailability` 字段与设置端点；health 拆分匿名存活/内部 readiness；413 details 改 `observedBytes`；位置拒收补 `EXPIRED_AT_RECEIPT` |
 | V2.0-r2 | 2026-07-17 | Gate 0 三轮返修：§1.6 冻结命令两分类（计划编辑命令带 `expected*`，业务事实/控制命令服务端事务内递增）；§2.3 冻结来源取消遇终态的返回语义（`success` + `FOLLOW_UP_REQUIRED`，不整批 400）与 `sourceStatusRaw` 存储边界（仅 `OrderSourceEvent`）；§1.1 区分 V1 读/写接口存续时点；§1.7 ingest 凭证绑定唯一 `sourceSystem`；可用性设置幂等 `replayed` |
+| V2.0-r3 | 2026-07-17 | Gate 0 四轮返修：§1.6 版本携带规则改封闭式（仅四类计划编辑命令带版本，其余含模块修改/位置变化/订单接入/周期校验一律服务端递增）；§2.2 模块端点标注不携带 `expectedPlanVersion` |

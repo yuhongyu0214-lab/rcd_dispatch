@@ -77,7 +77,7 @@
 
 | 术语 | 定义 |
 |---|---|
-| `planVersion` | 司机计划聚合的乐观锁版本号：每名司机一个计数器，归属司机计划聚合根，不属于单个 Assignment。该司机计划的任何变化（重排/分配/改派/撤回/取消释放/解锁/班次或可用性引起的释放）均递增一次。版本携带分两类（冻结）：**计划编辑命令**（分配/改派/撤回/解锁）由客户端携带 `expectedPlanVersion`（改派为 `expectedFromPlanVersion` + `expectedToPlanVersion`），不匹配返回 409；**业务事实或控制命令**（取消/可用性/上下班/出发/到达/完成/订单资料修改）不要求客户端版本，服务端在事务内加锁读取、校验并递增 |
+| `planVersion` | 司机计划聚合的乐观锁版本号：每名司机一个计数器，归属司机计划聚合根，不属于单个 Assignment。该司机计划的任何变化均递增一次。版本携带为**封闭式分类**（冻结）：只有**分配/改派/撤回/解锁**四类计划编辑命令由客户端携带 `expectedPlanVersion`（改派为 `expectedFromPlanVersion` + `expectedToPlanVersion`），不匹配返回 409；**除此之外**的所有业务事实、控制命令和系统重排触发（取消/可用性/上下班/出发/到达/完成/订单资料修改/服务模块修改/位置变化/订单接入/周期校验等）不携带客户端版本，服务端在事务内加锁读取、校验并递增 |
 | 调度短锁 | Redis `dispatch:lock:{driverId}` / `order:lock:{orderId}`，5–15 秒，防并发重排 |
 | 局部重排 | 只重排受事件影响的司机 A/B/C，不做全天全局最优 |
 | 基线校验 | 每 10 分钟对全部计划做一次校验性重算 |
@@ -89,3 +89,4 @@
 | V2.0 | 2026-07-17 | Gate 0 首次冻结 |
 | V2.0-r1 | 2026-07-17 | Gate 0 二轮返修：`planVersion` 归属司机计划聚合；新增 `DriverAvailability` 与候选司机三条件；新增 `IngestEnvelope`、`sourceSystem` 枚举、Order/Event 唯一键与版本覆盖规则；无效样本补“接收即过期”情形 |
 | V2.0-r2 | 2026-07-17 | Gate 0 三轮返修：`planVersion` 版本携带规则冻结为命令两分类；`sourceStatusRaw` 存储边界（仅 `OrderSourceEvent`）；`IngestRecord` 定性为规范化接入 DTO |
+| V2.0-r3 | 2026-07-17 | Gate 0 四轮返修：版本携带规则改封闭式，补服务模块修改与系统重排触发 |
