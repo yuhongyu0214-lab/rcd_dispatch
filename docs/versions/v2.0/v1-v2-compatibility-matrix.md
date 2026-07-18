@@ -84,7 +84,7 @@ V1 `DriverStatus`（6 值）→ V2 班次 + 可用性 + 位置新鲜度 + 执行
 | `Order.returnAddress` | `deliveryAddress` | 统一“送达”语义 |
 | `Order.channel` | `sourceSystem` | 按 §4.1 映射表（本文件定稿，Gate 1 不再改动） |
 | （无） | `externalOrderId` | 存量订单回填为 `orderNo`；回填标记见 §4.2 |
-| （无） | `sourceVersion` | 存量回填保留值 `"v1-migration"`（数据架构 §3.3 冻结例外：仅 `V1_IMPORT` 使用，不经在线 ingest，不参与新旧比较） |
+| （无） | `sourceVersion` | 存量回填保留值 `"v1-migration"`（数据架构 §3.3 冻结例外：保留 §4.1 来源映射，V2 在线 ingest 禁止传入，比较时恒小于合法在线版本） |
 | （无） | `receivedAt` | 存量回填 `createdAt` |
 | `Order.status` | `executionStatus` + 维度 | 按 §1 映射 |
 | `Driver.status` | `DriverShift` + `availability` + 派生 | 按 §2 映射 |
@@ -100,7 +100,7 @@ V1 `DriverStatus`（6 值）→ V2 班次 + 可用性 + 位置新鲜度 + 执行
 
 ### 4.2 回填标记（冻结）
 
-- 不新增 `backfilled` 布尔字段。回填标记就是 `sourceVersion = "v1-migration"`：凡此值即表示 `externalOrderId`、`receivedAt` 等字段来自迁移回填，非来源系统投递。
+- 不新增 `backfilled` 布尔字段。回填标记就是 `sourceVersion = "v1-migration"`：迁移及 V1 写兼容窗口均使用该基线值；它不是 V2 来源系统的在线投递版本。
 - 迁移时为每条存量订单写入一条 `OrderSourceEvent`（`sourceVersion = "v1-migration"`，结果 `MIGRATED`，payload 摘要含 V1 原始 `channel`、`status` 等原值），作为回填追溯依据。
 
 ## 5. 调度规则替换（硬边界，不迁移）
@@ -146,3 +146,4 @@ V1 `DriverStatus`（6 值）→ V2 班次 + 可用性 + 位置新鲜度 + 执行
 | V2.0-r1 | 2026-07-17 | Gate 0 二轮返修：`REASSIGN → MANUAL_LOCKED` 定稿；`UNAVAILABLE` 拆为 `onShift=false + availability=UNAVAILABLE`；`COMPLETED` Assignment 归入历史链记录；§4.1 `channel → sourceSystem` 映射表定稿；§4.2 回填标记定为 `sourceVersion="v1-migration"`（不新增字段）；§7 冻结 V1 写接口停用不转译 |
 | V2.0-r2 | 2026-07-17 | Gate 0 三轮返修：新增 §1.3 `arrivedAt` 回填链（START 日志 → `acceptedAt` → `Order.updatedAt` + `migrationFallback` 标识，三级不可用转人工核对）；§7 冻结兼容窗口两个独立时点（切换开关 ≠ 窗口关闭，V1 读接口存续至窗口关闭） |
 | V2.0-r3 | 2026-07-17 | Gate 0 四轮返修：§4 `"v1-migration"` 标注为冻结保留值例外，引用数据架构 §3.3 |
+| V2.0-r4 | 2026-07-18 | Gate 1 冲突裁决：保留 §4.1 来源映射；`"v1-migration"` 定为迁移及 V1 写兼容基线，并由版本比较器视为最旧版本 |

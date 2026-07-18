@@ -52,10 +52,11 @@
 | `OrderSourceAdapter` | 来源翻译器：`validate → normalize → map → CanonicalOrder`；外部字段和外部枚举终止于此层 |
 | `OrderSourceEvent` | 一次来源投递的持久记录（来源、外部 ID、版本、结果、原始 JSON 摘要） |
 | `IngestEnvelope` | 来源投递的输入信封：`sourceSystem` + 规范化接入记录（`IngestRecord`）数组；结构冻结见 API 契约 V2 §2.3 |
-| `sourceSystem` | 冻结枚举：`HALUO / PLUGIN / API / V1_IMPORT`；`V1_IMPORT` 仅用于迁移回填，不接受在线投递。外部渠道名在 Adapter 内规范化为本枚举 |
-| Order 唯一键 | `(sourceSystem, externalOrderId)`；同一来源的一个外部订单在内部只有一条订单快照 |
+| `sourceSystem` | 冻结枚举：`HALUO / PLUGIN / API / V1_IMPORT`；`V1_IMPORT` 仅用于迁移回填及 V1 写兼容窗口，不接受 V2 在线投递。外部渠道名在 Adapter 内规范化为本枚举 |
+| Order 唯一键 | `(sourceSystem, externalOrderId)`；同一来源的一个外部订单在内部只有一条订单快照；`orderNo` 只是展示号，不设唯一约束，不同来源允许重号 |
 | Event 唯一键（幂等键） | `(sourceSystem, externalOrderId, sourceVersion)`；orderNo 不得单独作为幂等键 |
 | 版本覆盖规则 | 同版本重放返回已有结果（`replayed`）；新版本更新快照；旧版本晚到不覆盖快照，计入 `skipped`（`STALE_VERSION`），仅记录来源事件 |
+| `v1-migration` | Gate 1 存量迁移及 V1 写兼容窗口专用基线版本；保留原来源映射，V2 在线 ingest 禁止传入，比较时恒小于任意合法在线版本 |
 | `businessType` | 锁定沿用 V1 值：`STORE_PICKUP / STORE_RETURN / DOOR_DELIVERY / DOOR_PICKUP` |
 | `sourceStatusRaw` | 外部原始状态字符串；可经过 Adapter，但仅持久化到 `OrderSourceEvent` 存证——`Order` 快照与调度 DTO 不保存、不暴露；不直接写入内部执行状态 |
 | `receivedAt` | 服务端接收时间；服务端生成，UTC 存储，不接受外部传入 |
@@ -90,3 +91,4 @@
 | V2.0-r1 | 2026-07-17 | Gate 0 二轮返修：`planVersion` 归属司机计划聚合；新增 `DriverAvailability` 与候选司机三条件；新增 `IngestEnvelope`、`sourceSystem` 枚举、Order/Event 唯一键与版本覆盖规则；无效样本补“接收即过期”情形 |
 | V2.0-r2 | 2026-07-17 | Gate 0 三轮返修：`planVersion` 版本携带规则冻结为命令两分类；`sourceStatusRaw` 存储边界（仅 `OrderSourceEvent`）；`IngestRecord` 定性为规范化接入 DTO |
 | V2.0-r3 | 2026-07-17 | Gate 0 四轮返修：版本携带规则改封闭式，补服务模块修改与系统重排触发 |
+| V2.0-r4 | 2026-07-18 | Gate 1 冲突裁决：冻结 `orderNo` 非唯一展示语义与 `v1-migration` 跨来源迁移基线语义 |
