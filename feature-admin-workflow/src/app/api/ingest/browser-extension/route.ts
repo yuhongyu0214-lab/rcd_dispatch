@@ -234,7 +234,7 @@ async function ingestOne(record: ExtensionRecord, traceId: string): Promise<Inge
     }
 
     // ── 去重（数据库已存在 → 计入 skipped，不算失败）──
-    const existing = await prisma.order.findUnique({
+    const existing = await prisma.order.findFirst({
       where: { orderNo },
       select: { id: true, orderNo: true },
     });

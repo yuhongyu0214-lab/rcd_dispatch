@@ -91,7 +91,7 @@ export async function POST(request: Request) {
     }
 
     // ── 去重 ──
-    const existing = await prisma.order.findUnique({
+    const existing = await prisma.order.findFirst({
       where: { orderNo: body.orderNo },
       select: { id: true }
     });

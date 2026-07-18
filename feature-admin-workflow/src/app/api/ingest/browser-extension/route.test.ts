@@ -7,7 +7,7 @@ import { OPTIONS, POST } from "./route";
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     order: {
-      findUnique: vi.fn(),
+      findFirst: vi.fn(),
       create: vi.fn()
     },
     store: {
@@ -85,7 +85,7 @@ describe("browser-extension ingest route", () => {
     process.env.INGEST_ALLOWED_ORIGINS = ALLOWED_ORIGIN;
     mockStoreResolution();
     mockOrderCreate();
-    vi.mocked(prisma.order.findUnique).mockResolvedValue(null);
+    vi.mocked(prisma.order.findFirst).mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -235,7 +235,7 @@ describe("browser-extension ingest route", () => {
 
   describe("duplicate handling", () => {
     it("counts an already-existing order as skipped, not failed", async () => {
-      vi.mocked(prisma.order.findUnique).mockResolvedValue({
+      vi.mocked(prisma.order.findFirst).mockResolvedValue({
         id: "existing-id",
         orderNo: "RC-DUP-1"
       } as never);
@@ -288,7 +288,7 @@ describe("browser-extension ingest route", () => {
   describe("mixed batch", () => {
     it("classifies success / skipped / failed independently", async () => {
       // RC-MIX-DUP 已存在于数据库 → skipped
-      vi.mocked(prisma.order.findUnique).mockImplementation(async (args: { where: { orderNo: string } }) =>
+      vi.mocked(prisma.order.findFirst).mockImplementation(async (args: { where: { orderNo: string } }) =>
         (args.where.orderNo === "RC-MIX-DUP"
           ? ({ id: "existing", orderNo: "RC-MIX-DUP" } as never)
           : null)
