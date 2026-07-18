@@ -11,7 +11,10 @@ function getOnlineSourceVersionKind(version: string): OnlineSourceVersionKind {
   if (ISO_TIMESTAMP_PATTERN.test(version)) {
     const timestamp = Date.parse(version);
 
-    if (Number.isFinite(timestamp) && new Date(timestamp).toISOString() === version) {
+    if (
+      Number.isFinite(timestamp) &&
+      new Date(timestamp).toISOString() === version
+    ) {
       return "ISO_TIMESTAMP";
     }
   }

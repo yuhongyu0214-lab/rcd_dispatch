@@ -7,23 +7,37 @@ import {
 } from "./source-version";
 
 describe("compareSourceVersions", () => {
-  it.each([
-    "2026-07-18T08:00:00.000Z",
-    "0000000001"
-  ])("treats v1-migration as older than legal online version %s", (onlineVersion) => {
-    expect(compareSourceVersions(V1_MIGRATION_SOURCE_VERSION, onlineVersion)).toBe(-1);
-    expect(compareSourceVersions(onlineVersion, V1_MIGRATION_SOURCE_VERSION)).toBe(1);
-  });
+  it.each(["2026-07-18T08:00:00.000Z", "0000000001"])(
+    "treats v1-migration as older than legal online version %s",
+    (onlineVersion) => {
+      expect(
+        compareSourceVersions(V1_MIGRATION_SOURCE_VERSION, onlineVersion)
+      ).toBe(-1);
+      expect(
+        compareSourceVersions(onlineVersion, V1_MIGRATION_SOURCE_VERSION)
+      ).toBe(1);
+    }
+  );
 
   it("treats two v1-migration baselines as equal", () => {
     expect(
-      compareSourceVersions(V1_MIGRATION_SOURCE_VERSION, V1_MIGRATION_SOURCE_VERSION)
+      compareSourceVersions(
+        V1_MIGRATION_SOURCE_VERSION,
+        V1_MIGRATION_SOURCE_VERSION
+      )
     ).toBe(0);
+  });
+
+  it("does not accept v1-migration as an online ingest version", () => {
+    expect(isLegalOnlineSourceVersion(V1_MIGRATION_SOURCE_VERSION)).toBe(false);
   });
 
   it("compares fixed-millisecond UTC timestamps lexicographically", () => {
     expect(
-      compareSourceVersions("2026-07-18T08:00:00.000Z", "2026-07-18T08:00:00.001Z")
+      compareSourceVersions(
+        "2026-07-18T08:00:00.000Z",
+        "2026-07-18T08:00:00.001Z"
+      )
     ).toBe(-1);
   });
 
@@ -40,9 +54,9 @@ describe("compareSourceVersions", () => {
     "12A3"
   ])("rejects illegal online version %s", (version) => {
     expect(isLegalOnlineSourceVersion(version)).toBe(false);
-    expect(() => compareSourceVersions(V1_MIGRATION_SOURCE_VERSION, version)).toThrow(
-      RangeError
-    );
+    expect(() =>
+      compareSourceVersions(V1_MIGRATION_SOURCE_VERSION, version)
+    ).toThrow(RangeError);
   });
 
   it("rejects mixed online version formats", () => {
