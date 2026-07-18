@@ -1,4 +1,4 @@
-import type { IngestRecordV2 } from "@/types/v2";
+import type { IngestRecordV2, OnlineOrderSourceSystemV2 } from "@/types/v2";
 import { BUSINESS_TYPES_V2 } from "@/types/v2";
 import {
   isLegalOnlineSourceVersion,
@@ -45,6 +45,47 @@ function isValidFiniteLat(value: number): boolean {
 
 function isValidFiniteLng(value: number): boolean {
   return Number.isFinite(value) && value >= -180 && value <= 180;
+}
+
+/**
+ * P1-4 返修: "已取消"来源状态按 sourceSystem 建立精确映射，不再共用全局词表。
+ * 原因：同一个词在不同来源含义不同 —— 如 "CLOSED / 关闭" 在部分平台表示
+ * 订单正常完结而非取消，全局词表会把完成单误判成取消。
+ * 原则：
+ * - 只收录该来源明确表示"取消/作废"的值（trim + 大写归一后精确匹配）；
+ * - 歧义词（关闭 / CLOSED / CLOSE 等）一律不收录；
+ * - 未收录的状态回退为"非取消"，此时取消语义只能来自显式 cancelledAt 字段。
+ */
+const CANCELLED_STATUS_BY_SOURCE: Record<
+  OnlineOrderSourceSystemV2,
+  ReadonlySet<string>
+> = {
+  // 哈啰：中文状态文案
+  HALUO: new Set(["已取消", "取消", "用户取消", "商家取消", "已撤销", "撤销"]),
+  // 浏览器插件抓取：页面文案中英混合
+  PLUGIN: new Set([
+    "已取消",
+    "取消",
+    "已撤销",
+    "撤销",
+    "CANCELLED",
+    "CANCELED"
+  ]),
+  // 开放 API：英文枚举
+  API: new Set(["CANCELLED", "CANCELED", "CANCEL", "VOID", "VOIDED"])
+};
+
+/**
+ * P1-4: 判断来源原始状态在指定来源系统语义下是否表示"已取消"。
+ * 命中且 payload 未显式提供 cancelledAt 时，映射阶段应将 cancelledAt 置为 receivedAt。
+ */
+export function isSourceStatusCancelled(
+  sourceStatusRaw: string,
+  sourceSystem: OnlineOrderSourceSystemV2
+): boolean {
+  const normalized = sourceStatusRaw.trim().toUpperCase();
+  if (normalized.length === 0) return false;
+  return CANCELLED_STATUS_BY_SOURCE[sourceSystem]?.has(normalized) ?? false;
 }
 
 export function validateIngestRecord(

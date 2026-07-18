@@ -2,14 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   CanonicalOrderV2,
-  IngestEnvelopeV2,
   IngestRecordV2
 } from "@/types/v2";
 
 import { processIngestRecord } from "./idempotency";
 import { mapToCanonical } from "./mapper";
 import { normalizeRecord } from "./normalize";
-import { validateIngestRecord } from "./validate";
+import { isSourceStatusCancelled, validateIngestRecord } from "./validate";
 
 // ---- Mock Prisma with hoisted factory ----
 const { mockPrismaTransaction } = vi.hoisted(() => ({
@@ -30,7 +29,8 @@ function createTransactionMock() {
     order: {
       findUnique: vi.fn(),
       create: vi.fn(),
-      update: vi.fn()
+      update: vi.fn(),
+      updateMany: vi.fn()
     },
     orderSourceEvent: {
       findUnique: vi.fn(),
@@ -44,6 +44,16 @@ function createTransactionMock() {
     },
     user: {
       findFirst: vi.fn()
+    },
+    assignment: {
+      findUnique: vi.fn(),
+      update: vi.fn()
+    },
+    driver: {
+      update: vi.fn()
+    },
+    dispatchAlert: {
+      updateMany: vi.fn()
     }
   };
 }
@@ -81,13 +91,6 @@ function makeValidRecord(overrides: Partial<IngestRecordV2> = {}): IngestRecordV
     remark: "测试备注",
     ...overrides
   };
-}
-
-function makeEnvelope(
-  records: IngestRecordV2[],
-  sourceSystem: "HALUO" | "PLUGIN" | "API" = "HALUO"
-): IngestEnvelopeV2 {
-  return { sourceSystem, records };
 }
 
 function makeCanonical(
@@ -204,6 +207,49 @@ describe("order-source adapter", () => {
     });
   });
 
+  // P1-4: sourceStatusRaw 取消状态识别（按来源系统精确映射）
+  describe("isSourceStatusCancelled (P1-4)", () => {
+    it("recognizes HALUO Chinese cancel statuses", () => {
+      expect(isSourceStatusCancelled("已取消", "HALUO")).toBe(true);
+      expect(isSourceStatusCancelled("取消", "HALUO")).toBe(true);
+      expect(isSourceStatusCancelled("已撤销", "HALUO")).toBe(true);
+    });
+
+    it("recognizes API English cancel statuses case-insensitively", () => {
+      expect(isSourceStatusCancelled("CANCELLED", "API")).toBe(true);
+      expect(isSourceStatusCancelled("cancelled", "API")).toBe(true);
+      expect(isSourceStatusCancelled("Cancel", "API")).toBe(true);
+      expect(isSourceStatusCancelled("  CANCELED  ", "API")).toBe(true);
+      expect(isSourceStatusCancelled("VOID", "API")).toBe(true);
+    });
+
+    it("recognizes PLUGIN mixed-language cancel statuses", () => {
+      expect(isSourceStatusCancelled("已取消", "PLUGIN")).toBe(true);
+      expect(isSourceStatusCancelled("cancelled", "PLUGIN")).toBe(true);
+    });
+
+    // P1 返修: CLOSED/关闭 在部分来源表示正常完结，不得判为取消
+    it("does NOT treat ambiguous CLOSED/关闭 as cancelled in any source (P1)", () => {
+      expect(isSourceStatusCancelled("已关闭", "HALUO")).toBe(false);
+      expect(isSourceStatusCancelled("关闭", "HALUO")).toBe(false);
+      expect(isSourceStatusCancelled("CLOSED", "API")).toBe(false);
+      expect(isSourceStatusCancelled("closed", "PLUGIN")).toBe(false);
+    });
+
+    // P1 返修: 词表按来源隔离，不跨来源生效
+    it("scopes cancel vocabulary per source system (P1)", () => {
+      expect(isSourceStatusCancelled("CANCELLED", "HALUO")).toBe(false);
+      expect(isSourceStatusCancelled("已取消", "API")).toBe(false);
+    });
+
+    it("does not match non-cancel or negated statuses", () => {
+      expect(isSourceStatusCancelled("待取车", "HALUO")).toBe(false);
+      expect(isSourceStatusCancelled("未取消", "HALUO")).toBe(false);
+      expect(isSourceStatusCancelled("进行中", "HALUO")).toBe(false);
+      expect(isSourceStatusCancelled("", "HALUO")).toBe(false);
+    });
+  });
+
   describe("normalizeRecord", () => {
     it("trims whitespace from all string fields", () => {
       const record = makeValidRecord({
@@ -249,6 +295,46 @@ describe("order-source adapter", () => {
       expect(canonical.externalOrderId).toBe("HALUO-001");
       expect(canonical.orderNo).toBe("ORDER-V2-001");
     });
+
+    // P1-4: sourceStatusRaw 表示取消 → cancelledAt 兜底为 receivedAt
+    it("maps cancelled sourceStatusRaw to cancelledAt=receivedAt when cancelledAt missing (P1-4)", () => {
+      const record = makeValidRecord({
+        sourceStatusRaw: "已取消",
+        cancelledAt: undefined
+      });
+      const normalized = normalizeRecord(record);
+      const receivedAt = "2026-07-18T08:00:30.000Z";
+      const canonical = mapToCanonical(normalized, "HALUO", receivedAt);
+
+      expect(canonical.cancelledAt).toBe(receivedAt);
+    });
+
+    it("keeps explicit cancelledAt over sourceStatusRaw-derived value (P1-4)", () => {
+      const record = makeValidRecord({
+        sourceStatusRaw: "已取消",
+        cancelledAt: "2026-07-18T07:59:00.000Z"
+      });
+      const normalized = normalizeRecord(record);
+      const canonical = mapToCanonical(
+        normalized,
+        "HALUO",
+        "2026-07-18T08:00:30.000Z"
+      );
+
+      expect(canonical.cancelledAt).toBe("2026-07-18T07:59:00.000Z");
+    });
+
+    it("leaves cancelledAt undefined for non-cancel sourceStatusRaw (P1-4)", () => {
+      const record = makeValidRecord({ sourceStatusRaw: "待取车" });
+      const normalized = normalizeRecord(record);
+      const canonical = mapToCanonical(
+        normalized,
+        "HALUO",
+        "2026-07-18T08:00:30.000Z"
+      );
+
+      expect(canonical.cancelledAt).toBeUndefined();
+    });
   });
 
   describe("processIngestRecord (idempotency)", () => {
@@ -268,10 +354,13 @@ describe("order-source adapter", () => {
       tx.user.findFirst.mockResolvedValue({
         id: "user-system"
       });
+
+      // 默认乐观锁更新命中 1 行
+      tx.order.updateMany.mockResolvedValue({ count: 1 });
     });
 
-    // --- Same version replay ---
-    it("returns replayed=true when same version event already exists", async () => {
+    // --- Same version replay (P1-1) ---
+    it("returns skipped + replayed for same version SUCCESS event (P1-1)", async () => {
       tx.orderSourceEvent.findUnique.mockResolvedValue({
         id: "event-1",
         orderId: "order-1",
@@ -284,10 +373,10 @@ describe("order-source adapter", () => {
         "trace-replay-1"
       );
 
-      expect(result.status).toBe("success");
+      expect(result.status).toBe("skipped");
       expect(result.replayed).toBe(true);
       expect(tx.order.create).not.toHaveBeenCalled();
-      expect(tx.order.update).not.toHaveBeenCalled();
+      expect(tx.order.updateMany).not.toHaveBeenCalled();
     });
 
     it("returns skipped for same version SKIPPED event", async () => {
@@ -305,6 +394,50 @@ describe("order-source adapter", () => {
 
       expect(result.status).toBe("skipped");
       expect(result.replayed).toBe(true);
+    });
+
+    it("returns skipped + replayed for same version MIGRATED event (P1-1)", async () => {
+      tx.orderSourceEvent.findUnique.mockResolvedValue({
+        id: "event-1",
+        orderId: "order-1",
+        result: "MIGRATED",
+        reason: null
+      });
+
+      const result = await processIngestRecord(
+        makeCanonical(),
+        "trace-replay-migrated"
+      );
+
+      expect(result.status).toBe("skipped");
+      expect(result.replayed).toBe(true);
+      expect(tx.order.create).not.toHaveBeenCalled();
+      expect(tx.order.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("retries processing when same version event is FAILED", async () => {
+      tx.orderSourceEvent.findUnique.mockResolvedValue({
+        id: "event-1",
+        orderId: null,
+        result: "FAILED",
+        reason: "STORE_NOT_FOUND"
+      });
+      tx.order.findUnique.mockResolvedValue(null);
+      tx.order.create.mockResolvedValue({
+        id: "order-new",
+        orderNo: "ORDER-V2-001",
+        executionStatus: "UNASSIGNED"
+      });
+      tx.orderSourceEvent.upsert.mockResolvedValue({});
+
+      const result = await processIngestRecord(
+        makeCanonical(),
+        "trace-failed-retry"
+      );
+
+      expect(result.status).toBe("success");
+      expect(result.replayed).toBeUndefined();
+      expect(tx.order.create).toHaveBeenCalled();
     });
 
     // --- New version update ---
@@ -337,10 +470,6 @@ describe("order-source adapter", () => {
         status: "PENDING",
         currentAssignmentId: null
       });
-      tx.order.update.mockResolvedValue({
-        id: "order-existing",
-        executionStatus: "UNASSIGNED"
-      });
       tx.orderSourceEvent.upsert.mockResolvedValue({});
 
       const result = await processIngestRecord(
@@ -349,8 +478,97 @@ describe("order-source adapter", () => {
       );
 
       expect(result.status).toBe("success");
-      expect(tx.order.update).toHaveBeenCalled();
+      expect(tx.order.updateMany).toHaveBeenCalled();
       expect(tx.orderSourceEvent.upsert).toHaveBeenCalled();
+    });
+
+    // --- P0-1: 元数据更新不得破坏执行状态 ---
+    it("keeps PLANNED executionStatus when a newer version updates metadata (P0-1)", async () => {
+      tx.orderSourceEvent.findUnique.mockResolvedValue(null);
+      tx.order.findUnique.mockResolvedValue({
+        id: "order-planned",
+        sourceVersion: "2026-07-18T07:00:00.000Z",
+        executionStatus: "PLANNED",
+        status: "ASSIGNED",
+        currentAssignmentId: "assignment-1"
+      });
+      tx.orderSourceEvent.upsert.mockResolvedValue({});
+
+      const result = await processIngestRecord(
+        makeCanonical({ sourceVersion: "2026-07-18T08:00:00.000Z" }),
+        "trace-p01-planned"
+      );
+
+      expect(result.status).toBe("success");
+      expect(tx.order.updateMany).toHaveBeenCalledTimes(1);
+
+      const call = tx.order.updateMany.mock.calls[0][0];
+      // 更新数据只含元数据，绝不覆盖执行状态与派单指针
+      expect(call.data).not.toHaveProperty("executionStatus");
+      expect(call.data).not.toHaveProperty("status");
+      expect(call.data).not.toHaveProperty("currentAssignmentId");
+      // 元数据字段确实被更新
+      expect(call.data).toHaveProperty("pickupAddress");
+      expect(call.data).toHaveProperty("sourceVersion", "2026-07-18T08:00:00.000Z");
+    });
+
+    // --- P0-3: 版本竞争（乐观锁） ---
+    it("retries on concurrent version race and settles on re-read (P0-3)", async () => {
+      tx.orderSourceEvent.findUnique.mockResolvedValue(null);
+      // 第一次读到 v(07:00)，写入时已被并发事务改为 v(09:00) → 命中 0 行；
+      // 重试后读到 v(09:00)，本次 v(08:00) 判定为 STALE_VERSION
+      tx.order.findUnique
+        .mockResolvedValueOnce({
+          id: "order-race",
+          sourceVersion: "2026-07-18T07:00:00.000Z",
+          executionStatus: "UNASSIGNED",
+          status: "PENDING",
+          currentAssignmentId: null
+        })
+        .mockResolvedValueOnce({
+          id: "order-race",
+          sourceVersion: "2026-07-18T09:00:00.000Z",
+          executionStatus: "UNASSIGNED",
+          status: "PENDING",
+          currentAssignmentId: null
+        });
+      tx.order.updateMany.mockResolvedValueOnce({ count: 0 });
+      tx.orderSourceEvent.upsert.mockResolvedValue({});
+
+      const result = await processIngestRecord(
+        makeCanonical({ sourceVersion: "2026-07-18T08:00:00.000Z" }),
+        "trace-p03-race"
+      );
+
+      expect(result.status).toBe("skipped");
+      expect(result.reason).toBe("STALE_VERSION");
+      expect(mockPrismaTransaction).toHaveBeenCalledTimes(2);
+      // 乐观锁 WHERE 必须带读取时的 sourceVersion
+      const firstUpdate = tx.order.updateMany.mock.calls[0][0];
+      expect(firstUpdate.where).toMatchObject({
+        id: "order-race",
+        sourceVersion: "2026-07-18T07:00:00.000Z"
+      });
+    });
+
+    it("fails after exhausting version race retries (P0-3)", async () => {
+      tx.orderSourceEvent.findUnique.mockResolvedValue(null);
+      tx.order.findUnique.mockResolvedValue({
+        id: "order-race",
+        sourceVersion: "2026-07-18T07:00:00.000Z",
+        executionStatus: "UNASSIGNED",
+        status: "PENDING",
+        currentAssignmentId: null
+      });
+      tx.order.updateMany.mockResolvedValue({ count: 0 });
+
+      const result = await processIngestRecord(
+        makeCanonical({ sourceVersion: "2026-07-18T08:00:00.000Z" }),
+        "trace-p03-exhausted"
+      );
+
+      expect(result.status).toBe("failed");
+      expect(mockPrismaTransaction).toHaveBeenCalledTimes(3);
     });
 
     // --- Old version (stale) ---
@@ -372,7 +590,7 @@ describe("order-source adapter", () => {
 
       expect(result.status).toBe("skipped");
       expect(result.reason).toBe("STALE_VERSION");
-      expect(tx.order.update).not.toHaveBeenCalled();
+      expect(tx.order.updateMany).not.toHaveBeenCalled();
       expect(tx.orderSourceEvent.upsert).toHaveBeenCalled();
     });
 
@@ -386,10 +604,6 @@ describe("order-source adapter", () => {
         status: "PENDING",
         currentAssignmentId: null
       });
-      tx.order.update.mockResolvedValue({
-        id: "order-existing",
-        executionStatus: "UNASSIGNED"
-      });
       tx.orderSourceEvent.upsert.mockResolvedValue({});
 
       const result = await processIngestRecord(
@@ -398,7 +612,7 @@ describe("order-source adapter", () => {
       );
 
       expect(result.status).toBe("success");
-      expect(tx.order.update).toHaveBeenCalled();
+      expect(tx.order.updateMany).toHaveBeenCalled();
     });
 
     // --- Cancel scenarios ---
@@ -410,10 +624,6 @@ describe("order-source adapter", () => {
         executionStatus: "UNASSIGNED",
         status: "PENDING",
         currentAssignmentId: null
-      });
-      tx.order.update.mockResolvedValue({
-        id: "order-existing",
-        executionStatus: "CANCELLED"
       });
       tx.orderSourceEvent.upsert.mockResolvedValue({});
 
@@ -427,7 +637,7 @@ describe("order-source adapter", () => {
 
       expect(result.status).toBe("success");
       expect(result.reason).toBeUndefined();
-      expect(tx.order.update).toHaveBeenCalledWith(
+      expect(tx.order.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             executionStatus: "CANCELLED",
@@ -435,6 +645,63 @@ describe("order-source adapter", () => {
           })
         })
       );
+      // 没有当前派单 → 不应释放任何 Assignment
+      expect(tx.assignment.update).not.toHaveBeenCalled();
+      expect(tx.driver.update).not.toHaveBeenCalled();
+    });
+
+    // --- P0 返修: 取消不越权 Gate 3 —— 1A 只落地取消事实与待释放意图 ---
+    it("cancels PLANNED order with fact + pending-release intent, never touching dispatch entities (P0)", async () => {
+      tx.orderSourceEvent.findUnique.mockResolvedValue(null);
+      tx.order.findUnique.mockResolvedValue({
+        id: "order-planned",
+        sourceVersion: "2026-07-18T07:00:00.000Z",
+        executionStatus: "PLANNED",
+        status: "ASSIGNED",
+        currentAssignmentId: "assignment-1"
+      });
+      tx.orderSourceEvent.upsert.mockResolvedValue({});
+
+      const result = await processIngestRecord(
+        makeCanonical({
+          sourceVersion: "2026-07-18T08:00:00.000Z",
+          cancelledAt: "2026-07-18T08:30:00.000Z"
+        }),
+        "trace-p02-cancel"
+      );
+
+      expect(result.status).toBe("success");
+
+      // 1) 订单取消事实原子落地；currentAssignmentId 保持原值作为待释放意图，不得清空
+      expect(tx.order.updateMany).toHaveBeenCalledTimes(1);
+      const call = tx.order.updateMany.mock.calls[0][0];
+      expect(call.where).toMatchObject({
+        id: "order-planned",
+        sourceVersion: "2026-07-18T07:00:00.000Z"
+      });
+      expect(call.data).toMatchObject({
+        executionStatus: "CANCELLED",
+        status: "CANCELLED"
+      });
+      expect(call.data).not.toHaveProperty("currentAssignmentId");
+
+      // 2) 所有权边界：Assignment / Driver.planVersion / DispatchAlert 属 Gate 3
+      //    单一事务集成线，1A 一律不写
+      expect(tx.assignment.findUnique).not.toHaveBeenCalled();
+      expect(tx.assignment.update).not.toHaveBeenCalled();
+      expect(tx.driver.update).not.toHaveBeenCalled();
+      expect(tx.dispatchAlert.updateMany).not.toHaveBeenCalled();
+
+      // 3) 只写 ORDER/CANCEL 日志，元数据记录待释放意图供 Gate 3 追溯
+      const logDatas = tx.operationLog.create.mock.calls.map(
+        (c) =>
+          (c[0] as { data: { action: string; metadataJson: Record<string, unknown> } })
+            .data
+      );
+      expect(logDatas.map((d) => d.action)).toEqual(["CANCEL"]);
+      expect(logDatas[0].metadataJson).toMatchObject({
+        pendingReleaseAssignmentId: "assignment-1"
+      });
     });
 
     it("returns FOLLOW_UP_REQUIRED when cancelling IN_SERVICE order", async () => {
@@ -445,10 +712,6 @@ describe("order-source adapter", () => {
         executionStatus: "IN_SERVICE",
         status: "IN_PROGRESS",
         currentAssignmentId: null
-      });
-      tx.order.update.mockResolvedValue({
-        id: "order-existing",
-        executionStatus: "IN_SERVICE"
       });
       tx.orderSourceEvent.upsert.mockResolvedValue({});
 
@@ -462,7 +725,10 @@ describe("order-source adapter", () => {
 
       expect(result.status).toBe("success");
       expect(result.reason).toBe("FOLLOW_UP_REQUIRED");
-      // snapshot should be updated but executionStatus unchanged
+      // snapshot 更新但执行状态保持不变
+      const call = tx.order.updateMany.mock.calls[0][0];
+      expect(call.data).not.toHaveProperty("executionStatus");
+      expect(call.data).not.toHaveProperty("status");
     });
 
     it("handles COMPLETED cancellation with FOLLOW_UP_REQUIRED", async () => {
@@ -473,10 +739,6 @@ describe("order-source adapter", () => {
         executionStatus: "COMPLETED",
         status: "COMPLETED",
         currentAssignmentId: null
-      });
-      tx.order.update.mockResolvedValue({
-        id: "order-existing",
-        executionStatus: "COMPLETED"
       });
       tx.orderSourceEvent.upsert.mockResolvedValue({});
 
@@ -500,10 +762,6 @@ describe("order-source adapter", () => {
         executionStatus: "CANCELLED",
         status: "CANCELLED",
         currentAssignmentId: null
-      });
-      tx.order.update.mockResolvedValue({
-        id: "order-existing",
-        executionStatus: "CANCELLED"
       });
       tx.orderSourceEvent.upsert.mockResolvedValue({});
 
@@ -546,26 +804,97 @@ describe("order-source adapter", () => {
       );
     });
 
-    // --- DB unique constraint race ---
-    it("handles P2002 unique constraint gracefully", async () => {
-      // 模拟第一个事务因为 P2002 失败（并发写入），事务层捕获并返回 skipped
+    // --- P0 返修: P2002 必须重入事务重读分流，不得直接判 DUPLICATE ---
+    it("re-enters transaction on first-create P2002 and applies the newer version (P0)", async () => {
+      // 审阅场景：v2 / v3 同时查到订单不存在，v2 先建单；
+      // v3 create 撞 Order 唯一键 → 不能丢弃，重读后按版本规则落为 update
       const p2002Error = Object.assign(
         new Error("Unique constraint failed"),
         { code: "P2002" }
       );
 
-      // 直接 mock $transaction 抛出 P2002
+      tx.orderSourceEvent.findUnique.mockResolvedValue(null);
+      tx.order.findUnique
+        .mockResolvedValueOnce(null) // 第一次事务：订单不存在 → 走 create
+        .mockResolvedValueOnce({
+          // 重试事务：重读拿到 v2 建的订单
+          id: "order-create-race",
+          sourceVersion: "2026-07-18T08:00:00.000Z",
+          executionStatus: "UNASSIGNED",
+          status: "PENDING",
+          currentAssignmentId: null
+        });
+      tx.order.create.mockRejectedValueOnce(p2002Error);
+      tx.orderSourceEvent.upsert.mockResolvedValue({});
+
+      const result = await processIngestRecord(
+        makeCanonical({ sourceVersion: "2026-07-18T09:00:00.000Z" }),
+        "trace-p2002-create-race"
+      );
+
+      // v3 快照必须成功落库，而不是被当作重复丢弃
+      expect(result.status).toBe("success");
+      expect(result.reason).toBeUndefined();
+      expect(mockPrismaTransaction).toHaveBeenCalledTimes(2);
+
+      expect(tx.order.updateMany).toHaveBeenCalledTimes(1);
+      const updateCall = tx.order.updateMany.mock.calls[0][0];
+      expect(updateCall.where).toMatchObject({
+        id: "order-create-race",
+        sourceVersion: "2026-07-18T08:00:00.000Z"
+      });
+      expect(updateCall.data).toHaveProperty(
+        "sourceVersion",
+        "2026-07-18T09:00:00.000Z"
+      );
+    });
+
+    it("re-enters transaction on P2002 and settles as replay for same version (P0)", async () => {
+      const p2002Error = Object.assign(
+        new Error("Unique constraint failed"),
+        { code: "P2002" }
+      );
+
+      // 第一次事务因并发写入同幂等键失败；重试后读到同版本事件 → replay
       mockPrismaTransaction.mockRejectedValueOnce(p2002Error);
+      tx.orderSourceEvent.findUnique.mockResolvedValue({
+        id: "event-dup",
+        orderId: "order-1",
+        result: "SUCCESS",
+        reason: null
+      });
 
       const result = await processIngestRecord(
         makeCanonical(),
-        "trace-race-1"
+        "trace-p2002-replay"
       );
 
-      // P2002 handled as skipped in the catch block
       expect(result.status).toBe("skipped");
-      expect(result.reason).toBe("DUPLICATE");
       expect(result.replayed).toBe(true);
+      expect(mockPrismaTransaction).toHaveBeenCalledTimes(2);
+      expect(tx.order.create).not.toHaveBeenCalled();
+      expect(tx.order.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("fails after exhausting P2002 retries instead of mislabeling DUPLICATE (P0)", async () => {
+      const p2002Error = Object.assign(
+        new Error("Unique constraint failed"),
+        { code: "P2002" }
+      );
+
+      mockPrismaTransaction
+        .mockRejectedValueOnce(p2002Error)
+        .mockRejectedValueOnce(p2002Error)
+        .mockRejectedValueOnce(p2002Error);
+
+      const result = await processIngestRecord(
+        makeCanonical(),
+        "trace-p2002-exhausted"
+      );
+
+      expect(result.status).toBe("failed");
+      expect(result.reason).toBeUndefined();
+      expect(mockPrismaTransaction).toHaveBeenCalledTimes(3);
     });
 
     // --- Store not found ---

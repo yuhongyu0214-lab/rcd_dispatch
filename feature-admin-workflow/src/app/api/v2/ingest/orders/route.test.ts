@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { POST } from "./route";
+import { OPTIONS, POST } from "./route";
 
 vi.mock("@/lib/adapters/order-source", () => ({
   processIngestEnvelope: vi.fn()
@@ -72,6 +72,10 @@ describe("POST /api/v2/ingest/orders", () => {
     delete process.env.INGEST_API_KEY_HALUO;
     delete process.env.INGEST_API_KEY_PLUGIN;
     delete process.env.INGEST_API_KEY_API;
+    delete process.env.INGEST_KEY;
+    delete process.env.INGEST_KEY_SOURCE;
+    delete process.env.INGEST_KEY_BINDINGS;
+    delete process.env.CORS_ORIGINS;
   });
 
   // ---- Auth ----
@@ -165,6 +169,250 @@ describe("POST /api/v2/ingest/orders", () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe("FORBIDDEN");
       expect(processIngestEnvelope).not.toHaveBeenCalled();
+    });
+
+    // P1-2: 未绑定来源的通用 key 必须拒绝，不得回退为 ANY
+    it("returns 403 when generic key has no source binding (P1-2)", async () => {
+      process.env.INGEST_API_KEY = INGEST_KEY;
+      delete process.env.INGEST_API_KEY_SOURCE;
+
+      const response = await POST(
+        buildRequest(
+          buildEnvelope([
+            {
+              externalOrderId: "HALUO-001",
+              sourceVersion: "2026-07-18T08:00:00.000Z",
+              sourceStatusRaw: "待取车",
+              orderNo: "ORDER-V2-001",
+              businessType: "STORE_PICKUP",
+              promisedPickupAt: "2026-07-18T09:00:00.000Z",
+              pickupAddress: "取车点",
+              deliveryAddress: "送达点",
+              storeCode: "STORE_HZ_XH"
+            }
+          ])
+        )
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("FORBIDDEN");
+      expect(processIngestEnvelope).not.toHaveBeenCalled();
+    });
+
+    // P1-2: INGEST_KEY_BINDINGS JSON 绑定表
+    it("accepts key bound via INGEST_KEY_BINDINGS to matching source (P1-2)", async () => {
+      delete process.env.INGEST_API_KEY;
+      delete process.env.INGEST_API_KEY_SOURCE;
+      process.env.INGEST_KEY_BINDINGS = JSON.stringify({
+        "bindings-key-1": "HALUO"
+      });
+
+      const response = await POST(
+        buildRequest(
+          buildEnvelope([
+            {
+              externalOrderId: "HALUO-001",
+              sourceVersion: "2026-07-18T08:00:00.000Z",
+              sourceStatusRaw: "待取车",
+              orderNo: "ORDER-V2-001",
+              businessType: "STORE_PICKUP",
+              promisedPickupAt: "2026-07-18T09:00:00.000Z",
+              pickupAddress: "取车点",
+              deliveryAddress: "送达点",
+              storeCode: "STORE_HZ_XH"
+            }
+          ]),
+          { "X-Ingest-Key": "bindings-key-1" }
+        )
+      );
+
+      expect(response.status).toBe(200);
+      expect(processIngestEnvelope).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns 403 when INGEST_KEY_BINDINGS binding mismatches envelope source (P1-2)", async () => {
+      delete process.env.INGEST_API_KEY;
+      delete process.env.INGEST_API_KEY_SOURCE;
+      process.env.INGEST_KEY_BINDINGS = JSON.stringify({
+        "bindings-key-1": "PLUGIN"
+      });
+
+      const response = await POST(
+        buildRequest(
+          buildEnvelope([
+            {
+              externalOrderId: "HALUO-001",
+              sourceVersion: "2026-07-18T08:00:00.000Z",
+              sourceStatusRaw: "待取车",
+              orderNo: "ORDER-V2-001",
+              businessType: "STORE_PICKUP",
+              promisedPickupAt: "2026-07-18T09:00:00.000Z",
+              pickupAddress: "取车点",
+              deliveryAddress: "送达点",
+              storeCode: "STORE_HZ_XH"
+            }
+          ]),
+          { "X-Ingest-Key": "bindings-key-1" }
+        )
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(body.error.code).toBe("FORBIDDEN");
+      expect(processIngestEnvelope).not.toHaveBeenCalled();
+    });
+  });
+
+  // ---- P1-3: CORS 预检 ----
+  describe("OPTIONS preflight (P1-3)", () => {
+    function buildOptionsRequest(headers: Record<string, string> = {}): Request {
+      return new Request("http://localhost/api/v2/ingest/orders", {
+        method: "OPTIONS",
+        headers
+      });
+    }
+
+    it("returns 204 with CORS headers for whitelisted Origin", async () => {
+      process.env.CORS_ORIGINS =
+        "https://haluo.example.com, https://plugin.example.com";
+
+      const response = await OPTIONS(
+        buildOptionsRequest({ Origin: "https://haluo.example.com" })
+      );
+
+      expect(response.status).toBe(204);
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
+        "https://haluo.example.com"
+      );
+      expect(response.headers.get("Access-Control-Allow-Methods")).toContain(
+        "POST"
+      );
+      expect(response.headers.get("Access-Control-Allow-Headers")).toContain(
+        "X-Ingest-Key"
+      );
+    });
+
+    it("returns 403 for Origin not in whitelist", async () => {
+      process.env.CORS_ORIGINS = "https://haluo.example.com";
+
+      const response = await OPTIONS(
+        buildOptionsRequest({ Origin: "https://evil.example.com" })
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("FORBIDDEN");
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
+    });
+
+    it("returns 403 for any Origin when CORS_ORIGINS is unset", async () => {
+      delete process.env.CORS_ORIGINS;
+
+      const response = await OPTIONS(
+        buildOptionsRequest({ Origin: "https://haluo.example.com" })
+      );
+
+      expect(response.status).toBe(403);
+    });
+
+    it("returns 204 without CORS headers when Origin is absent", async () => {
+      process.env.CORS_ORIGINS = "https://haluo.example.com";
+
+      const response = await OPTIONS(buildOptionsRequest());
+
+      expect(response.status).toBe(204);
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
+    });
+  });
+
+  // ---- P1 返修: CORS 约束作用于实际 POST，而非只在预检 ----
+  describe("POST CORS enforcement (P1)", () => {
+    const validRecord = {
+      externalOrderId: "HALUO-001",
+      sourceVersion: "2026-07-18T08:00:00.000Z",
+      sourceStatusRaw: "待取车",
+      orderNo: "ORDER-V2-001",
+      businessType: "STORE_PICKUP",
+      promisedPickupAt: "2026-07-18T09:00:00.000Z",
+      pickupAddress: "取车点",
+      deliveryAddress: "送达点",
+      storeCode: "STORE_HZ_XH"
+    };
+
+    it("rejects non-whitelisted Origin on actual POST with 403", async () => {
+      process.env.CORS_ORIGINS = "https://haluo.example.com";
+
+      const response = await POST(
+        buildRequest(buildEnvelope([validRecord]), {
+          Origin: "https://evil.example.com"
+        })
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(body.error.code).toBe("FORBIDDEN");
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
+      expect(processIngestEnvelope).not.toHaveBeenCalled();
+    });
+
+    it("rejects any Origin on POST when CORS_ORIGINS is unset", async () => {
+      delete process.env.CORS_ORIGINS;
+
+      const response = await POST(
+        buildRequest(buildEnvelope([validRecord]), {
+          Origin: "https://haluo.example.com"
+        })
+      );
+
+      expect(response.status).toBe(403);
+      expect(processIngestEnvelope).not.toHaveBeenCalled();
+    });
+
+    it("echoes CORS headers on successful POST for whitelisted Origin", async () => {
+      process.env.CORS_ORIGINS = "https://haluo.example.com";
+
+      const response = await POST(
+        buildRequest(buildEnvelope([validRecord]), {
+          Origin: "https://haluo.example.com"
+        })
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
+        "https://haluo.example.com"
+      );
+      expect(response.headers.get("Vary")).toContain("Origin");
+    });
+
+    it("echoes CORS headers on failure responses for whitelisted Origin", async () => {
+      process.env.CORS_ORIGINS = "https://haluo.example.com";
+
+      // 合法 Origin + 无效 key → 401 也必须带 CORS 头，浏览器才能读到错误
+      const response = await POST(
+        buildRequest(buildEnvelope([validRecord]), {
+          Origin: "https://haluo.example.com",
+          "X-Ingest-Key": "wrong-key"
+        })
+      );
+
+      expect(response.status).toBe(401);
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
+        "https://haluo.example.com"
+      );
+      expect(response.headers.get("Vary")).toContain("Origin");
+    });
+
+    it("leaves non-browser requests (no Origin) unaffected", async () => {
+      process.env.CORS_ORIGINS = "https://haluo.example.com";
+
+      const response = await POST(buildRequest(buildEnvelope([validRecord])));
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
+      expect(processIngestEnvelope).toHaveBeenCalledTimes(1);
     });
   });
 
