@@ -40,6 +40,8 @@ export type LocationRejectionReasonV2 =
   | "ACCURACY_TOO_LOW"
   | "CLOCK_SKEW"
   | "EXPIRED_AT_RECEIPT"
+  /** 结构非法样本：非有限数/越界坐标、负精度或无法解析的采集时间 */
+  | "INVALID_SAMPLE"
   | "DUPLICATE";
 
 export type LocationInvalidReasonV2 = Exclude<
