@@ -17,6 +17,62 @@ enum DriverStatus {
   UNAVAILABLE
 }
 
+enum DriverAvailability {
+  AVAILABLE
+  UNAVAILABLE
+}
+
+enum OrderSourceSystem {
+  HALUO
+  PLUGIN
+  API
+  V1_IMPORT
+}
+
+enum OrderExecutionStatus {
+  UNASSIGNED
+  PLANNED
+  EN_ROUTE
+  IN_SERVICE
+  COMPLETED
+  CANCELLED
+}
+
+enum OrderFeasibility {
+  UNKNOWN
+  NORMAL
+  AT_RISK
+  INFEASIBLE
+}
+
+enum AssignmentLockType {
+  NONE
+  AUTO_FROZEN
+  MANUAL_LOCKED
+}
+
+enum OrderSourceEventResult {
+  SUCCESS
+  SKIPPED
+  FAILED
+  MIGRATED
+}
+
+enum DispatchAlertType {
+  INFEASIBLE
+}
+
+enum DispatchAlertStatus {
+  OPEN
+  RESOLVED
+}
+
+enum DispatchAlertResolvedBy {
+  SYSTEM_RECALC
+  ORDER_MODIFIED
+  ORDER_CANCELLED
+}
+
 enum VehicleStatus {
   AVAILABLE
   PRE_ASSIGNED
@@ -63,6 +119,11 @@ enum OperationEntityType {
   DRIVER
   VEHICLE
   IMPORT_BATCH
+  ORDER_SOURCE_EVENT
+  DRIVER_SHIFT
+  SERVICE_PLAN
+  DISPATCH_ALERT
+  LOCATION_SAMPLE
 }
 
 enum OperationAction {
@@ -75,21 +136,32 @@ enum OperationAction {
   START
   COMPLETE
   IMPORT
+  AUTO_DISPATCH
+  DEPART
+  ARRIVE
+  MODULE_CHANGE
+  ORDER_MODIFY
+  ALERT_RESOLVE
+  SHIFT_START
+  SHIFT_END
+  UNLOCK
+  AVAILABILITY_CHANGE
 }
 
 model User {
-  id                 String         @id @default(cuid())
-  email              String         @unique
-  phone              String         @unique
-  name               String
-  password           String
-  role               String         @default("admin")
-  driverId           String?        @unique
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
-  driver             Driver?        @relation(fields: [driverId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  assignmentsCreated Assignment[]
-  operationLogs      OperationLog[]
+  id                  String             @id @default(cuid())
+  email               String             @unique
+  phone               String             @unique
+  name                String
+  password            String
+  role                String             @default("admin")
+  driverId            String?            @unique
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  driver              Driver?            @relation(fields: [driverId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  assignmentsCreated  Assignment[]
+  operationLogs       OperationLog[]
+  servicePlansUpdated OrderServicePlan[] @relation("ServicePlanUpdatedBy")
 }
 
 model Store {
@@ -105,22 +177,31 @@ model Store {
 }
 
 model Driver {
-  id           String         @id @default(cuid())
-  storeId      String
-  name         String
-  phone        String         @unique
-  status       DriverStatus   @default(S1)
-  isActive     Boolean        @default(true)
-  lastOnlineAt DateTime?
-  lastLat      Float?
-  lastLng      Float?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  store        Store          @relation(fields: [storeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  user         User?
-  assignments  Assignment[]
+  id                     String                 @id @default(cuid())
+  storeId                String
+  name                   String
+  phone                  String                 @unique
+  status                 DriverStatus           @default(S1)
+  onShift                Boolean                @default(false)
+  availability           DriverAvailability     @default(AVAILABLE)
+  planVersion            Int                    @default(1)
+  isActive               Boolean                @default(true)
+  lastOnlineAt           DateTime?              @db.Timestamptz(6)
+  lastLat                Float?
+  lastLng                Float?
+  lastAccuracyMeters     Float?
+  lastLocationCapturedAt DateTime?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  store                  Store                  @relation(fields: [storeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  user                   User?
+  assignments            Assignment[]
+  shifts                 DriverShift[]
+  locationSamples        DriverLocationSample[]
+  operationLogs          OperationLog[]
 
   @@index([storeId, status])
+  @@index([onShift, availability])
 }
 
 model Vehicle {
@@ -141,10 +222,16 @@ model Vehicle {
 }
 
 model Order {
-  id                   String        @id @default(cuid())
-  orderNo              String        @unique
+  id                   String               @id @default(cuid())
+  orderNo              String
   type                 OrderType
-  status               OrderStatus   @default(PENDING)
+  status               OrderStatus          @default(PENDING)
+  sourceSystem         OrderSourceSystem    @default(V1_IMPORT)
+  externalOrderId      String               @default("")
+  sourceVersion        String               @default("v1-migration")
+  executionStatus      OrderExecutionStatus @default(UNASSIGNED)
+  feasibility          OrderFeasibility     @default(UNKNOWN)
+  slackMinutes         Int?
   storeId              String
   vehicleId            String?
   licensePlateSnapshot String?
@@ -158,47 +245,76 @@ model Order {
   returnAddress        String
   returnLat            Float?
   returnLng            Float?
+  deliveryAddress      String               @default("")
+  deliveryLat          Float?
+  deliveryLng          Float?
   geocodePickupStatus  String?
   geocodeReturnStatus  String?
   scheduledAt          DateTime
+  promisedPickupAt     DateTime             @default(now())
+  receivedAt           DateTime             @default(now())
+  remark               String?
+  cancelledAt          DateTime?
   currentAssignmentId  String?
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
-  store                Store         @relation(fields: [storeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  vehicle              Vehicle?      @relation(fields: [vehicleId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  assignments          Assignment[]  @relation("OrderAssignments")
-  currentAssignment    Assignment?   @relation("CurrentAssignment", fields: [currentAssignmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  store                Store                @relation(fields: [storeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  vehicle              Vehicle?             @relation(fields: [vehicleId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  assignments          Assignment[]         @relation("OrderAssignments")
+  currentAssignment    Assignment?          @relation("CurrentAssignment", fields: [currentAssignmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  sourceEvents         OrderSourceEvent[]
+  dispatchAlerts       DispatchAlert[]
+  operationLogs        OperationLog[]
 
+  @@unique([sourceSystem, externalOrderId])
+  @@index([orderNo])
   @@index([storeId, status])
   @@index([status, scheduledAt])
   @@index([currentAssignmentId])
   @@index([importBatchId])
+  @@index([executionStatus, promisedPickupAt])
+  @@index([feasibility, executionStatus])
 }
 
 model Assignment {
-  id                   String           @id @default(cuid())
+  id                   String             @id @default(cuid())
   orderId              String
   driverId             String
   type                 AssignmentType
-  status               AssignmentStatus @default(ACTIVE)
+  status               AssignmentStatus   @default(ACTIVE)
   previousAssignmentId String?
   createdByUserId      String
-  assignedAt           DateTime         @default(now())
+  assignedAt           DateTime           @default(now())
   acceptedAt           DateTime?
   withdrawnAt          DateTime?
   recycledAt           DateTime?
+  sequenceNo           Int?
+  plannedDepartAt      DateTime?
+  plannedPickupAt      DateTime?
+  plannedCompleteAt    DateTime?
+  deadheadEtaMinutes   Int?
+  serviceEtaMinutes    Int?
+  etaUnavailableReason String?
+  lockType             AssignmentLockType @default(NONE)
+  departedAt           DateTime?
+  arrivedAt            DateTime?
   completedAt          DateTime?
-  order                Order            @relation("OrderAssignments", fields: [orderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  driver               Driver           @relation(fields: [driverId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  createdByUser        User             @relation(fields: [createdByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  previousAssignment   Assignment?      @relation("AssignmentChain", fields: [previousAssignmentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  nextAssignments      Assignment[]     @relation("AssignmentChain")
-  currentForOrders     Order[]          @relation("CurrentAssignment")
+  lastEtaCalculatedAt  DateTime?
+  order                Order              @relation("OrderAssignments", fields: [orderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  driver               Driver             @relation(fields: [driverId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  createdByUser        User               @relation(fields: [createdByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  previousAssignment   Assignment?        @relation("AssignmentChain", fields: [previousAssignmentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  nextAssignments      Assignment[]       @relation("AssignmentChain")
+  currentForOrders     Order[]            @relation("CurrentAssignment")
+  servicePlan          OrderServicePlan?
+  operationLogs        OperationLog[]
 
   @@index([orderId, status])
   @@index([driverId, status])
   @@index([assignedAt])
   @@index([previousAssignmentId])
+  @@index([driverId, sequenceNo])
+  @@index([orderId, lockType])
 }
 
 model OperationLog {
@@ -207,14 +323,106 @@ model OperationLog {
   entityId       String
   action         OperationAction
   operatorUserId String
+  orderId        String?
+  driverId       String?
+  assignmentId   String?
+  traceId        String?
   reason         String?
   metadataJson   Json?
   createdAt      DateTime            @default(now())
   operatorUser   User                @relation(fields: [operatorUserId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  order          Order?              @relation(fields: [orderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  driver         Driver?             @relation(fields: [driverId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  assignment     Assignment?         @relation(fields: [assignmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   @@index([entityType, entityId])
   @@index([operatorUserId, createdAt])
   @@index([action, createdAt])
+  @@index([orderId, createdAt])
+  @@index([driverId, createdAt])
+  @@index([assignmentId, createdAt])
+  @@index([traceId])
+}
+
+model OrderSourceEvent {
+  id              String                 @id @default(cuid())
+  orderId         String?
+  sourceSystem    OrderSourceSystem
+  externalOrderId String
+  sourceVersion   String
+  sourceStatusRaw String
+  result          OrderSourceEventResult
+  reason          String?
+  payloadSummary  Json?
+  traceId         String?
+  receivedAt      DateTime               @default(now())
+  processedAt     DateTime?
+  createdAt       DateTime               @default(now())
+  order           Order?                 @relation(fields: [orderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@unique([sourceSystem, externalOrderId, sourceVersion])
+  @@index([orderId, receivedAt])
+  @@index([result, receivedAt])
+  @@index([traceId])
+}
+
+model DriverShift {
+  id        String    @id @default(cuid())
+  driverId  String
+  startedAt DateTime
+  endedAt   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  driver    Driver    @relation(fields: [driverId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([driverId, startedAt])
+  @@index([endedAt])
+}
+
+model OrderServicePlan {
+  id                 String     @id @default(cuid())
+  assignmentId       String     @unique
+  modulesJson        Json       @default("[]")
+  totalModuleMinutes Int        @default(0)
+  revision           Int        @default(1)
+  updatedByUserId    String?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  assignment         Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  updatedBy          User?      @relation("ServicePlanUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([updatedByUserId, updatedAt])
+}
+
+model DispatchAlert {
+  id                   String                   @id @default(cuid())
+  orderId              String
+  type                 DispatchAlertType        @default(INFEASIBLE)
+  status               DispatchAlertStatus      @default(OPEN)
+  slackMinutesAtCreate Int
+  resolvedAt           DateTime?
+  resolvedBy           DispatchAlertResolvedBy?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  order                Order                    @relation(fields: [orderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([orderId, status])
+  @@index([status, createdAt])
+}
+
+model DriverLocationSample {
+  id             String   @id @default(cuid())
+  driverId       String
+  lat            Float
+  lng            Float
+  accuracyMeters Float
+  capturedAt     DateTime
+  receivedAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+  driver         Driver   @relation(fields: [driverId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([driverId, capturedAt])
+  @@index([capturedAt])
 }
 
 model GeocodeCache {
@@ -227,8 +435,8 @@ model GeocodeCache {
   geocodeStatus     String
   failReason        String?
   amapRequestId     String?
-  expiresAt         DateTime?
+  expiresAt         DateTime? @db.Timestamptz(6)
   hitCount          Int       @default(0)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
 }
