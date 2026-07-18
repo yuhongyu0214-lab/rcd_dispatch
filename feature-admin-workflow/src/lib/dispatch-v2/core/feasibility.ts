@@ -85,8 +85,7 @@ export function etaUnavailableReason(
   if (!hasDestination) {
     return "DESTINATION_MISSING";
   }
-  // When both exist but the resolver still returned null (e.g. calculation
-  // overflow), fall back to a generic reason. In practice the default
-  // haversine resolver never returns null when coordinates are present.
+  // When both endpoints exist but the injected resolver still returned null
+  // (provider gap, calculation failure), fall back to the generic reason.
   return "AMAP_UNAVAILABLE";
 }

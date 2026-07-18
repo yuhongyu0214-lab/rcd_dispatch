@@ -9,9 +9,9 @@ import type {
   GeoPointV2,
 } from "@/types/v2";
 
-import { filterCandidateDrivers } from "./candidate-filter";
+import { filterCandidateDrivers, filterDispatchableOrders } from "./candidate-filter";
 import { calculateFeasibility, calculateSlackMinutes } from "./feasibility";
-import { haversineEtaResolver, runDispatchV2 } from "./index";
+import { runDispatchV2 } from "./index";
 import { sortOrdersByPriority } from "./sorter";
 import { planSlots } from "./slot-planner";
 import type { EtaResolver } from "./types";
@@ -75,6 +75,17 @@ function mapEtaResolver(lookup: Map<string, number | null>): EtaResolver {
   };
 }
 
+/**
+ * Test-local resolver: minutes proportional to straight-line distance.
+ * The production core never generates ETA values itself — resolvers are
+ * always injected.
+ */
+const distanceEtaResolver: EtaResolver = (from, to) => {
+  const dLat = to.lat - from.lat;
+  const dLng = to.lng - from.lng;
+  return Math.round(Math.sqrt(dLat * dLat + dLng * dLng) * 200);
+};
+
 // =========================================================================
 // candidate-filter tests
 // =========================================================================
@@ -114,6 +125,29 @@ describe("filterCandidateDrivers", () => {
     const snapshot = JSON.stringify(drivers);
     filterCandidateDrivers(drivers);
     expect(JSON.stringify(drivers)).toBe(snapshot);
+  });
+});
+
+// =========================================================================
+// filterDispatchableOrders tests
+// =========================================================================
+
+describe("filterDispatchableOrders", () => {
+  it("keeps only UNASSIGNED orders", () => {
+    const orders = [
+      makeOrder({ orderId: "u", executionStatus: "UNASSIGNED" }),
+      makeOrder({ orderId: "p", executionStatus: "PLANNED" }),
+      makeOrder({ orderId: "e", executionStatus: "EN_ROUTE" }),
+      makeOrder({ orderId: "s", executionStatus: "IN_SERVICE" }),
+      makeOrder({ orderId: "c", executionStatus: "COMPLETED" }),
+      makeOrder({ orderId: "x", executionStatus: "CANCELLED" }),
+    ];
+    const result = filterDispatchableOrders(orders);
+    expect(result.map((o) => o.orderId)).toEqual(["u"]);
+  });
+
+  it("returns empty array when no orders provided", () => {
+    expect(filterDispatchableOrders([])).toEqual([]);
   });
 });
 
@@ -202,34 +236,6 @@ describe("sortOrdersByPriority", () => {
 });
 
 // =========================================================================
-// haversine ETA resolver tests
-// =========================================================================
-
-describe("haversineEtaResolver", () => {
-  it("returns a positive number for valid coordinates", () => {
-    const result = haversineEtaResolver(PT_HZ_XH, PT_GONGSHU);
-    expect(result).toBeGreaterThan(0);
-    expect(Number.isInteger(result)).toBe(true);
-  });
-
-  it("returns 0 for same coordinates", () => {
-    const result = haversineEtaResolver(PT_HZ_XH, PT_HZ_XH);
-    expect(result).toBe(0);
-  });
-
-  it("is deterministic — same input gives same output", () => {
-    const a = haversineEtaResolver(PT_HZ_XH, PT_GONGSHU);
-    const b = haversineEtaResolver(PT_HZ_XH, PT_GONGSHU);
-    expect(a).toBe(b);
-  });
-
-  it("returns null for non-finite coordinates", () => {
-    expect(haversineEtaResolver({ lat: NaN, lng: 120 }, PT_GONGSHU)).toBeNull();
-    expect(haversineEtaResolver(PT_HZ_XH, { lat: 30, lng: Infinity })).toBeNull();
-  });
-});
-
-// =========================================================================
 // runDispatchV2 — integration tests
 // =========================================================================
 
@@ -298,28 +304,9 @@ describe("runDispatchV2", () => {
   });
 
   it("multiple drivers, single order → best ETA wins", () => {
+    // Give drivers different positions; d2 is closer to pickup → shorter
+    // ETA → wins.
     const input: DispatchInputV2 = {
-      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
-      orders: [makeOrder({ orderId: "o1" })],
-      drivers: [
-        makeDriver({ driverId: "d1" }),
-        makeDriver({ driverId: "d2" }),
-      ],
-    };
-
-    // d1 has 30min ETA, d2 has 10min → d2 should win
-    const etaLookup = new Map<string, number>();
-    etaLookup.set("30.2741,120.1551->30.2741,120.1551", 10); // d2's position to pickup
-
-    const resolver: EtaResolver = (_from, _to) => {
-      // Both drivers start at same position — we need to differentiate
-      // Use a simple counter approach instead
-      return 15;
-    };
-
-    // Actually, both drivers share coordinates. Let me make a more precise test.
-    // Give drivers different positions
-    const input2: DispatchInputV2 = {
       event: { type: "ORDER_RECEIVED", occurredAt: NOW },
       orders: [makeOrder({ orderId: "o1", pickupLocation: { lat: 30.5, lng: 120.5 } })],
       drivers: [
@@ -334,8 +321,7 @@ describe("runDispatchV2", () => {
       ],
     };
 
-    // d2 is closer to pickup → shorter ETA → wins
-    const result = runDispatchV2(input2, haversineEtaResolver);
+    const result = runDispatchV2(input, distanceEtaResolver);
     expect(result.proposals[1].assignments[0]?.orderId ?? "").toBe("o1");
   });
 
@@ -418,6 +404,10 @@ describe("runDispatchV2", () => {
       executionStatus: "PLANNED",
       pickupLocation: { lat: 30.275, lng: 120.156 },
       deliveryLocation: { lat: 30.320, lng: 120.143 },
+      // Immobile timelines advance ONLY via stored times — required for the
+      // next slot to be plannable.
+      plannedDepartAt: "2026-07-18T08:00:00.000Z",
+      plannedCompleteAt: "2026-07-18T08:40:00.000Z",
       serviceModuleMinutes: 0,
     };
 
@@ -464,6 +454,8 @@ describe("runDispatchV2", () => {
       executionStatus: "PLANNED",
       pickupLocation: { lat: 30.275, lng: 120.156 },
       deliveryLocation: { lat: 30.320, lng: 120.143 },
+      plannedDepartAt: "2026-07-18T08:00:00.000Z",
+      plannedCompleteAt: "2026-07-18T08:40:00.000Z",
       serviceModuleMinutes: 0,
     };
 
@@ -499,6 +491,8 @@ describe("runDispatchV2", () => {
       executionStatus: "PLANNED",
       pickupLocation: { lat: 30.275, lng: 120.156 },
       deliveryLocation: { lat: 30.320, lng: 120.143 },
+      plannedDepartAt: "2026-07-18T07:50:00.000Z",
+      plannedCompleteAt: "2026-07-18T08:30:00.000Z",
       serviceModuleMinutes: 0,
     };
 
@@ -531,6 +525,8 @@ describe("runDispatchV2", () => {
       executionStatus: "PLANNED",
       pickupLocation: { lat: 30.275, lng: 120.156 },
       deliveryLocation: { lat: 30.320, lng: 120.143 },
+      plannedDepartAt: "2026-07-18T07:55:00.000Z",
+      plannedCompleteAt: "2026-07-18T08:35:00.000Z",
       serviceModuleMinutes: 0,
     };
 
@@ -718,11 +714,15 @@ describe("runDispatchV2", () => {
   // Base fixture
   // -----------------------------------------------------------------------
 
-  it("works with FIXTURE_DISPATCH_INPUT_V2", () => {
+  it("works with FIXTURE_DISPATCH_INPUT_V2 (no resolver → no-ETA mode)", () => {
     const result = runDispatchV2(FIXTURE_DISPATCH_INPUT_V2);
     expect(result.proposals).toHaveLength(1);
     expect(result.proposals[0].driverId).toBe("driver-v2-001");
     expect(result.proposals[0].expectedPlanVersion).toBe(1);
+    // Without an injected resolver the core must NOT invent ETAs — the order
+    // is reported as ETA-unavailable instead of being planned.
+    expect(result.proposals[0].assignments).toEqual([]);
+    expect(result.etaUnavailableOrderIds).toEqual(["order-v2-001"]);
   });
 
   // -----------------------------------------------------------------------
@@ -816,7 +816,9 @@ describe("planSlots", () => {
   });
 
   it("gaps before immobile slots are fillable", () => {
-    // Immobile at slot B, slot A is empty → should be fillable
+    // Immobile at slot B (WITH a stored departure bound), slot A is empty
+    // → should be fillable as long as the new work completes before the
+    // driver must depart for B.
     const immobileB: DispatchAssignmentInputV2 = {
       assignmentId: "imm-b",
       orderId: "imm-order-b",
@@ -825,6 +827,8 @@ describe("planSlots", () => {
       executionStatus: "PLANNED",
       pickupLocation: { lat: 30.275, lng: 120.156 },
       deliveryLocation: { lat: 30.320, lng: 120.143 },
+      plannedDepartAt: "2026-07-18T08:30:00.000Z",
+      plannedCompleteAt: "2026-07-18T09:10:00.000Z",
       serviceModuleMinutes: 0,
     };
 
@@ -854,5 +858,468 @@ describe("planSlots", () => {
     const slotB = d1.find((a) => a.sequenceNo === 2)!;
     expect(slotB.orderId).toBe("imm-order-b");
     expect(slotB.assignmentId).toBe("imm-b");
+  });
+});
+
+// =========================================================================
+// Regression tests — P0 / P1 fixes
+// =========================================================================
+
+describe("regression: P0/P1 fixes", () => {
+  // -----------------------------------------------------------------------
+  // P0-1: no fake ETA — absent resolver means "no ETA available"
+  // -----------------------------------------------------------------------
+
+  it("P0-1: no etaResolver → all pool orders are ETA-unavailable, no fake plans", () => {
+    const input: DispatchInputV2 = {
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [
+        makeOrder({ orderId: "o1" }),
+        makeOrder({ orderId: "o2", promisedPickupAt: "2026-07-18T10:00:00.000Z" }),
+      ],
+      drivers: [
+        makeDriver({ driverId: "d1" }),
+        makeDriver({ driverId: "d2" }),
+      ],
+    };
+    // No resolver injected — the core must not fall back to haversine/average
+    // speed estimation.
+    const result = runDispatchV2(input);
+    expect([...result.etaUnavailableOrderIds].sort()).toEqual(["o1", "o2"]);
+    expect(result.infeasibleOrderIds).toEqual([]);
+    for (const p of result.proposals) {
+      expect(p.assignments).toEqual([]);
+    }
+  });
+
+  it("P0-1: no etaResolver still respects locked assignments (stored plan kept)", () => {
+    const locked: DispatchAssignmentInputV2 = {
+      assignmentId: "locked-noeta",
+      orderId: "locked-order",
+      sequenceNo: 1,
+      lockType: "MANUAL_LOCKED",
+      executionStatus: "PLANNED",
+      pickupLocation: { lat: 30.275, lng: 120.156 },
+      deliveryLocation: { lat: 30.32, lng: 120.143 },
+      plannedDepartAt: "2026-07-18T08:10:00.000Z",
+      plannedCompleteAt: "2026-07-18T08:50:00.000Z",
+      serviceModuleMinutes: 0,
+    };
+    const input: DispatchInputV2 = {
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [
+        makeOrder({ orderId: "locked-order", executionStatus: "PLANNED" }),
+        makeOrder({ orderId: "o1" }),
+      ],
+      drivers: [makeDriver({ driverId: "d1", assignments: [locked] })],
+    };
+    const result = runDispatchV2(input);
+
+    const d1 = result.proposals[0];
+    expect(d1.assignments).toHaveLength(1);
+    expect(d1.assignments[0].assignmentId).toBe("locked-noeta");
+    expect(d1.assignments[0].plannedDepartAt).toBe("2026-07-18T08:10:00.000Z");
+    expect(d1.assignments[0].plannedCompleteAt).toBe("2026-07-18T08:50:00.000Z");
+    // The input contract carries no pickup time — none may be invented.
+    expect(d1.assignments[0].plannedPickupAt).toBeUndefined();
+    expect(d1.assignments[0].etaAvailable).toBe(true);
+    // The new order cannot be planned without a real ETA source.
+    expect(result.etaUnavailableOrderIds).toEqual(["o1"]);
+  });
+
+  // -----------------------------------------------------------------------
+  // P0-2: terminal orders never enter the dispatchable pool
+  // -----------------------------------------------------------------------
+
+  it("P0-2: CANCELLED / COMPLETED orders don't enter the dispatchable pool", () => {
+    const input: DispatchInputV2 = {
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [
+        makeOrder({ orderId: "cancelled-order", executionStatus: "CANCELLED" }),
+        makeOrder({ orderId: "completed-order", executionStatus: "COMPLETED" }),
+        makeOrder({ orderId: "o1" }),
+      ],
+      drivers: [makeDriver({ driverId: "d1" })],
+    };
+    const result = runDispatchV2(input, fixedEtaResolver(10));
+
+    const assignedOrderIds = result.proposals.flatMap((p) =>
+      p.assignments.map((a) => a.orderId)
+    );
+    expect(assignedOrderIds).toEqual(["o1"]);
+    // Terminal orders are silently excluded — they are neither infeasible
+    // nor ETA-unavailable, they are simply not dispatchable.
+    expect(result.infeasibleOrderIds).toEqual([]);
+    expect(result.etaUnavailableOrderIds).toEqual([]);
+  });
+
+  // -----------------------------------------------------------------------
+  // P0-3: assignment's OWN execution status governs immobility
+  // -----------------------------------------------------------------------
+
+  it("P0-3: EN_ROUTE assignment is immobile even when the order snapshot is missing", () => {
+    const enRouteAsg: DispatchAssignmentInputV2 = {
+      assignmentId: "enroute-ghost",
+      orderId: "ghost-order", // deliberately NOT present in input.orders
+      sequenceNo: 1,
+      lockType: "NONE",
+      executionStatus: "EN_ROUTE",
+      pickupLocation: { lat: 30.275, lng: 120.156 },
+      deliveryLocation: { lat: 30.32, lng: 120.143 },
+      plannedDepartAt: "2026-07-18T07:50:00.000Z",
+      plannedCompleteAt: "2026-07-18T08:30:00.000Z",
+      serviceModuleMinutes: 0,
+    };
+    const input: DispatchInputV2 = {
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [makeOrder({ orderId: "o1" })],
+      drivers: [makeDriver({ driverId: "d1", assignments: [enRouteAsg] })],
+    };
+    const result = runDispatchV2(input, fixedEtaResolver(10));
+
+    const d1 = result.proposals[0];
+    // The EN_ROUTE assignment stays in slot A; the new order goes to slot B.
+    expect(
+      d1.assignments.some((a) => a.assignmentId === "enroute-ghost" && a.sequenceNo === 1)
+    ).toBe(true);
+    expect(d1.assignments.some((a) => a.orderId === "o1" && a.sequenceNo === 2)).toBe(true);
+  });
+
+  it("P0-3: COMPLETED assignment is immobile (never released) even without the order snapshot", () => {
+    const completedAsg: DispatchAssignmentInputV2 = {
+      assignmentId: "completed-ghost",
+      orderId: "ghost-completed-order", // NOT present in input.orders
+      sequenceNo: 1,
+      lockType: "NONE",
+      executionStatus: "COMPLETED",
+      pickupLocation: { lat: 30.275, lng: 120.156 },
+      deliveryLocation: { lat: 30.32, lng: 120.143 },
+      plannedDepartAt: "2026-07-18T07:30:00.000Z",
+      plannedCompleteAt: "2026-07-18T08:10:00.000Z",
+      serviceModuleMinutes: 0,
+    };
+    const input: DispatchInputV2 = {
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [makeOrder({ orderId: "o1" })],
+      drivers: [makeDriver({ driverId: "d1", assignments: [completedAsg] })],
+    };
+    const result = runDispatchV2(input, fixedEtaResolver(10));
+
+    const d1 = result.proposals[0];
+    expect(d1.assignments.some((a) => a.assignmentId === "completed-ghost")).toBe(true);
+    // The completed assignment keeps occupying slot A — the new order lands on B.
+    expect(d1.assignments.some((a) => a.orderId === "o1" && a.sequenceNo === 2)).toBe(true);
+  });
+
+  // -----------------------------------------------------------------------
+  // P1-1: missing service-leg ETA ⇒ etaAvailable=false
+  // -----------------------------------------------------------------------
+
+  it("P1-1: etaAvailable=false when the service-leg ETA is missing", () => {
+    // Deadhead (driver → pickup) resolves; service leg (pickup → delivery)
+    // does not (simulated Amap gap).
+    const lookup = new Map<string, number | null>();
+    lookup.set(`${PT_HZ_XH.lat},${PT_HZ_XH.lng}->${PT_HZ_XH.lat},${PT_HZ_XH.lng}`, 10);
+    const resolver = mapEtaResolver(lookup);
+
+    const input: DispatchInputV2 = {
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [makeOrder({ orderId: "o1" })], // pickup PT_HZ_XH, delivery PT_GONGSHU
+      drivers: [makeDriver({ driverId: "d1" })], // located at PT_HZ_XH
+    };
+    const result = runDispatchV2(input, resolver);
+
+    const asg = result.proposals[0].assignments[0];
+    expect(asg).toBeDefined();
+    expect(asg.orderId).toBe("o1");
+    expect(asg.etaAvailable).toBe(false);
+    expect(asg.etaUnavailableReason).toBe("AMAP_UNAVAILABLE");
+    // Incomplete chain — no fabricated completion data.
+    expect(asg.plannedCompleteAt).toBeUndefined();
+    expect(asg.serviceEtaMinutes).toBeUndefined();
+    // The resolvable deadhead leg is still surfaced.
+    expect(asg.deadheadEtaMinutes).toBe(10);
+  });
+
+  it("P1-1: etaAvailable=false with DESTINATION_MISSING when the order has no delivery location", () => {
+    const input: DispatchInputV2 = {
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [makeOrder({ orderId: "o1", deliveryLocation: undefined })],
+      drivers: [makeDriver({ driverId: "d1" })],
+    };
+    const result = runDispatchV2(input, fixedEtaResolver(10));
+
+    const asg = result.proposals[0].assignments[0];
+    expect(asg).toBeDefined();
+    expect(asg.etaAvailable).toBe(false);
+    expect(asg.etaUnavailableReason).toBe("DESTINATION_MISSING");
+    expect(asg.plannedCompleteAt).toBeUndefined();
+  });
+
+  // -----------------------------------------------------------------------
+  // P1-2: new order in the gap before a locked slot must not overlap it
+  // (frozen rule: completeAt <= locked slot's plannedDepartAt)
+  // -----------------------------------------------------------------------
+
+  it("P1-2: new order in empty slot A must complete before locked B departs", () => {
+    const lockedB: DispatchAssignmentInputV2 = {
+      assignmentId: "locked-b",
+      orderId: "locked-order-b",
+      sequenceNo: 2,
+      lockType: "MANUAL_LOCKED",
+      executionStatus: "PLANNED",
+      pickupLocation: { lat: 30.275, lng: 120.156 },
+      deliveryLocation: { lat: 30.32, lng: 120.143 },
+      plannedDepartAt: "2026-07-18T08:30:00.000Z",
+      plannedCompleteAt: "2026-07-18T09:10:00.000Z",
+      serviceModuleMinutes: 0,
+    };
+    const makeInput = (): DispatchInputV2 => ({
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [
+        makeOrder({ orderId: "locked-order-b", executionStatus: "PLANNED" }),
+        makeOrder({ orderId: "new-order" }),
+      ],
+      drivers: [makeDriver({ driverId: "d1", assignments: [lockedB] })],
+    });
+
+    // deadhead 30 + service 30 → would complete 09:00 > locked departure
+    // 08:30 → timeline overlap → slot A cannot host the order.
+    const overlap = runDispatchV2(makeInput(), fixedEtaResolver(30));
+    expect(overlap.infeasibleOrderIds).toEqual(["new-order"]);
+    expect(overlap.proposals[0].assignments.map((a) => a.assignmentId)).toEqual(["locked-b"]);
+
+    // deadhead 10 + service 10 → completes 08:20 <= 08:30 → fits in slot A.
+    const fits = runDispatchV2(makeInput(), fixedEtaResolver(10));
+    expect(fits.infeasibleOrderIds).toEqual([]);
+    const slotA = fits.proposals[0].assignments.find((a) => a.sequenceNo === 1);
+    expect(slotA?.orderId).toBe("new-order");
+    expect(slotA?.plannedCompleteAt).toBe("2026-07-18T08:20:00.000Z");
+
+    // Boundary: deadhead 15 + service 15 → completes exactly at the locked
+    // departure 08:30 → completeAt <= plannedDepartAt → still allowed.
+    const boundary = runDispatchV2(makeInput(), fixedEtaResolver(15));
+    expect(boundary.infeasibleOrderIds).toEqual([]);
+    expect(
+      boundary.proposals[0].assignments.find((a) => a.sequenceNo === 1)?.orderId
+    ).toBe("new-order");
+  });
+
+  // -----------------------------------------------------------------------
+  // P1-3: locked/executing assignment times are never recalculated
+  // -----------------------------------------------------------------------
+
+  it("P1-3: locked assignment keeps its stored plan; the next slot starts after it", () => {
+    const lockedA: DispatchAssignmentInputV2 = {
+      assignmentId: "locked-a",
+      orderId: "locked-order-a",
+      sequenceNo: 1,
+      lockType: "MANUAL_LOCKED",
+      executionStatus: "PLANNED",
+      pickupLocation: { lat: 30.275, lng: 120.156 },
+      deliveryLocation: { lat: 30.32, lng: 120.143 },
+      plannedDepartAt: "2026-07-18T08:00:00.000Z",
+      plannedCompleteAt: "2026-07-18T08:45:00.000Z",
+      serviceModuleMinutes: 0,
+    };
+    const input: DispatchInputV2 = {
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [
+        makeOrder({ orderId: "locked-order-a", executionStatus: "PLANNED" }),
+        makeOrder({ orderId: "o1" }),
+      ],
+      drivers: [makeDriver({ driverId: "d1", assignments: [lockedA] })],
+    };
+    // A 7-minute resolver would recompute the locked plan as depart 08:00 /
+    // complete ~08:14 — the stored plan must win, verbatim.
+    const result = runDispatchV2(input, fixedEtaResolver(7));
+    const d1 = result.proposals[0];
+
+    const slotA = d1.assignments.find((a) => a.sequenceNo === 1)!;
+    expect(slotA.assignmentId).toBe("locked-a");
+    expect(slotA.plannedDepartAt).toBe("2026-07-18T08:00:00.000Z");
+    expect(slotA.plannedCompleteAt).toBe("2026-07-18T08:45:00.000Z");
+    expect(slotA.plannedPickupAt).toBeUndefined();
+    expect(slotA.etaAvailable).toBe(true);
+
+    // The next slot's timeline starts from the locked completion time,
+    // not from the event time.
+    const slotB = d1.assignments.find((a) => a.sequenceNo === 2)!;
+    expect(slotB.orderId).toBe("o1");
+    expect(slotB.plannedDepartAt).toBe("2026-07-18T08:45:00.000Z");
+    expect(slotB.plannedPickupAt).toBe("2026-07-18T08:52:00.000Z");
+  });
+
+  // -----------------------------------------------------------------------
+  // P1-4: new planned assignments carry serviceEtaMinutes / plannedCompleteAt
+  // -----------------------------------------------------------------------
+
+  it("P1-4: new planned assignments carry serviceEtaMinutes and plannedCompleteAt", () => {
+    const input: DispatchInputV2 = {
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [makeOrder({ orderId: "o1", serviceModuleMinutes: 8 })],
+      drivers: [makeDriver({ driverId: "d1" })],
+    };
+    const result = runDispatchV2(input, fixedEtaResolver(12));
+
+    const asg = result.proposals[0].assignments[0];
+    expect(asg.etaAvailable).toBe(true);
+    expect(asg.deadheadEtaMinutes).toBe(12);
+    expect(asg.serviceEtaMinutes).toBe(12);
+    expect(asg.plannedDepartAt).toBe(NOW);
+    expect(asg.plannedPickupAt).toBe("2026-07-18T08:12:00.000Z");
+    // completeAt = pickup + service ETA (12) + service modules (8)
+    expect(asg.plannedCompleteAt).toBe("2026-07-18T08:32:00.000Z");
+  });
+});
+
+// =========================================================================
+// Regression tests — frozen plannedDepartAt / immobile-cursor rules
+// =========================================================================
+
+describe("regression: plannedDepartAt overlap bound & immobile cursor", () => {
+  // -----------------------------------------------------------------------
+  // Locked slot WITHOUT plannedDepartAt → earlier empty slots are forbidden
+  // -----------------------------------------------------------------------
+
+  it("locked B without plannedDepartAt: the empty slot before it is never filled", () => {
+    const lockedB: DispatchAssignmentInputV2 = {
+      assignmentId: "locked-nodepart",
+      orderId: "locked-order-b",
+      sequenceNo: 2,
+      lockType: "MANUAL_LOCKED",
+      executionStatus: "PLANNED",
+      pickupLocation: { lat: 30.275, lng: 120.156 },
+      deliveryLocation: { lat: 30.32, lng: 120.143 },
+      // plannedDepartAt deliberately missing — the bound must NOT be
+      // inferred from plannedCompleteAt or any ETA computation.
+      plannedCompleteAt: "2026-07-18T09:10:00.000Z",
+      serviceModuleMinutes: 0,
+    };
+    const input: DispatchInputV2 = {
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [
+        makeOrder({ orderId: "locked-order-b", executionStatus: "PLANNED" }),
+        makeOrder({ orderId: "new-order", promisedPickupAt: "2026-07-18T09:30:00.000Z" }),
+      ],
+      drivers: [makeDriver({ driverId: "d1", assignments: [lockedB] })],
+    };
+    // Even a 1-minute ETA everywhere must not squeeze the order in before B.
+    const result = runDispatchV2(input, fixedEtaResolver(1));
+
+    const d1 = result.proposals[0];
+    expect(d1.assignments.find((a) => a.sequenceNo === 1)).toBeUndefined();
+    // The slot AFTER B stays usable — it starts from B's stored completion.
+    const slotC = d1.assignments.find((a) => a.sequenceNo === 3);
+    expect(slotC?.orderId).toBe("new-order");
+    expect(slotC?.plannedDepartAt).toBe("2026-07-18T09:10:00.000Z");
+    expect(result.infeasibleOrderIds).toEqual([]);
+    expect(result.etaUnavailableOrderIds).toEqual([]);
+  });
+
+  it("locked slot without plannedDepartAt forbids ALL earlier empty slots (sole driver → infeasible)", () => {
+    const lockedC: DispatchAssignmentInputV2 = {
+      assignmentId: "locked-c-nodepart",
+      orderId: "locked-order-c",
+      sequenceNo: 3,
+      lockType: "MANUAL_LOCKED",
+      executionStatus: "PLANNED",
+      pickupLocation: { lat: 30.275, lng: 120.156 },
+      deliveryLocation: { lat: 30.32, lng: 120.143 },
+      plannedCompleteAt: "2026-07-18T10:00:00.000Z",
+      serviceModuleMinutes: 0,
+    };
+    const input: DispatchInputV2 = {
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [
+        makeOrder({ orderId: "locked-order-c", executionStatus: "PLANNED" }),
+        makeOrder({ orderId: "new-order" }),
+      ],
+      drivers: [makeDriver({ driverId: "d1", assignments: [lockedC] })],
+    };
+    const result = runDispatchV2(input, fixedEtaResolver(1));
+
+    // Slots A and B both precede the bound-less locked slot C → forbidden;
+    // the sole driver has no usable capacity → infeasible per existing logic.
+    expect(result.proposals[0].assignments.map((a) => a.assignmentId)).toEqual([
+      "locked-c-nodepart",
+    ]);
+    expect(result.infeasibleOrderIds).toEqual(["new-order"]);
+    expect(result.etaUnavailableOrderIds).toEqual([]);
+  });
+
+  it("locked slot without plannedDepartAt: the order stays available for other drivers", () => {
+    const lockedC: DispatchAssignmentInputV2 = {
+      assignmentId: "locked-c-nodepart",
+      orderId: "locked-order-c",
+      sequenceNo: 3,
+      lockType: "MANUAL_LOCKED",
+      executionStatus: "PLANNED",
+      pickupLocation: { lat: 30.275, lng: 120.156 },
+      deliveryLocation: { lat: 30.32, lng: 120.143 },
+      plannedCompleteAt: "2026-07-18T10:00:00.000Z",
+      serviceModuleMinutes: 0,
+    };
+    const input: DispatchInputV2 = {
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [
+        makeOrder({ orderId: "locked-order-c", executionStatus: "PLANNED" }),
+        makeOrder({ orderId: "new-order" }),
+      ],
+      drivers: [
+        makeDriver({ driverId: "d1", assignments: [lockedC] }),
+        makeDriver({ driverId: "d2" }),
+      ],
+    };
+    const result = runDispatchV2(input, fixedEtaResolver(5));
+
+    const d1 = result.proposals.find((p) => p.driverId === "d1")!;
+    expect(d1.assignments.map((a) => a.assignmentId)).toEqual(["locked-c-nodepart"]);
+    const d2 = result.proposals.find((p) => p.driverId === "d2")!;
+    expect(d2.assignments.find((a) => a.sequenceNo === 1)?.orderId).toBe("new-order");
+    expect(result.infeasibleOrderIds).toEqual([]);
+  });
+
+  // -----------------------------------------------------------------------
+  // Immobile WITHOUT plannedCompleteAt → cursor time UNKNOWN downstream
+  // -----------------------------------------------------------------------
+
+  it("immobile without plannedCompleteAt: subsequent slots are not planned and times are never recomputed", () => {
+    const lockedNoComplete: DispatchAssignmentInputV2 = {
+      assignmentId: "locked-nocomplete",
+      orderId: "locked-order-a",
+      sequenceNo: 1,
+      lockType: "MANUAL_LOCKED",
+      executionStatus: "PLANNED",
+      pickupLocation: { lat: 30.275, lng: 120.156 },
+      deliveryLocation: { lat: 30.32, lng: 120.143 },
+      plannedDepartAt: "2026-07-18T08:05:00.000Z",
+      // plannedCompleteAt deliberately missing → cursor time UNKNOWN
+      serviceModuleMinutes: 0,
+    };
+    const input: DispatchInputV2 = {
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [
+        makeOrder({ orderId: "locked-order-a", executionStatus: "PLANNED" }),
+        makeOrder({ orderId: "o1" }),
+      ],
+      drivers: [makeDriver({ driverId: "d1", assignments: [lockedNoComplete] })],
+    };
+    // A generous resolver is available — it must NOT be used to reconstruct
+    // the missing completion time or plan the next slot from it.
+    const result = runDispatchV2(input, fixedEtaResolver(5));
+
+    const d1 = result.proposals[0];
+    expect(d1.assignments).toHaveLength(1);
+    const slotA = d1.assignments[0];
+    expect(slotA.assignmentId).toBe("locked-nocomplete");
+    // Stored plan echoed verbatim — nothing recomputed, nothing invented.
+    expect(slotA.plannedDepartAt).toBe("2026-07-18T08:05:00.000Z");
+    expect(slotA.plannedPickupAt).toBeUndefined();
+    expect(slotA.plannedCompleteAt).toBeUndefined();
+    expect(slotA.etaAvailable).toBe(false);
+    // Slots after the unknown-cursor point cannot be planned → data gap.
+    expect(result.etaUnavailableOrderIds).toEqual(["o1"]);
+    expect(result.infeasibleOrderIds).toEqual([]);
   });
 });

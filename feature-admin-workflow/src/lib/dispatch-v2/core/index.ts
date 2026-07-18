@@ -2,55 +2,33 @@ import type {
   DispatchDriverPlanProposalV2,
   DispatchInputV2,
   DispatchOutputV2,
-  GeoPointV2,
 } from "@/types/v2";
 
-import { filterCandidateDrivers } from "./candidate-filter";
+import { filterCandidateDrivers, filterDispatchableOrders } from "./candidate-filter";
 import { sortOrdersByPriority } from "./sorter";
 import { planSlots } from "./slot-planner";
 import type { EtaResolver } from "./types";
 
-// ---------------------------------------------------------------------------
-// Default ETA resolver — Haversine-based (pure, deterministic)
-// ---------------------------------------------------------------------------
+export { filterCandidateDrivers, filterDispatchableOrders };
 
-/** Earth's radius in km. */
-const EARTH_RADIUS_KM = 6371;
-
-/** Average urban speed in km/h for fallback ETA estimation. */
-const AVERAGE_SPEED_KMH = 30;
+// ---------------------------------------------------------------------------
+// No-ETA mode resolver
+// ---------------------------------------------------------------------------
 
 /**
- * Deterministic Haversine ETA resolver.
+ * Resolver used when the caller does NOT inject a real ETA source.
  *
- * Computes great-circle distance between two points and estimates travel
- * time using a fixed average urban speed. No external services, no I/O.
+ * The dispatch core must NEVER fabricate ETA values (e.g. haversine distance
+ * at an assumed average speed) — fake ETA is a frozen-spec P0 blocker. When
+ * no resolver is injected the core runs in "no ETA" mode:
  *
- * Returns null only when coordinates are invalid (NaN, Infinity).
+ *   - locked / frozen / executing assignments are still respected (and keep
+ *     their stored planned times),
+ *   - but no new deadhead ETA can be computed, so orders that would need a
+ *     fresh plan are reported via `etaUnavailableOrderIds` instead of being
+ *     planned with invented times.
  */
-export function haversineEtaResolver(from: GeoPointV2, to: GeoPointV2): number | null {
-  const { lat: lat1, lng: lng1 } = from;
-  const { lat: lat2, lng: lng2 } = to;
-
-  if (
-    !Number.isFinite(lat1) || !Number.isFinite(lng1) ||
-    !Number.isFinite(lat2) || !Number.isFinite(lng2)
-  ) {
-    return null;
-  }
-
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const distanceKm = EARTH_RADIUS_KM * c;
-  const minutes = distanceKm / (AVERAGE_SPEED_KMH / 60);
-
-  return Math.round(minutes);
-}
+const noEtaResolver: EtaResolver = () => null;
 
 // ---------------------------------------------------------------------------
 // Main orchestrator
@@ -68,14 +46,19 @@ export function haversineEtaResolver(from: GeoPointV2, to: GeoPointV2): number |
  * Pure: no Prisma, no Redis, no HTTP, no Date.now(), no Math.random().
  *
  * @param input - Dispatch input DTO (orders + drivers + event)
- * @param etaResolver - Optional ETA resolver (defaults to haversine-based)
+ * @param etaResolver - Real ETA resolver injected by the integration layer
+ *   (Gate 3: Amap-backed matrix). The core itself never generates ETA values.
+ *   When absent, the core runs in "no ETA" mode: immobile assignments are
+ *   preserved, but orders needing a new deadhead ETA end up in
+ *   `etaUnavailableOrderIds` (never planned with fake ETAs).
  * @returns Dispatch output with proposals, infeasible IDs, and unavailable IDs
  */
 export function runDispatchV2(
   input: DispatchInputV2,
   etaResolver?: EtaResolver
 ): DispatchOutputV2 {
-  const resolveEta = etaResolver ?? haversineEtaResolver;
+  // P0: no silent haversine fallback — absent resolver means "ETA unavailable".
+  const resolveEta = etaResolver ?? noEtaResolver;
 
   // 1. Filter candidate drivers
   const candidates = filterCandidateDrivers(input.drivers);
