@@ -30,10 +30,11 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
   }
 
-  // Parse request body
-  let body: LocationBatchV2;
+  // Parse request body (P1-5: a JSON body of `null` or a non-object must
+  // return a structured 400 instead of crashing on `body.samples`).
+  let body: unknown;
   try {
-    body = (await request.json()) as LocationBatchV2;
+    body = await request.json();
   } catch {
     return failV2(
       createApiErrorV2(
@@ -45,7 +46,20 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
   }
 
-  if (!body.samples || !Array.isArray(body.samples)) {
+  if (body === null || typeof body !== "object") {
+    return failV2(
+      createApiErrorV2(
+        "VALIDATION_FAILED",
+        "Request body must be a JSON object",
+        { fields: { body: ["Expected a JSON object with a samples array"] } }
+      ),
+      { traceId }
+    );
+  }
+
+  const { samples } = body as Partial<LocationBatchV2>;
+
+  if (!Array.isArray(samples)) {
     return failV2(
       createApiErrorV2(
         "VALIDATION_FAILED",
@@ -56,7 +70,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
   }
 
-  const result = await processLocationBatch(driverId, body.samples, traceId);
+  const result = await processLocationBatch(driverId, samples, traceId);
 
   return okV2(result, { traceId });
 }

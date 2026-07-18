@@ -1,5 +1,8 @@
-import type { Assignment } from "@prisma/client";
+import type { Assignment, DriverShift } from "@prisma/client";
 
+import type { ApiErrorV2 } from "@/types/v2";
+
+import { ADMIN_ROLES } from "@/lib/auth/roles";
 import { createApiErrorV2 } from "@/lib/contracts/v2";
 import { createLogger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
@@ -7,6 +10,12 @@ import { prisma } from "@/lib/prisma";
 import type { ShiftResult } from "./types";
 
 const log = createLogger("shifts");
+
+/** Internal outcome of the endShift transaction. */
+type EndShiftTxOutcome =
+  | { kind: "completed"; shift: DriverShift; releasedCount: number }
+  | { kind: "missing_shift_repaired" }
+  | { kind: "rejected"; error: ApiErrorV2 };
 
 /**
  * Start a driver shift.
@@ -83,11 +92,17 @@ export async function startShift(
 /**
  * End a driver shift.
  *
+ * P0-2: the entire flow — guard checks, PLANNED-assignment release, shift
+ * close and driver update — runs inside a single transaction, so it either
+ * all commits or all rolls back. Running the guards inside the transaction
+ * also prevents TOCTOU between the EN_ROUTE/IN_SERVICE check and the writes.
+ *
  * Guards (rules 9-10):
  * - Cannot end shift if driver has active assignments with order executionStatus
  *   of EN_ROUTE or IN_SERVICE → returns ILLEGAL_TRANSITION
- * - PLANNED assignments are released: order executionStatus reset to UNASSIGNED
- *   and assignment sequenceNo removed (cleared from plan)
+ * - PLANNED assignments are released: assignment RECYCLED with sequenceNo
+ *   cleared, order reset to UNASSIGNED with currentAssignmentId cleared,
+ *   driver planVersion incremented, and an OperationLog written per release
  * - EN_ROUTE / IN_SERVICE orders are NOT touched
  *
  * After guards pass:
@@ -98,134 +113,230 @@ export async function endShift(
   driverId: string,
   traceId: string
 ): Promise<ShiftResult> {
-  const driver = await prisma.driver.findUnique({
-    where: { id: driverId },
-    select: { id: true, onShift: true }
-  });
+  let outcome: EndShiftTxOutcome;
 
-  if (!driver) {
-    return {
-      success: false,
-      error: createApiErrorV2("NOT_FOUND", "Driver not found")
-    };
-  }
+  try {
+    outcome = await prisma.$transaction<EndShiftTxOutcome>(
+      async (tx) => {
+        const driver = await tx.driver.findUnique({
+          where: { id: driverId },
+          select: { id: true, onShift: true }
+        });
 
-  if (!driver.onShift) {
-    return {
-      success: false,
-      error: createApiErrorV2(
-        "ILLEGAL_TRANSITION",
-        "Driver is not on shift",
-        {
-          currentStatus: "UNASSIGNED",
-          targetStatus: "COMPLETED"
+        if (!driver) {
+          return {
+            kind: "rejected",
+            error: createApiErrorV2("NOT_FOUND", "Driver not found")
+          };
         }
-      )
-    };
-  }
 
-  // Guard: check for EN_ROUTE or IN_SERVICE orders (rule 9)
-  const blockingAssignments = await prisma.assignment.findMany({
-    where: {
-      driverId,
-      status: "ACTIVE",
-      order: {
-        executionStatus: { in: ["EN_ROUTE", "IN_SERVICE"] }
-      }
-    },
-    select: { id: true, orderId: true }
-  });
-
-  if (blockingAssignments.length > 0) {
-    return {
-      success: false,
-      error: createApiErrorV2(
-        "ILLEGAL_TRANSITION",
-        "Cannot end shift with active EN_ROUTE or IN_SERVICE orders",
-        {
-          currentStatus: "IN_SERVICE",
-          targetStatus: "UNASSIGNED"
+        if (!driver.onShift) {
+          return {
+            kind: "rejected",
+            error: createApiErrorV2(
+              "ILLEGAL_TRANSITION",
+              "Driver is not on shift",
+              {
+                currentStatus: "UNASSIGNED",
+                targetStatus: "COMPLETED"
+              }
+            )
+          };
         }
-      )
-    };
-  }
 
-  // Release PLANNED assignments (rule 10)
-  const plannedAssignments = await prisma.assignment.findMany({
-    where: {
-      driverId,
-      status: "ACTIVE",
-      order: {
-        executionStatus: "PLANNED"
-      }
-    },
-    select: { id: true, orderId: true }
-  });
+        // Guard: check for EN_ROUTE or IN_SERVICE orders (rule 9) —
+        // inside the transaction to avoid TOCTOU with the writes below.
+        const blockingAssignments = await tx.assignment.findMany({
+          where: {
+            driverId,
+            status: "ACTIVE",
+            order: {
+              executionStatus: { in: ["EN_ROUTE", "IN_SERVICE"] }
+            }
+          },
+          select: { id: true, orderId: true }
+        });
 
-  for (const assignment of plannedAssignments) {
-    // Remove from plan
-    await prisma.assignment.update({
-      where: { id: assignment.id },
-      data: { sequenceNo: null }
-    });
+        if (blockingAssignments.length > 0) {
+          return {
+            kind: "rejected",
+            error: createApiErrorV2(
+              "ILLEGAL_TRANSITION",
+              "Cannot end shift with active EN_ROUTE or IN_SERVICE orders",
+              {
+                currentStatus: "IN_SERVICE",
+                targetStatus: "UNASSIGNED"
+              }
+            )
+          };
+        }
 
-    // Reset order to UNASSIGNED
-    await prisma.order.update({
-      where: { id: assignment.orderId },
-      data: { executionStatus: "UNASSIGNED" }
-    });
-  }
+        // Release PLANNED assignments (rule 10)
+        const plannedAssignments = await tx.assignment.findMany({
+          where: {
+            driverId,
+            status: "ACTIVE",
+            order: {
+              executionStatus: "PLANNED"
+            }
+          },
+          select: { id: true, orderId: true }
+        });
 
-  if (plannedAssignments.length > 0) {
-    log.info("Released PLANNED assignments on shift end", {
+        if (plannedAssignments.length > 0) {
+          // OperationLog requires an operator user; driver-triggered releases
+          // are logged under the earliest admin/dispatcher (system operator).
+          const operator = await tx.user.findFirst({
+            where: { role: { in: [...ADMIN_ROLES] } },
+            orderBy: { createdAt: "asc" },
+            select: { id: true }
+          });
+
+          if (!operator) {
+            return {
+              kind: "rejected",
+              error: createApiErrorV2(
+                "INTERNAL_ERROR",
+                "No system operator account available to log the release"
+              )
+            };
+          }
+
+          const releasedAt = new Date();
+
+          for (const assignment of plannedAssignments) {
+            // Remove from plan and close out the assignment
+            await tx.assignment.update({
+              where: { id: assignment.id },
+              data: {
+                status: "RECYCLED",
+                recycledAt: releasedAt,
+                sequenceNo: null
+              }
+            });
+
+            // Reset order to UNASSIGNED and detach the released assignment
+            await tx.order.update({
+              where: { id: assignment.orderId },
+              data: {
+                executionStatus: "UNASSIGNED",
+                currentAssignmentId: null
+              }
+            });
+
+            // Audit every release in the same transaction
+            await tx.operationLog.create({
+              data: {
+                entityType: "ASSIGNMENT",
+                entityId: assignment.id,
+                action: "RECYCLE",
+                operatorUserId: operator.id,
+                orderId: assignment.orderId,
+                driverId,
+                assignmentId: assignment.id,
+                traceId,
+                reason: "Released PLANNED assignment on shift end",
+                metadataJson: {
+                  traceId,
+                  actor: "DRIVER_API",
+                  trigger: "SHIFT_END",
+                  orderId: assignment.orderId,
+                  assignmentId: assignment.id,
+                  driverId,
+                  stateFlow: ["PLANNED", "UNASSIGNED"]
+                }
+              }
+            });
+          }
+
+          // Plan changed — bump the driver's plan version
+          await tx.driver.update({
+            where: { id: driverId },
+            data: { planVersion: { increment: 1 } }
+          });
+        }
+
+        // Find and close the active shift
+        const activeShift = await tx.driverShift.findFirst({
+          where: { driverId, endedAt: null },
+          orderBy: { startedAt: "desc" }
+        });
+
+        if (!activeShift) {
+          // State inconsistency: onShift === true but no open shift
+          await tx.driver.update({
+            where: { id: driverId },
+            data: { onShift: false }
+          });
+          return { kind: "missing_shift_repaired" };
+        }
+
+        const closedShift = await tx.driverShift.update({
+          where: { id: activeShift.id },
+          data: { endedAt: new Date() }
+        });
+
+        await tx.driver.update({
+          where: { id: driverId },
+          data: { onShift: false }
+        });
+
+        return {
+          kind: "completed",
+          shift: closedShift,
+          releasedCount: plannedAssignments.length
+        };
+      },
+      { timeout: 15_000 }
+    );
+  } catch (error) {
+    // Any throw inside the callback rolled the whole transaction back —
+    // no partial state (e.g. released assignments without a closed shift).
+    log.error("endShift transaction failed — rolled back", {
       traceId,
       driverId,
-      count: plannedAssignments.length
+      error: error instanceof Error ? error.message : String(error)
     });
+    return {
+      success: false,
+      error: createApiErrorV2(
+        "INTERNAL_ERROR",
+        "Failed to end shift — no changes were applied"
+      )
+    };
   }
 
-  // Find and close the active shift
-  const activeShift = await prisma.driverShift.findFirst({
-    where: { driverId, endedAt: null },
-    orderBy: { startedAt: "desc" }
-  });
+  if (outcome.kind === "rejected") {
+    return { success: false, error: outcome.error };
+  }
 
-  if (!activeShift) {
-    // State inconsistency: onShift === true but no open shift
-    await prisma.driver.update({
-      where: { id: driverId },
-      data: { onShift: false }
-    });
-
+  if (outcome.kind === "missing_shift_repaired") {
     log.warn("No active shift found on endShift — driver.onShift was true", {
       traceId,
       driverId
     });
-
     return {
       success: false,
       error: createApiErrorV2("NOT_FOUND", "No active shift found")
     };
   }
 
-  const closedShift = await prisma.driverShift.update({
-    where: { id: activeShift.id },
-    data: { endedAt: new Date() }
-  });
-
-  await prisma.driver.update({
-    where: { id: driverId },
-    data: { onShift: false }
-  });
+  if (outcome.releasedCount > 0) {
+    log.info("Released PLANNED assignments on shift end", {
+      traceId,
+      driverId,
+      count: outcome.releasedCount
+    });
+  }
 
   log.info("Shift ended", {
     traceId,
     driverId,
-    shiftId: closedShift.id,
-    releasedPlanned: plannedAssignments.length
+    shiftId: outcome.shift.id,
+    releasedPlanned: outcome.releasedCount
   });
 
-  return { success: true, shift: closedShift };
+  return { success: true, shift: outcome.shift };
 }
 
 /**

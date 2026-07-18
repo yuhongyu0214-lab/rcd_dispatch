@@ -30,6 +30,8 @@ export async function processLocationBatch(
   const results: LocationSampleResultV2[] = [];
   const serverTimeMs = Date.now();
   const redisAvailable = isRedisAvailable();
+  let dbSampleWriteFailures = 0;
+  let driverUpdateFailures = 0;
 
   // Fetch the most recent DB sample for sampling decisions (rule 7)
   let lastSample = null;
@@ -42,21 +44,44 @@ export async function processLocationBatch(
     // Non-fatal — sampling decisions degrade to "always save"
   }
 
-  // Bulk pre-check for duplicate (driverId, capturedAt) to avoid per-sample round trips
-  const capturedAts = samples.map((s) => new Date(s.capturedAt));
+  // P0-1: read the current Redis location once so out-of-order samples
+  // (in-batch or across batches) can never regress the cached position.
+  // We track the newest known capturedAt and only overwrite with newer data.
+  let newestRedisCapturedAtMs: number | null = null;
+  if (redisAvailable) {
+    try {
+      const currentRedisLocation = await getDriverLocation(driverId);
+      if (currentRedisLocation?.ts) {
+        const currentMs = new Date(currentRedisLocation.ts).getTime();
+        if (Number.isFinite(currentMs)) {
+          newestRedisCapturedAtMs = currentMs;
+        }
+      }
+    } catch {
+      // Treat as no existing cached location
+    }
+  }
+
+  // Bulk pre-check for duplicate (driverId, capturedAt) to avoid per-sample round trips.
+  // Unparseable capturedAt values are excluded — they are rejected per-sample by validation.
+  const capturedAts = samples
+    .map((s) => new Date(s.capturedAt))
+    .filter((d) => Number.isFinite(d.getTime()));
   const existingCaptureTimes = new Set<number>();
 
   try {
-    const existingRows = await prisma.driverLocationSample.findMany({
-      where: {
-        driverId,
-        capturedAt: { in: capturedAts }
-      },
-      select: { capturedAt: true }
-    });
+    if (capturedAts.length > 0) {
+      const existingRows = await prisma.driverLocationSample.findMany({
+        where: {
+          driverId,
+          capturedAt: { in: capturedAts }
+        },
+        select: { capturedAt: true }
+      });
 
-    for (const row of existingRows) {
-      existingCaptureTimes.add(row.capturedAt.getTime());
+      for (const row of existingRows) {
+        existingCaptureTimes.add(row.capturedAt.getTime());
+      }
     }
   } catch {
     // Non-fatal — dedup degrades gracefully
@@ -87,8 +112,19 @@ export async function processLocationBatch(
     existingCaptureTimes.add(capturedAtMs);
 
     // ---- Redis write (rule 6) ----
-    if (redisAvailable) {
+    // P0-1: only overwrite the cached location when this sample is strictly
+    // newer than the newest known capturedAt. Older samples are still
+    // processed for sampling/DB below — they just must not regress the cache.
+    if (
+      redisAvailable &&
+      (newestRedisCapturedAtMs === null || capturedAtMs > newestRedisCapturedAtMs)
+    ) {
       try {
+        // NOTE (P1-3): lib/redis.ts applies TTL=300s to driver:last_location
+        // and driver:online keys, but the frozen spec requires TTL=180s.
+        // redis.ts is shared infrastructure outside this stage's allowed scope
+        // and does not expose the raw client for a separate TTL adjustment.
+        // TODO(Gate 3): reconcile the TTL in lib/redis.ts to the frozen 180s.
         await setDriverLocation(driverId, {
           lat: String(sample.lat),
           lng: String(sample.lng),
@@ -98,8 +134,11 @@ export async function processLocationBatch(
           status: "ACTIVE"
         });
         await setDriverOnline(driverId);
+        newestRedisCapturedAtMs = capturedAtMs;
       } catch {
-        log.warn("Redis write failed for location batch", {
+        // P1-2: Redis is a cache, not the source of truth — a failed cache
+        // write must not fail the sample. Log clearly and continue.
+        log.warn("Redis write failed for location batch (cache only, sample still accepted)", {
           traceId,
           driverId,
           index: i
@@ -131,6 +170,9 @@ export async function processLocationBatch(
           createdAt: created.createdAt
         };
       } catch {
+        // P1-2: the sample was received and validated — a failed history write
+        // does not fail the sample, but it is counted and surfaced in the log.
+        dbSampleWriteFailures += 1;
         log.warn("Failed to persist location sample", {
           traceId,
           driverId,
@@ -139,19 +181,34 @@ export async function processLocationBatch(
       }
     }
 
-    // ---- Update Driver.lastLat / lastLng (best-effort) ----
+    // ---- Update Driver.lastLat / lastLng (best-effort, monotonic) ----
+    // P0-1: conditional update — only overwrite when this sample is newer than
+    // the stored capture time (or none is stored), so out-of-order samples
+    // cannot regress Driver.lastLat/lastLng. updateMany makes this atomic.
     try {
-      await prisma.driver.update({
-        where: { id: driverId },
+      await prisma.driver.updateMany({
+        where: {
+          id: driverId,
+          OR: [
+            { lastLocationCapturedAt: null },
+            { lastLocationCapturedAt: { lt: new Date(capturedAtMs) } }
+          ]
+        },
         data: {
           lastLat: sample.lat,
           lastLng: sample.lng,
           lastAccuracyMeters: sample.accuracyMeters,
-          lastLocationCapturedAt: new Date(sample.capturedAt)
+          lastLocationCapturedAt: new Date(capturedAtMs)
         }
       });
     } catch {
-      // Non-fatal
+      // P1-2: best-effort — do not fail the sample, but surface the problem.
+      driverUpdateFailures += 1;
+      log.warn("Failed to update Driver.lastLocation fields", {
+        traceId,
+        driverId,
+        index: i
+      });
     }
 
     results.push({ index: i, status: "success" });
@@ -165,7 +222,9 @@ export async function processLocationBatch(
     driverId,
     total: samples.length,
     success,
-    skipped
+    skipped,
+    dbSampleWriteFailures,
+    driverUpdateFailures
   });
 
   return { results, success, skipped };

@@ -23,7 +23,8 @@ vi.mock("@/lib/prisma", () => ({
     driver: {
       findUnique: vi.fn(),
       findMany: vi.fn(),
-      update: vi.fn()
+      update: vi.fn(),
+      updateMany: vi.fn()
     },
     driverLocationSample: {
       findFirst: vi.fn(),
@@ -219,6 +220,130 @@ describe("validateLocationSample", () => {
     expect(validateLocationSample(sample, serverTimeMs)).toEqual({
       valid: false,
       reason: "CLOCK_SKEW"
+    });
+  });
+
+  // ---- P1-1 / P1-4: structural validation regression tests ----
+
+  it("rejects NaN accuracy (P1-1)", () => {
+    const sample = makeSample({
+      accuracyMeters: Number.NaN,
+      capturedAt: new Date(serverTimeMs).toISOString()
+    });
+    expect(validateLocationSample(sample, serverTimeMs)).toEqual({
+      valid: false,
+      reason: "ACCURACY_TOO_LOW"
+    });
+  });
+
+  it("rejects negative accuracy (P1-1)", () => {
+    const sample = makeSample({
+      accuracyMeters: -5,
+      capturedAt: new Date(serverTimeMs).toISOString()
+    });
+    expect(validateLocationSample(sample, serverTimeMs)).toEqual({
+      valid: false,
+      reason: "ACCURACY_TOO_LOW"
+    });
+  });
+
+  it("rejects Infinity accuracy (P1-1)", () => {
+    const sample = makeSample({
+      accuracyMeters: Number.POSITIVE_INFINITY,
+      capturedAt: new Date(serverTimeMs).toISOString()
+    });
+    expect(validateLocationSample(sample, serverTimeMs)).toEqual({
+      valid: false,
+      reason: "ACCURACY_TOO_LOW"
+    });
+  });
+
+  it("rejects NaN latitude (P1-4)", () => {
+    const sample = makeSample({
+      lat: Number.NaN,
+      capturedAt: new Date(serverTimeMs).toISOString()
+    });
+    expect(validateLocationSample(sample, serverTimeMs)).toEqual({
+      valid: false,
+      reason: "INVALID_SAMPLE"
+    });
+  });
+
+  it("rejects Infinity longitude (P1-4)", () => {
+    const sample = makeSample({
+      lng: Number.POSITIVE_INFINITY,
+      capturedAt: new Date(serverTimeMs).toISOString()
+    });
+    expect(validateLocationSample(sample, serverTimeMs)).toEqual({
+      valid: false,
+      reason: "INVALID_SAMPLE"
+    });
+  });
+
+  it("rejects latitude outside the GCJ-02 China range (P1-1)", () => {
+    const sample = makeSample({
+      lat: 60,
+      capturedAt: new Date(serverTimeMs).toISOString()
+    });
+    expect(validateLocationSample(sample, serverTimeMs)).toEqual({
+      valid: false,
+      reason: "INVALID_SAMPLE"
+    });
+  });
+
+  it("rejects longitude outside the GCJ-02 China range (P1-1)", () => {
+    const sample = makeSample({
+      lng: 150,
+      capturedAt: new Date(serverTimeMs).toISOString()
+    });
+    expect(validateLocationSample(sample, serverTimeMs)).toEqual({
+      valid: false,
+      reason: "INVALID_SAMPLE"
+    });
+  });
+
+  it("rejects (0,0) null-island coordinates (P1-1)", () => {
+    const sample = makeSample({
+      lat: 0,
+      lng: 0,
+      capturedAt: new Date(serverTimeMs).toISOString()
+    });
+    expect(validateLocationSample(sample, serverTimeMs)).toEqual({
+      valid: false,
+      reason: "INVALID_SAMPLE"
+    });
+  });
+
+  it("accepts boundary coordinates of the GCJ-02 range", () => {
+    const low = makeSample({
+      lat: 18,
+      lng: 73,
+      capturedAt: new Date(serverTimeMs).toISOString()
+    });
+    const high = makeSample({
+      lat: 54,
+      lng: 136,
+      capturedAt: new Date(serverTimeMs).toISOString()
+    });
+    expect(validateLocationSample(low, serverTimeMs)).toEqual({ valid: true });
+    expect(validateLocationSample(high, serverTimeMs)).toEqual({ valid: true });
+  });
+
+  it("rejects an unparseable capturedAt (P1-1)", () => {
+    const sample = makeSample({ capturedAt: "not-a-date" });
+    expect(validateLocationSample(sample, serverTimeMs)).toEqual({
+      valid: false,
+      reason: "INVALID_SAMPLE"
+    });
+  });
+
+  it("rejects a non-string capturedAt (P1-4)", () => {
+    const sample = makeSample({
+      capturedAt: 1700000000000 as unknown as string
+    });
+    expect(validateLocationSample(sample, serverTimeMs)).toEqual({
+      valid: false,
+      reason: "INVALID_SAMPLE"
     });
   });
 });
@@ -538,6 +663,7 @@ describe("processLocationBatch", () => {
     mockRedis.isRedisAvailable.mockReturnValue(true);
     mockRedis.setDriverLocation.mockResolvedValue(undefined);
     mockRedis.setDriverOnline.mockResolvedValue(undefined);
+    mockRedis.getDriverLocation.mockResolvedValue(null);
 
     vi.mocked(prisma.driverLocationSample.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.driverLocationSample.findMany).mockResolvedValue([]);
@@ -552,6 +678,7 @@ describe("processLocationBatch", () => {
       createdAt: new Date()
     });
     vi.mocked(prisma.driver.update).mockResolvedValue({} as unknown as Awaited<ReturnType<typeof prisma.driver.update>>);
+    vi.mocked(prisma.driver.updateMany).mockResolvedValue({ count: 1 });
   });
 
   it("processes all valid samples successfully", async () => {
@@ -716,5 +843,169 @@ describe("processLocationBatch", () => {
     expect(result.success).toBe(0);
     expect(result.skipped).toBe(0);
     expect(result.results).toHaveLength(0);
+  });
+
+  // ---- P0-1: out-of-order sample regression tests ----
+
+  it("does not let an older sample overwrite a newer one in Redis (out-of-order batch)", async () => {
+    const now = Date.now();
+    const newer = makeSample({
+      lat: 30.6,
+      capturedAt: new Date(now - 10_000).toISOString()
+    });
+    const older = makeSample({
+      lat: 30.1,
+      capturedAt: new Date(now - 60_000).toISOString()
+    });
+
+    const result = await processLocationBatch("d-1", [newer, older], "trace-1");
+
+    // Both samples are valid and accepted…
+    expect(result.success).toBe(2);
+    expect(result.skipped).toBe(0);
+    // …but only the newer one reaches Redis
+    expect(mockRedis.setDriverLocation).toHaveBeenCalledTimes(1);
+    expect(mockRedis.setDriverLocation).toHaveBeenCalledWith(
+      "d-1",
+      expect.objectContaining({ ts: newer.capturedAt, lat: "30.6" })
+    );
+  });
+
+  it("skips the Redis write when Redis already holds a newer location", async () => {
+    const now = Date.now();
+    mockRedis.getDriverLocation.mockResolvedValue({
+      lat: "30.9",
+      lng: "104.2",
+      status: "ACTIVE",
+      ts: new Date(now - 5_000).toISOString(),
+      server_ts: String(now)
+    });
+
+    const older = makeSample({
+      capturedAt: new Date(now - 60_000).toISOString()
+    });
+
+    const result = await processLocationBatch("d-1", [older], "trace-1");
+
+    // Sample is still accepted and still considered for DB sampling…
+    expect(result.success).toBe(1);
+    expect(prisma.driverLocationSample.create).toHaveBeenCalledTimes(1);
+    // …but the newer cached location is not regressed
+    expect(mockRedis.setDriverLocation).not.toHaveBeenCalled();
+  });
+
+  it("writes to Redis when the sample is newer than the cached location", async () => {
+    const now = Date.now();
+    mockRedis.getDriverLocation.mockResolvedValue({
+      lat: "30.9",
+      lng: "104.2",
+      status: "ACTIVE",
+      ts: new Date(now - 90_000).toISOString(),
+      server_ts: String(now)
+    });
+
+    const newer = makeSample({
+      capturedAt: new Date(now - 10_000).toISOString()
+    });
+
+    const result = await processLocationBatch("d-1", [newer], "trace-1");
+
+    expect(result.success).toBe(1);
+    expect(mockRedis.setDriverLocation).toHaveBeenCalledTimes(1);
+  });
+
+  it("updates Driver.lastLocation only via a monotonic conditional update", async () => {
+    const now = Date.now();
+    const sample = makeSample({
+      capturedAt: new Date(now - 10_000).toISOString()
+    });
+
+    await processLocationBatch("d-1", [sample], "trace-1");
+
+    expect(prisma.driver.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "d-1",
+        OR: [
+          { lastLocationCapturedAt: null },
+          { lastLocationCapturedAt: { lt: new Date(sample.capturedAt) } }
+        ]
+      },
+      data: expect.objectContaining({
+        lastLat: sample.lat,
+        lastLng: sample.lng,
+        lastAccuracyMeters: sample.accuracyMeters,
+        lastLocationCapturedAt: new Date(sample.capturedAt)
+      })
+    });
+    // The unconditional update must no longer be used
+    expect(prisma.driver.update).not.toHaveBeenCalled();
+  });
+
+  // ---- P1-1: structurally invalid samples in a batch ----
+
+  it("rejects NaN accuracy, out-of-bounds coordinates and invalid dates per-sample", async () => {
+    const now = Date.now();
+    const samples = [
+      makeSample({
+        accuracyMeters: Number.NaN,
+        capturedAt: new Date(now).toISOString()
+      }),
+      makeSample({ lat: 60, capturedAt: new Date(now - 1_000).toISOString() }),
+      makeSample({ capturedAt: "not-a-date" })
+    ];
+
+    const result = await processLocationBatch("d-1", samples, "trace-1");
+
+    expect(result.success).toBe(0);
+    expect(result.skipped).toBe(3);
+    expect(result.results[0]).toEqual({
+      index: 0,
+      status: "skipped",
+      reason: "ACCURACY_TOO_LOW"
+    });
+    expect(result.results[1]).toEqual({
+      index: 1,
+      status: "skipped",
+      reason: "INVALID_SAMPLE"
+    });
+    expect(result.results[2]).toEqual({
+      index: 2,
+      status: "skipped",
+      reason: "INVALID_SAMPLE"
+    });
+    // Nothing invalid reaches Redis or the database
+    expect(mockRedis.setDriverLocation).not.toHaveBeenCalled();
+    expect(prisma.driverLocationSample.create).not.toHaveBeenCalled();
+    expect(prisma.driver.updateMany).not.toHaveBeenCalled();
+  });
+
+  // ---- P1-2: failure isolation regression tests ----
+
+  it("still accepts the sample when the DB history write fails", async () => {
+    vi.mocked(prisma.driverLocationSample.create).mockRejectedValue(
+      new Error("db down")
+    );
+
+    const result = await processLocationBatch(
+      "d-1",
+      [makeSample({ capturedAt: new Date(Date.now() - 10_000).toISOString() })],
+      "trace-1"
+    );
+
+    expect(result.success).toBe(1);
+    expect(result.skipped).toBe(0);
+  });
+
+  it("still accepts the sample when the Driver last-location update fails", async () => {
+    vi.mocked(prisma.driver.updateMany).mockRejectedValue(new Error("db down"));
+
+    const result = await processLocationBatch(
+      "d-1",
+      [makeSample({ capturedAt: new Date(Date.now() - 10_000).toISOString() })],
+      "trace-1"
+    );
+
+    expect(result.success).toBe(1);
+    expect(result.skipped).toBe(0);
   });
 });
