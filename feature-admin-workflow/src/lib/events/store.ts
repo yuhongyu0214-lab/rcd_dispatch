@@ -1,3 +1,5 @@
+import { Prisma } from "@prisma/client";
+
 import { prisma } from "@/lib/prisma";
 import { createLogger } from "@/lib/logger";
 import type { InternalEvent, InternalEventResult } from "./types";
@@ -9,11 +11,13 @@ const eventLog = createLogger("internal-events");
  *
  * Uses the OrderSourceEvent model with:
  *   sourceSystem = "INTERNAL"
- *   externalOrderId = eventId
- *   sourceVersion = occurredAt
+ *   externalOrderId = eventId (stable, caller-provided)
+ *   sourceVersion = "1" (fixed — business occurrence time goes to receivedAt)
  *
  * The `@@unique([sourceSystem, externalOrderId, sourceVersion])` constraint
- * prevents replays — duplicate events are silently skipped.
+ * with sourceVersion fixed at "1" means the stable eventId alone gates
+ * idempotency. Retries with the same eventId always hit the unique constraint
+ * regardless of when they arrive.
  *
  * MUST be called AFTER the business transaction commit succeeds (i.e., never
  * inside a transaction that could be rolled back on trigger failure).
@@ -26,7 +30,7 @@ export async function commitInternalEvent(
       data: {
         sourceSystem: "INTERNAL",
         externalOrderId: event.eventId,
-        sourceVersion: event.occurredAt,
+        sourceVersion: "1",
         sourceStatusRaw: event.type,
         result: "SUCCESS",
         traceId: event.traceId,
@@ -47,10 +51,9 @@ export async function commitInternalEvent(
     });
     return { eventId: event.eventId, committed: true };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
     if (
-      message.includes("Unique constraint") ||
-      message.includes("duplicate")
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2002"
     ) {
       eventLog.info("internal_event_duplicate_skipped", {
         eventId: event.eventId,
@@ -62,6 +65,7 @@ export async function commitInternalEvent(
         reason: "DUPLICATE",
       };
     }
+    const message = err instanceof Error ? err.message : String(err);
     eventLog.error("internal_event_commit_failed", {
       eventId: event.eventId,
       type: event.type,

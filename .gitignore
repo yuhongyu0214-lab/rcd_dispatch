@@ -45,5 +45,8 @@ package-lock.json
 # TypeScript build artifacts
 *.tsbuildinfo
 
+# Claude worktree metadata (generated at runtime)
+.claude/worktrees/
+
 # Brainstorming artifacts
 .superpowers/
