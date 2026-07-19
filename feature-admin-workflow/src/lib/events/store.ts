@@ -11,11 +11,13 @@ const eventLog = createLogger("internal-events");
  *
  * Uses the OrderSourceEvent model with:
  *   sourceSystem = "INTERNAL"
- *   externalOrderId = eventId
- *   sourceVersion = occurredAt
+ *   externalOrderId = eventId (stable, caller-provided)
+ *   sourceVersion = "1" (fixed — business occurrence time goes to receivedAt)
  *
  * The `@@unique([sourceSystem, externalOrderId, sourceVersion])` constraint
- * prevents replays — duplicate events are silently skipped.
+ * with sourceVersion fixed at "1" means the stable eventId alone gates
+ * idempotency. Retries with the same eventId always hit the unique constraint
+ * regardless of when they arrive.
  *
  * MUST be called AFTER the business transaction commit succeeds (i.e., never
  * inside a transaction that could be rolled back on trigger failure).
@@ -28,7 +30,7 @@ export async function commitInternalEvent(
       data: {
         sourceSystem: "INTERNAL",
         externalOrderId: event.eventId,
-        sourceVersion: event.occurredAt,
+        sourceVersion: "1",
         sourceStatusRaw: event.type,
         result: "SUCCESS",
         traceId: event.traceId,

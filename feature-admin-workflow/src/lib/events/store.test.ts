@@ -113,4 +113,44 @@ describe("commitInternalEvent", () => {
     // reason must NOT be "DUPLICATE" for non-P2002 errors
     expect(result.reason).toBeUndefined();
   });
+
+  it("same eventId with different occurredAt still produces DUPLICATE", async () => {
+    // The unique key is (sourceSystem=INTERNAL, externalOrderId=eventId,
+    // sourceVersion="1"). sourceVersion is fixed at "1", so the eventId
+    // alone gates idempotency. Different occurredAt values must NOT
+    // produce separate rows.
+    vi.mocked(prisma.orderSourceEvent.create).mockResolvedValueOnce({
+      id: "evt-1",
+    } as never);
+    vi.mocked(prisma.orderSourceEvent.create).mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+        code: "P2002",
+        clientVersion: "6.19.3",
+      })
+    );
+
+    // First write succeeds
+    const first = await commitInternalEvent({
+      eventId: "assign-asg-001",
+      type: "ASSIGNMENT_ASSIGNED",
+      orderId: "order-1",
+      occurredAt: "2026-07-19T08:00:00.000Z",
+      traceId: "trace-001",
+    });
+    expect(first.committed).toBe(true);
+
+    // Second write — same eventId, DIFFERENT occurredAt → DUPLICATE
+    const second = await commitInternalEvent({
+      eventId: "assign-asg-001",
+      type: "ASSIGNMENT_ASSIGNED",
+      orderId: "order-1",
+      occurredAt: "2026-07-19T08:00:05.000Z",
+      traceId: "trace-002",
+    });
+    expect(second).toEqual({
+      eventId: "assign-asg-001",
+      committed: false,
+      reason: "DUPLICATE",
+    });
+  });
 });
