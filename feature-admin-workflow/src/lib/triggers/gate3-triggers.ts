@@ -4,10 +4,6 @@ import { createLogger } from "@/lib/logger";
 
 const triggerLog = createLogger("gate3-triggers");
 
-function makeEventId(prefix: string): string {
-  return `${prefix}-${crypto.randomUUID()}`;
-}
-
 // ---------------------------------------------------------------------------
 // Thin trigger functions — Gate 3 frozen assignment lifecycle
 //
@@ -15,16 +11,20 @@ function makeEventId(prefix: string): string {
 //   - No dispatch queries, plan calculations, or transaction commit logic
 //   - Called AFTER business transaction commit succeeds
 //   - Trigger failure does NOT rollback committed business facts
+//   - eventId must be a stable identifier derived from the business operation
+//     (e.g., `assign-{assignmentId}`), NOT a random UUID. The caller is
+//     responsible for producing the same eventId on retry of the same fact.
 // ---------------------------------------------------------------------------
 
 export async function triggerAssignmentAssigned(params: {
+  eventId: string;
   orderId: string;
   driverId: string;
   occurredAt: string;
   traceId: string;
 }): Promise<void> {
   const event: InternalEvent = {
-    eventId: makeEventId("assign"),
+    eventId: params.eventId,
     type: "ASSIGNMENT_ASSIGNED",
     orderId: params.orderId,
     driverId: params.driverId,
@@ -33,6 +33,7 @@ export async function triggerAssignmentAssigned(params: {
   };
   await commitInternalEvent(event).catch((err) => {
     triggerLog.error("trigger ASSIGNMENT_ASSIGNED failed", {
+      eventId: params.eventId,
       orderId: params.orderId,
       traceId: params.traceId,
       error: String(err),
@@ -41,13 +42,14 @@ export async function triggerAssignmentAssigned(params: {
 }
 
 export async function triggerAssignmentReassigned(params: {
+  eventId: string;
   orderId: string;
   toDriverId: string;
   occurredAt: string;
   traceId: string;
 }): Promise<void> {
   const event: InternalEvent = {
-    eventId: makeEventId("reassign"),
+    eventId: params.eventId,
     type: "ASSIGNMENT_REASSIGNED",
     orderId: params.orderId,
     driverId: params.toDriverId,
@@ -56,6 +58,7 @@ export async function triggerAssignmentReassigned(params: {
   };
   await commitInternalEvent(event).catch((err) => {
     triggerLog.error("trigger ASSIGNMENT_REASSIGNED failed", {
+      eventId: params.eventId,
       orderId: params.orderId,
       traceId: params.traceId,
       error: String(err),
@@ -64,13 +67,14 @@ export async function triggerAssignmentReassigned(params: {
 }
 
 export async function triggerAssignmentWithdrawn(params: {
+  eventId: string;
   orderId: string;
   driverId: string;
   occurredAt: string;
   traceId: string;
 }): Promise<void> {
   const event: InternalEvent = {
-    eventId: makeEventId("withdraw"),
+    eventId: params.eventId,
     type: "ASSIGNMENT_WITHDRAWN",
     orderId: params.orderId,
     driverId: params.driverId,
@@ -79,6 +83,7 @@ export async function triggerAssignmentWithdrawn(params: {
   };
   await commitInternalEvent(event).catch((err) => {
     triggerLog.error("trigger ASSIGNMENT_WITHDRAWN failed", {
+      eventId: params.eventId,
       orderId: params.orderId,
       traceId: params.traceId,
       error: String(err),
@@ -87,13 +92,14 @@ export async function triggerAssignmentWithdrawn(params: {
 }
 
 export async function triggerAssignmentCancelled(params: {
+  eventId: string;
   orderId: string;
   driverId?: string;
   occurredAt: string;
   traceId: string;
 }): Promise<void> {
   const event: InternalEvent = {
-    eventId: makeEventId("cancel"),
+    eventId: params.eventId,
     type: "ASSIGNMENT_CANCELLED",
     orderId: params.orderId,
     driverId: params.driverId,
@@ -102,6 +108,7 @@ export async function triggerAssignmentCancelled(params: {
   };
   await commitInternalEvent(event).catch((err) => {
     triggerLog.error("trigger ASSIGNMENT_CANCELLED failed", {
+      eventId: params.eventId,
       orderId: params.orderId,
       traceId: params.traceId,
       error: String(err),

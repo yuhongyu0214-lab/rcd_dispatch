@@ -340,17 +340,25 @@ function findBestSlot(
   serviceEtaMinutes: number | null;
   etaUnavailable: boolean;
   infeasible: boolean;
-  /** Best slack value observed across all driver-slot combos (may be < -30). */
+  /** Best slack among slots rejected for slack < -30 (undefined if none). */
   bestSlackObserved: number | undefined;
+  /** True when at least one slot passed slack check but was blocked otherwise. */
+  anySlotPassedSlackCheck: boolean;
 } {
   let bestSlot: CandidateSlot | null = null;
   let bestDeadhead = Infinity;
   let anyEtaAvailable = false;
   let serviceEtaGapAtLockedBound = false;
   let cursorTimeUnknown = false;
-  /** Track the highest (least-negative) slack seen across all combos, for
-   *  reporting on INFEASIBLE orders.  Sentinel -999/9999 are forbidden. */
+  /** Track the highest (least-negative) slack among slots rejected for
+   *  slack < -30. Only meaningful when ALL viable slots fail on slack alone.
+   *  Slots with acceptable slack (>= -30) that are rejected for other reasons
+   *  (bound conflict, service-ETA gap) do NOT update this value. */
   let bestSlackObserved: number | undefined = undefined;
+  /** True when at least one driver-slot combination passed the slack check
+   *  (slack >= -30) but was ultimately rejected for a non-slack reason (e.g.
+   *  locked-slot bound overlap, service-ETA not available to prove fit). */
+  let anySlotPassedSlackCheck = false;
 
   // The service leg (pickup → delivery) is driver-independent — resolve once.
   const serviceEtaMinutes =
@@ -393,15 +401,21 @@ function findBestSlot(
       const projectedPickupAt = addMinutes(departAt, deadhead);
       const slack = minutesBetween(projectedPickupAt, order.promisedPickupAt);
 
-      // Track best (highest) slack for INFEASIBLE evaluation reporting.
-      if (bestSlackObserved === undefined || slack > bestSlackObserved) {
-        bestSlackObserved = slack;
-      }
-
       if (slack < -30) {
-        // INFEASIBLE — skip this slot
+        // INFEASIBLE — this slot is rejected solely because of slack.
+        // Track the best (highest) slack among slack-rejected slots for
+        // reporting when ALL viable slots fail on slack alone.
+        if (bestSlackObserved === undefined || slack > bestSlackObserved) {
+          bestSlackObserved = slack;
+        }
         continue;
       }
+
+      // Slack is acceptable (>= -30). Record this fact so the planner can
+      // distinguish "no slot had acceptable slack" (true INFEASIBLE) from
+      // "a slot had acceptable slack but was blocked for another reason"
+      // (UNPLANNED / NO_AVAILABLE_SLOT).
+      anySlotPassedSlackCheck = true;
 
       // Filling a gap BEFORE a locked/executing slot must not overlap it: the
       // new assignment has to be completed before the driver must DEPART for
@@ -446,7 +460,7 @@ function findBestSlot(
   }
 
   if (bestSlot) {
-    return { best: bestSlot, serviceEtaMinutes, etaUnavailable: false, infeasible: false, bestSlackObserved };
+    return { best: bestSlot, serviceEtaMinutes, etaUnavailable: false, infeasible: false, bestSlackObserved, anySlotPassedSlackCheck };
   }
 
   // Determine whether ANY candidate driver has an available slot.
@@ -461,7 +475,7 @@ function findBestSlot(
   }
 
   if (!anyHasSlot) {
-    return { best: null, serviceEtaMinutes, etaUnavailable: false, infeasible: true, bestSlackObserved };
+    return { best: null, serviceEtaMinutes, etaUnavailable: false, infeasible: true, bestSlackObserved, anySlotPassedSlackCheck };
   }
 
   // A candidate was rejected only because of a DATA GAP — either the
@@ -469,17 +483,17 @@ function findBestSlot(
   // or the driver's timeline past an immobile assignment is unknown (missing
   // stored plannedCompleteAt). Data gaps are not proven infeasibility.
   if (serviceEtaGapAtLockedBound || cursorTimeUnknown) {
-    return { best: null, serviceEtaMinutes, etaUnavailable: true, infeasible: false, bestSlackObserved };
+    return { best: null, serviceEtaMinutes, etaUnavailable: true, infeasible: false, bestSlackObserved, anySlotPassedSlackCheck };
   }
 
   // Slots exist. Distinguish "ETA unavailable for all" vs "all infeasible".
   if (anyEtaAvailable) {
     // We had valid ETA data for some combos but none met the constraints
-    return { best: null, serviceEtaMinutes, etaUnavailable: false, infeasible: true, bestSlackObserved };
+    return { best: null, serviceEtaMinutes, etaUnavailable: false, infeasible: true, bestSlackObserved, anySlotPassedSlackCheck };
   }
 
   // Slots exist but ETA was unavailable for every candidate combination
-  return { best: null, serviceEtaMinutes, etaUnavailable: true, infeasible: false, bestSlackObserved };
+  return { best: null, serviceEtaMinutes, etaUnavailable: true, infeasible: false, bestSlackObserved, anySlotPassedSlackCheck };
 }
 
 // ---------------------------------------------------------------------------
@@ -712,6 +726,16 @@ export function planSlots(
           bestSlackMinutes: null,
           reason: "NO_ELIGIBLE_DRIVER",
         });
+      } else if (result.anySlotPassedSlackCheck) {
+        // At least one driver-slot combo had acceptable slack (>= -30) but was
+        // blocked by slot constraints (locked-slot bound overlap, service-ETA
+        // gap, etc.). This is a slot-capacity issue, NOT proven infeasibility.
+        evaluations.push({
+          orderId: order.orderId,
+          result: "UNPLANNED",
+          bestSlackMinutes: null,
+          reason: "NO_AVAILABLE_SLOT",
+        });
       } else if (result.bestSlackObserved === undefined) {
         // No driver-slot combo produced a computable slack (no ETA data at all
         // for any driver, yet candidates exist — e.g. all drivers have slots
@@ -723,8 +747,10 @@ export function planSlots(
           reason: "NO_AVAILABLE_SLOT",
         });
       } else {
-        // Real slack values were computed but all fell below -30.
-        // bestSlackObserved carries the highest (least-negative) observed value.
+        // ALL driver-slot combos with computable slack fell below -30, and no
+        // slot passed the slack check at all. This is genuinely INFEASIBLE.
+        // bestSlackObserved carries the highest (least-negative) observed value
+        // among the slack-rejected slots.
         evaluations.push({
           orderId: order.orderId,
           result: "INFEASIBLE",

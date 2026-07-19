@@ -5,7 +5,8 @@ import type { InternalEvent } from "./types";
  *
  * Gate 3: This is a stub — it recognizes application entry points for
  * the whitelisted trigger types but does NOT call runDispatchV2 yet.
- * The integration layer (Gate 4) will wire this to the dispatch engine.
+ * The transaction integration layer (Gate 3) will wire this to the
+ * dispatch engine as business operations are implemented.
  *
  * Frozen rules:
  *   - replay / duplicate / old version / no state change / FOLLOW_UP_REQUIRED
@@ -16,9 +17,9 @@ import type { InternalEvent } from "./types";
 export async function handleInternalEvent(
   _event: InternalEvent
 ): Promise<{ shouldTriggerDispatch: boolean; reason?: string }> {
-  // Gate 3 stub — dispatch integration deferred to Gate 4
+  // Gate 3 stub — dispatch integration deferred to business operation integration
   return {
     shouldTriggerDispatch: false,
-    reason: "Gate 3 stub — dispatch integration deferred to Gate 4",
+    reason: "Gate 3 stub — dispatch integration deferred to business operation integration",
   };
 }

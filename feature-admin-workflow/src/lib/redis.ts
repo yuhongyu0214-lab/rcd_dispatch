@@ -858,14 +858,15 @@ export async function releaseDispatchLock(orderId: string): Promise<void> {
 
   const traceId = (globalThis as { __traceId?: string }).__traceId ?? "unknown";
 
+  if (typeof client.eval !== "function") {
+    // Cannot safely compare tokens without eval — do NOT fall back to bare DEL.
+    // TTL (10s) will expire the lock naturally.
+    log.warn("releaseDispatchLock: no eval capability, deferring to TTL expiry", { orderId });
+    return;
+  }
+
   try {
-    // 使用 Lua 脚本确保只释放自己持有的锁
-    if (typeof client.eval === "function") {
-      await client.eval(RELEASE_LOCK_SCRIPT, 1, `dispatch:lock:${orderId}`, traceId);
-    } else {
-      // 降级：直接 DEL（风险较低，因为 TTL 只有 10s）
-      await client.del(`dispatch:lock:${orderId}`);
-    }
+    await client.eval(RELEASE_LOCK_SCRIPT, 1, `dispatch:lock:${orderId}`, traceId);
     circuitBreaker.recordSuccess();
   } catch (err) {
     // 释放失败可接受，TTL 10s 后自动过期

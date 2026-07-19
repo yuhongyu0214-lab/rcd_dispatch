@@ -1,0 +1,30 @@
+-- Rollback: Remove INTERNAL from OrderSourceSystem.
+--
+-- PostgreSQL does not support removing enum values directly.
+-- The standard rollback approach is:
+--
+--   1. Ensure no rows reference 'INTERNAL' in any table.
+--      SELECT count(*) FROM "Order" WHERE "sourceSystem" = 'INTERNAL';
+--      SELECT count(*) FROM "OrderSourceEvent" WHERE "sourceSystem" = 'INTERNAL';
+--
+--   2. If either query returns > 0, migrate those rows to a safe value
+--      (e.g. V1_IMPORT) first, or delete them if acceptable.
+--
+--   3. Recreate the type without INTERNAL:
+--
+--      BEGIN;
+--      ALTER TYPE "OrderSourceSystem" RENAME TO "OrderSourceSystem_old";
+--      CREATE TYPE "OrderSourceSystem" AS ENUM ('HALUO', 'PLUGIN', 'API', 'V1_IMPORT');
+--      ALTER TABLE "Order" ALTER COLUMN "sourceSystem"
+--        TYPE "OrderSourceSystem" USING "sourceSystem"::text::"OrderSourceSystem";
+--      ALTER TABLE "OrderSourceEvent" ALTER COLUMN "sourceSystem"
+--        TYPE "OrderSourceSystem" USING "sourceSystem"::text::"OrderSourceSystem";
+--      DROP TYPE "OrderSourceSystem_old";
+--      COMMIT;
+--
+--   4. This requires a brief application outage because the ALTER COLUMN …
+--      USING … blocks writes to both tables.
+--
+-- In practice, 'INTERNAL' is an additive value that does not break existing
+-- queries, so a rollback should only be performed if the entire Gate 3
+-- internal-event design is reverted.

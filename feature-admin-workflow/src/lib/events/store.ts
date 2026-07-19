@@ -1,3 +1,5 @@
+import { Prisma } from "@prisma/client";
+
 import { prisma } from "@/lib/prisma";
 import { createLogger } from "@/lib/logger";
 import type { InternalEvent, InternalEventResult } from "./types";
@@ -47,10 +49,9 @@ export async function commitInternalEvent(
     });
     return { eventId: event.eventId, committed: true };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
     if (
-      message.includes("Unique constraint") ||
-      message.includes("duplicate")
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2002"
     ) {
       eventLog.info("internal_event_duplicate_skipped", {
         eventId: event.eventId,
@@ -62,6 +63,7 @@ export async function commitInternalEvent(
         reason: "DUPLICATE",
       };
     }
+    const message = err instanceof Error ? err.message : String(err);
     eventLog.error("internal_event_commit_failed", {
       eventId: event.eventId,
       type: event.type,

@@ -1166,8 +1166,12 @@ describe("regression: P0/P1 fixes", () => {
 
     // deadhead 30 + service 30 → would complete 09:00 > locked departure
     // 08:30 → timeline overlap → slot A cannot host the order.
+    // slack = -30 (boundary, not < -30) → slot passes slack check but is
+    // blocked by the locked B bound → UNPLANNED (NO_AVAILABLE_SLOT), not
+    // INFEASIBLE (SLACK_BELOW_LIMIT).
     const overlap = runDispatchV2(makeInput(), fixedEtaResolver(30));
-    expect(evalIds(overlap.evaluations, "INFEASIBLE")).toEqual(["new-order"]);
+    expect(evalIds(overlap.evaluations, "UNPLANNED")).toEqual(["new-order"]);
+    expect(evalIds(overlap.evaluations, "INFEASIBLE")).toEqual([]);
     expect(overlap.proposals[0].assignments.map((a) => a.assignmentId)).toEqual(["locked-b"]);
 
     // deadhead 10 + service 10 → completes 08:20 <= 08:30 → fits in slot A.
