@@ -38,6 +38,12 @@ export type DispatchAssignmentInputV2 = {
   executionStatus: ExecutionStatusV2;
   pickupLocation?: GeoPointV2;
   deliveryLocation?: GeoPointV2;
+  /**
+   * 锁定/执行中工单的既有计划出发时间（来自 Assignment.plannedDepartAt）。
+   * 调度核心用它判断前置空槽的新工单是否与本锁定槽重叠：
+   * 缺失时禁止填充本槽之前的空槽，不得用推算时间补齐。
+   */
+  plannedDepartAt?: IsoDateTimeStringV2;
   plannedCompleteAt?: IsoDateTimeStringV2;
   serviceModuleMinutes: number;
 };
