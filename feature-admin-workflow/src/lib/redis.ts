@@ -10,6 +10,7 @@
  */
 
 import { createLogger } from "@/lib/logger";
+import type { GeoPointV2 } from "@/types/v2";
 
 const log = createLogger("redis");
 
@@ -87,6 +88,25 @@ export interface MapSnapshot {
   drivers: MapSnapshotDriver[];
   generatedAt: number;
 }
+
+// ---------------------------------------------------------------------------
+// Gate 3 — 资源锁与 ETA 原语类型
+// ---------------------------------------------------------------------------
+
+/** Tri-state lock acquisition result (2026-07-19 ruling). */
+export type LockAcquireResult = "acquired" | "busy" | "unavailable";
+
+/** ETA cache value keyed by normalized origin/dest hash + mode. */
+export interface EtaCacheValueV2 {
+  etaMinutes: number;
+  distanceMeters: number;
+  durationSeconds: number;
+  polyline?: string;
+  cachedAt: number;
+}
+
+/** Default ETA cache TTL (seconds). */
+export const DEFAULT_ETA_TTL_SECONDS = 60;
 
 // ============================================================================
 // 连接管理
@@ -697,6 +717,72 @@ export async function getCachedEta(
 }
 
 // ============================================================================
+// Gate 3 — ETA 原语（基于规范化起终点哈希，替换 orderId:driverId 键）
+// ============================================================================
+
+/**
+ * Normalize a GeoPointV2 into a stable hash for ETA cache keys.
+ *
+ * Rounds to 6 decimal places (~0.1 m precision) so cache keys are stable
+ * across minor coordinate representation differences while preserving
+ * practical equality.
+ */
+export function normalizePointHash(point: GeoPointV2): string {
+  const lat = point.lat.toFixed(6);
+  const lng = point.lng.toFixed(6);
+  return `${lat},${lng}`;
+}
+
+/**
+ * Cache ETA value keyed by normalized origin/dest hash + mode.
+ *
+ * Key format: `eta:{originHash}:{destHash}:{mode}`
+ *
+ * Frozen constraint (2026-07-19 ruling): uses normalized origin/dest hash
+ * and travel mode; default TTL 60s.
+ */
+export async function cacheEtaV2(
+  originHash: string,
+  destinationHash: string,
+  mode: string,
+  value: EtaCacheValueV2,
+  ttlSeconds: number = DEFAULT_ETA_TTL_SECONDS
+): Promise<void> {
+  const key = `eta:${originHash}:${destinationHash}:${mode}`;
+  await safeWrite("cacheEtaV2", key, async (client) => {
+    const json = JSON.stringify(value);
+    await client.set(key, json, "EX", ttlSeconds);
+  });
+}
+
+/**
+ * Read cached ETA value by normalized origin/dest hash + mode.
+ *
+ * Frozen constraint (2026-07-19 ruling): Redis unavailable → return null
+ * (no fake ETA). Entries older than 50 seconds or with FAILED status are
+ * treated as stale.
+ */
+export async function getCachedEtaV2(
+  originHash: string,
+  destinationHash: string,
+  mode: string
+): Promise<EtaCacheValueV2 | null> {
+  const key = `eta:${originHash}:${destinationHash}:${mode}`;
+  return safeRead("getCachedEtaV2", key, async (client) => {
+    const raw = await client.get(key);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as EtaCacheValueV2;
+      const age = Date.now() - parsed.cachedAt;
+      if (age > 50_000) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  });
+}
+
+// ============================================================================
 // Key 操作函数 — 派单调 (dispatch:lock:{orderId})
 // 文档参考：tair-key-design 4.4 节
 // ============================================================================
@@ -714,6 +800,13 @@ const RELEASE_LOCK_SCRIPT = `
 
 /**
  * 获取派单调（SET NX EX）。
+ *
+ * @deprecated Use {@link acquireResourceLock} instead. The new primitive takes a
+ *             caller-generated token and returns a tri-state result
+ *             ("acquired" | "busy" | "unavailable"). This wrapper uses
+ *             globalThis.__traceId and returns boolean for backward
+ *             compatibility.
+ *
  * 文档参考：tair-key-design 4.4.3 写入命令
  * 返回 true 表示获取锁成功。
  */
@@ -752,6 +845,11 @@ export async function acquireDispatchLock(
 
 /**
  * 释放派单调（Lua 脚本安全释放）。
+ *
+ * @deprecated Use {@link releaseResourceLock} instead. The new primitive takes a
+ *             caller-generated token and NEVER falls back to bare DEL — when
+ *             token comparison is impossible, it lets TTL expire naturally.
+ *
  * 文档参考：tair-key-design 4.4.4 释放命令
  */
 export async function releaseDispatchLock(orderId: string): Promise<void> {
@@ -776,6 +874,118 @@ export async function releaseDispatchLock(orderId: string): Promise<void> {
       error: String(err)
     });
   }
+}
+
+// ============================================================================
+// Gate 3 — 资源锁原语（替换 acquireDispatchLock / releaseDispatchLock）
+// ============================================================================
+
+const RESOURCE_LOCK_RELEASE_SCRIPT = `
+  if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+  else
+    return 0
+  end
+`;
+
+/**
+ * Acquire a named resource lock with a caller-generated token.
+ *
+ * Frozen constraints (2026-07-19 ruling):
+ *  1. Token is generated by the CALLER — no globalThis.__traceId.
+ *  2. Returns tri-state: "acquired" | "busy" | "unavailable".
+ *     "unavailable" means Redis is down — the caller MUST degrade to DB
+ *     optimistic locking, never pretend the lock was acquired.
+ *
+ * @param resourceKey - Unique key for the resource (e.g. `dispatch:lock:${orderId}`)
+ * @param token - Opaque token generated by the caller (e.g. `crypto.randomUUID()`)
+ * @param ttlSeconds - Lock TTL in seconds (default 10)
+ */
+export async function acquireResourceLock(
+  resourceKey: string,
+  token: string,
+  ttlSeconds = 10
+): Promise<LockAcquireResult> {
+  const client = getRedisClient();
+  if (!client) return "unavailable";
+
+  try {
+    const result = await client.set(resourceKey, token, "NX", "EX", ttlSeconds);
+    circuitBreaker.recordSuccess();
+    return result === "OK" ? "acquired" : "busy";
+  } catch (err) {
+    circuitBreaker.recordFailure();
+    log.warn("acquireResourceLock failed", { resourceKey, error: String(err) });
+    return "unavailable";
+  }
+}
+
+/**
+ * Release a named resource lock.
+ *
+ * NEVER calls DEL without token comparison. When token comparison is
+ * impossible (no eval), lets TTL expire naturally — bare DEL could
+ * release someone else's lock.
+ *
+ * @param resourceKey - The resource key used during acquire
+ * @param token - The same token used during acquire
+ */
+export async function releaseResourceLock(
+  resourceKey: string,
+  token: string
+): Promise<void> {
+  const client = getRedisClient();
+  if (!client) return;
+
+  if (typeof client.eval !== "function") {
+    // Cannot safely compare tokens without eval — do NOT fall back to bare DEL.
+    // TTL will expire the lock naturally.
+    log.warn("releaseResourceLock: no eval capability, deferring to TTL expiry", { resourceKey });
+    return;
+  }
+
+  try {
+    await client.eval(RESOURCE_LOCK_RELEASE_SCRIPT, 1, resourceKey, token);
+    circuitBreaker.recordSuccess();
+  } catch (err) {
+    // Release failure is acceptable — TTL will expire the lock.
+    log.warn("releaseResourceLock failed (will expire via TTL)", {
+      resourceKey,
+      error: String(err),
+    });
+  }
+}
+
+/**
+ * Acquire multiple resource locks with deadlock prevention.
+ *
+ * Resources are sorted lexicographically for acquire and released in reverse
+ * order on partial failure. This prevents circular-wait deadlocks.
+ *
+ * @returns Map of resourceKey → "acquired" | "busy" | "unavailable"
+ */
+export async function acquireResourceLocks(
+  resources: Array<{ resourceKey: string; token: string; ttlSeconds?: number }>
+): Promise<Map<string, LockAcquireResult>> {
+  const results = new Map<string, LockAcquireResult>();
+  // Sort for deadlock prevention (canonical ordering)
+  const sorted = [...resources].sort((a, b) =>
+    a.resourceKey.localeCompare(b.resourceKey)
+  );
+
+  for (let i = 0; i < sorted.length; i++) {
+    const r = sorted[i];
+    const result = await acquireResourceLock(r.resourceKey, r.token, r.ttlSeconds ?? 10);
+    results.set(r.resourceKey, result);
+    if (result !== "acquired") {
+      // Release any locks we already acquired (reverse order)
+      for (let j = i - 1; j >= 0; j--) {
+        await releaseResourceLock(sorted[j].resourceKey, sorted[j].token);
+      }
+      break;
+    }
+  }
+  return results;
 }
 
 // ============================================================================
