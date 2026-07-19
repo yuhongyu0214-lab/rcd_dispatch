@@ -27,6 +27,7 @@ enum OrderSourceSystem {
   PLUGIN
   API
   V1_IMPORT
+  INTERNAL
 }
 
 enum OrderExecutionStatus {
