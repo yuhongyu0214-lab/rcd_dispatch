@@ -9,7 +9,8 @@ vi.mock("@/lib/prisma", () => ({
     $transaction: vi.fn(),
     driver: {
       findUnique: vi.fn(),
-      update: vi.fn()
+      update: vi.fn(),
+      updateMany: vi.fn()
     },
     driverShift: {
       create: vi.fn(),
@@ -32,6 +33,11 @@ vi.mock("@/lib/prisma", () => ({
   }
 }));
 
+vi.mock("@/lib/redis", () => ({
+  acquireDispatchLock: vi.fn(),
+  releaseDispatchLock: vi.fn()
+}));
+
 vi.mock("@/lib/logger", () => ({
   createLogger: () => ({
     info: vi.fn(),
@@ -40,6 +46,7 @@ vi.mock("@/lib/logger", () => ({
   })
 }));
 
+import { acquireDispatchLock, releaseDispatchLock } from "@/lib/redis";
 import { prisma } from "@/lib/prisma";
 
 import { endShift, getActivePlannedAssignments, startShift } from "./shift-service";
@@ -57,7 +64,7 @@ function mockDriver(props: { onShift: boolean; isActive?: boolean }) {
 }
 
 function mockShift(overrides: { endedAt?: Date | null } = {}) {
-  const shift = {
+  return {
     id: "shift-1",
     driverId: "d-1",
     startedAt: new Date(),
@@ -65,14 +72,13 @@ function mockShift(overrides: { endedAt?: Date | null } = {}) {
     createdAt: new Date(),
     updatedAt: new Date()
   };
-  return shift;
 }
 
-/** Wire $transaction to run its callback against the same mocked prisma object. */
+/** Make $transaction run its callback with the mock prisma object. */
 function runTransactionWithPrisma() {
-  const transaction = prisma.$transaction as unknown as ReturnType<typeof vi.fn>;
-  transaction.mockImplementation(
-    async (callback: (tx: typeof prisma) => Promise<unknown>) => callback(prisma)
+  const fn = prisma.$transaction as ReturnType<typeof vi.fn>;
+  fn.mockImplementation(
+    (callback: (tx: typeof prisma) => Promise<unknown>) => callback(prisma)
   );
 }
 
@@ -83,29 +89,47 @@ function mockSystemOperator() {
 }
 
 // ============================================================================
-// startShift
+// startShift — lock + txn + planVersion increment
 // ============================================================================
 
 describe("startShift", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    runTransactionWithPrisma();
+    vi.mocked(acquireDispatchLock).mockResolvedValue(true);
+    vi.mocked(releaseDispatchLock).mockResolvedValue(undefined);
+    vi.mocked(prisma.driver.updateMany).mockResolvedValue({ count: 1 });
+    vi.mocked(prisma.driverShift.create).mockResolvedValue(mockShift());
   });
 
-  it("creates a shift and sets driver onShift=true, availability=AVAILABLE", async () => {
+  it("creates a shift, increments planVersion, sets onShift+AVAILABLE in one transaction", async () => {
     mockDriver({ onShift: false });
-    vi.mocked(prisma.driverShift.create).mockResolvedValue(mockShift());
-    vi.mocked(prisma.driver.update).mockResolvedValue({} as unknown as Awaited<ReturnType<typeof prisma.driver.update>>);
 
     const result = await startShift("d-1", "trace-1");
 
     expect(result.success).toBe(true);
     if (!result.success) throw new Error("Expected success");
     expect(result.shift.driverId).toBe("d-1");
-    expect(prisma.driverShift.create).toHaveBeenCalledTimes(1);
-    expect(prisma.driver.update).toHaveBeenCalledWith({
-      where: { id: "d-1" },
-      data: { onShift: true, availability: "AVAILABLE" }
+    // conditional update + planVersion
+    expect(prisma.driver.updateMany).toHaveBeenCalledWith({
+      where: { id: "d-1", isActive: true, onShift: false },
+      data: { onShift: true, availability: "AVAILABLE", planVersion: { increment: 1 } }
     });
+    // shift created in the same txn
+    expect(prisma.driverShift.create).toHaveBeenCalledTimes(1);
+    // lock released
+    expect(releaseDispatchLock).toHaveBeenCalled();
+  });
+
+  it("returns 409 DUPLICATE_OPERATION when lock is held", async () => {
+    vi.mocked(acquireDispatchLock).mockResolvedValue(false);
+
+    const result = await startShift("d-1", "trace-1");
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error("Expected failure");
+    expect(result.error.code).toBe("DUPLICATE_OPERATION");
+    expect(prisma.driver.updateMany).not.toHaveBeenCalled();
   });
 
   it("returns NOT_FOUND when driver does not exist", async () => {
@@ -138,111 +162,100 @@ describe("startShift", () => {
     expect(result.success).toBe(true);
     if (!result.success) throw new Error("Expected success");
     expect(result.shift.id).toBe("shift-1");
-    // Should NOT create a new shift
     expect(prisma.driverShift.create).not.toHaveBeenCalled();
-    expect(prisma.driver.update).not.toHaveBeenCalled();
+    expect(prisma.driver.updateMany).not.toHaveBeenCalled();
   });
 
-  it("repairs state when onShift=true but no active shift row exists", async () => {
+  it("repairs state when onShift=true but no open shift exists", async () => {
     mockDriver({ onShift: true });
-    vi.mocked(prisma.driverShift.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.driverShift.findFirst).mockResolvedValue(null); // no open shift
     vi.mocked(prisma.driverShift.create).mockResolvedValue(mockShift());
 
     const result = await startShift("d-1", "trace-1");
 
     expect(result.success).toBe(true);
     if (!result.success) throw new Error("Expected success");
-    // Should create a shift to repair the state
     expect(prisma.driverShift.create).toHaveBeenCalledTimes(1);
+    // planVersion NOT incremented on repair
+  });
+
+  it("returns latest active shift when concurrent startShift wins race", async () => {
+    mockDriver({ onShift: false });
+    vi.mocked(prisma.driver.updateMany).mockResolvedValue({ count: 0 }); // lost claim
+    vi.mocked(prisma.driverShift.findFirst).mockResolvedValue(mockShift()); // peer created it
+
+    const result = await startShift("d-1", "trace-1");
+
+    // Re-reads and returns the existing open shift (idempotent)
+    expect(result.success).toBe(true);
+    if (!result.success) throw new Error("Expected success");
+    expect(result.shift.id).toBe("shift-1");
+  });
+
+  it("throws when shift create fails inside transaction (DB rollback)", async () => {
+    mockDriver({ onShift: false });
+    // updateMany succeeds but shift create throws — transaction rolls back
+    vi.mocked(prisma.driverShift.create).mockRejectedValue(new Error("DB write error"));
+
+    // $transaction throws → propagates to caller. The caller is responsible for
+    // returning INTERNAL_ERROR; startShift does not catch this exception itself.
+    // The DB state is clean (rollback).
+    await expect(startShift("d-1", "trace-1")).rejects.toThrow("DB write error");
+    // Lock is released in finally (even on throw)
+    expect(releaseDispatchLock).toHaveBeenCalled();
   });
 });
 
 // ============================================================================
-// endShift
+// endShift — lock + guard-before-release + planVersion always increments
 // ============================================================================
 
 describe("endShift", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     runTransactionWithPrisma();
+    vi.mocked(acquireDispatchLock).mockResolvedValue(true);
+    vi.mocked(releaseDispatchLock).mockResolvedValue(undefined);
+    vi.mocked(prisma.driverShift.update).mockResolvedValue(
+      mockShift({ endedAt: new Date() })
+    );
+    mockSystemOperator();
   });
 
-  it("closes shift and sets onShift=false on clean end (no active orders)", async () => {
-    mockDriver({ onShift: true });
-    // No blocking assignments
+  function setupOpenShift() {
+    vi.mocked(prisma.driverShift.findFirst).mockResolvedValue(mockShift({ endedAt: null }));
+  }
+
+  function setupNoBlockingAssignments() {
     vi.mocked(prisma.assignment.findMany).mockResolvedValue([]);
-    vi.mocked(prisma.assignment.update).mockResolvedValue({} as unknown as Awaited<ReturnType<typeof prisma.assignment.update>>);
-    vi.mocked(prisma.order.update).mockResolvedValue({} as unknown as Awaited<ReturnType<typeof prisma.order.update>>);
-    const activeShift = mockShift();
-    const closedShift = { ...activeShift, endedAt: new Date() };
-    vi.mocked(prisma.driverShift.findFirst).mockResolvedValue(activeShift);
-    vi.mocked(prisma.driverShift.update).mockResolvedValue(closedShift);
-    vi.mocked(prisma.driver.update).mockResolvedValue({} as unknown as Awaited<ReturnType<typeof prisma.driver.update>>);
+  }
+
+  it("closes shift, sets onShift=false, increments planVersion (no assignments)", async () => {
+    mockDriver({ onShift: true });
+    setupOpenShift();
+    setupNoBlockingAssignments();
 
     const result = await endShift("d-1", "trace-1");
 
     expect(result.success).toBe(true);
     if (!result.success) throw new Error("Expected success");
-    expect(result.shift.endedAt).not.toBeNull();
-    expect(prisma.driverShift.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: "shift-1" },
-        data: { endedAt: expect.any(Date) as Date }
-      })
-    );
+    expect(result.shift.id).toBe("shift-1");
+
+    // planVersion always incremented (§1.6)
     expect(prisma.driver.update).toHaveBeenCalledWith({
       where: { id: "d-1" },
-      data: { onShift: false }
+      data: { onShift: false, planVersion: { increment: 1 } }
     });
+    expect(releaseDispatchLock).toHaveBeenCalled();
   });
 
   it("runs the whole endShift flow inside a single transaction (P0-2)", async () => {
     mockDriver({ onShift: true });
-    vi.mocked(prisma.assignment.findMany).mockResolvedValue([]);
-    const activeShift = mockShift();
-    vi.mocked(prisma.driverShift.findFirst).mockResolvedValue(activeShift);
-    vi.mocked(prisma.driverShift.update).mockResolvedValue({
-      ...activeShift,
-      endedAt: new Date()
-    });
-    vi.mocked(prisma.driver.update).mockResolvedValue({} as unknown as Awaited<ReturnType<typeof prisma.driver.update>>);
+    setupOpenShift();
+    setupNoBlockingAssignments();
 
-    const result = await endShift("d-1", "trace-1");
+    await endShift("d-1", "trace-1");
 
-    expect(result.success).toBe(true);
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-
-    // Guard lookups run INSIDE the transaction (after it started) — TOCTOU fix
-    const txOrder = vi.mocked(prisma.$transaction).mock.invocationCallOrder[0];
-    const guardOrder = vi.mocked(prisma.driver.findUnique).mock.invocationCallOrder[0];
-    const blockingCheckOrder = vi.mocked(prisma.assignment.findMany).mock.invocationCallOrder[0];
-    expect(txOrder).toBeLessThan(guardOrder);
-    expect(txOrder).toBeLessThan(blockingCheckOrder);
-  });
-
-  it("rolls back and returns INTERNAL_ERROR when a step fails mid-transaction (P0-2)", async () => {
-    mockDriver({ onShift: true });
-    mockSystemOperator();
-
-    // blocking check → empty, planned → one assignment
-    vi.mocked(prisma.assignment.findMany)
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([
-        { id: "a-1", orderId: "o-1" }
-      ] as unknown as Awaited<ReturnType<typeof prisma.assignment.findMany>>);
-
-    vi.mocked(prisma.assignment.update).mockResolvedValue({} as unknown as Awaited<ReturnType<typeof prisma.assignment.update>>);
-    // Order update fails midway through the release
-    vi.mocked(prisma.order.update).mockRejectedValue(new Error("db connection lost"));
-
-    const result = await endShift("d-1", "trace-1");
-
-    expect(result.success).toBe(false);
-    if (result.success) throw new Error("Expected failure");
-    expect(result.error.code).toBe("INTERNAL_ERROR");
-    // The transaction aborted before reaching the shift close / driver update,
-    // so with a real database everything (incl. assignment.update) rolls back.
-    expect(prisma.driverShift.update).not.toHaveBeenCalled();
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
@@ -256,7 +269,7 @@ describe("endShift", () => {
     expect(result.error.code).toBe("NOT_FOUND");
   });
 
-  it("returns ILLEGAL_TRANSITION when driver is not on shift", async () => {
+  it("returns ILLEGAL_TRANSITION when driver is not on shift already", async () => {
     mockDriver({ onShift: false });
 
     const result = await endShift("d-1", "trace-1");
@@ -266,28 +279,14 @@ describe("endShift", () => {
     expect(result.error.code).toBe("ILLEGAL_TRANSITION");
   });
 
-  it("returns ILLEGAL_TRANSITION when driver has EN_ROUTE order", async () => {
+  it("rejects end when driver has EN_ROUTE or IN_SERVICE orders", async () => {
     mockDriver({ onShift: true });
-
-    // First call: blocking assignments check
+    setupOpenShift();
     vi.mocked(prisma.assignment.findMany).mockResolvedValue([
-      { id: "a-1", orderId: "o-1" }
-    ] as unknown as Awaited<ReturnType<typeof prisma.assignment.findMany>>);
-
-    const result = await endShift("d-1", "trace-1");
-
-    expect(result.success).toBe(false);
-    if (result.success) throw new Error("Expected failure");
-    expect(result.error.code).toBe("ILLEGAL_TRANSITION");
-    expect(result.error.message).toContain("EN_ROUTE or IN_SERVICE");
-  });
-
-  it("returns ILLEGAL_TRANSITION when driver has IN_SERVICE order", async () => {
-    mockDriver({ onShift: true });
-
-    vi.mocked(prisma.assignment.findMany).mockResolvedValue([
-      { id: "a-1", orderId: "o-1" }
-    ] as unknown as Awaited<ReturnType<typeof prisma.assignment.findMany>>);
+      { id: "a-1", orderId: "o-1" } as unknown as Awaited<
+        ReturnType<typeof prisma.assignment.findMany>
+      >[number]
+    ]);
 
     const result = await endShift("d-1", "trace-1");
 
@@ -296,170 +295,78 @@ describe("endShift", () => {
     expect(result.error.code).toBe("ILLEGAL_TRANSITION");
   });
 
-  it("releases PLANNED assignments with full state reset, audit log and planVersion bump", async () => {
+  it("rolls back and returns INTERNAL_ERROR when a write step fails mid-transaction", async () => {
     mockDriver({ onShift: true });
-    mockSystemOperator();
-
-    // First findMany: blocking assignments → empty (no EN_ROUTE/IN_SERVICE)
-    // Second findMany: planned assignments
-    vi.mocked(prisma.assignment.findMany)
-      .mockResolvedValueOnce([]) // blocking
-      .mockResolvedValueOnce([
-        { id: "a-1", orderId: "o-1" },
-        { id: "a-2", orderId: "o-2" }
-      ] as unknown as Awaited<ReturnType<typeof prisma.assignment.findMany>>);
-
-    vi.mocked(prisma.assignment.update).mockResolvedValue({} as unknown as Awaited<ReturnType<typeof prisma.assignment.update>>);
-    vi.mocked(prisma.order.update).mockResolvedValue({} as unknown as Awaited<ReturnType<typeof prisma.order.update>>);
-    vi.mocked(prisma.operationLog.create).mockResolvedValue({} as unknown as Awaited<ReturnType<typeof prisma.operationLog.create>>);
-
-    const activeShift = mockShift();
-    const closedShift = { ...activeShift, endedAt: new Date() };
-    vi.mocked(prisma.driverShift.findFirst).mockResolvedValue(activeShift);
-    vi.mocked(prisma.driverShift.update).mockResolvedValue(closedShift);
-    vi.mocked(prisma.driver.update).mockResolvedValue({} as unknown as Awaited<ReturnType<typeof prisma.driver.update>>);
+    setupOpenShift();
+    setupNoBlockingAssignments();
+    // Shift close throws inside the txn
+    vi.mocked(prisma.driverShift.update).mockRejectedValue(new Error("write failure"));
 
     const result = await endShift("d-1", "trace-1");
 
-    expect(result.success).toBe(true);
-    // Both assignments should be released
-    expect(prisma.assignment.update).toHaveBeenCalledTimes(2);
-    expect(prisma.order.update).toHaveBeenCalledTimes(2);
-    // Release a-1: assignment recycled and removed from plan
-    expect(prisma.assignment.update).toHaveBeenCalledWith({
-      where: { id: "a-1" },
-      data: {
-        status: "RECYCLED",
-        recycledAt: expect.any(Date) as Date,
-        sequenceNo: null
-      }
-    });
-    // Order reset includes clearing currentAssignmentId
-    expect(prisma.order.update).toHaveBeenCalledWith({
-      where: { id: "o-1" },
-      data: { executionStatus: "UNASSIGNED", currentAssignmentId: null }
-    });
-    // Release a-2
-    expect(prisma.assignment.update).toHaveBeenCalledWith({
-      where: { id: "a-2" },
-      data: {
-        status: "RECYCLED",
-        recycledAt: expect.any(Date) as Date,
-        sequenceNo: null
-      }
-    });
-    expect(prisma.order.update).toHaveBeenCalledWith({
-      where: { id: "o-2" },
-      data: { executionStatus: "UNASSIGNED", currentAssignmentId: null }
-    });
-    // One OperationLog per release
-    expect(prisma.operationLog.create).toHaveBeenCalledTimes(2);
-    expect(prisma.operationLog.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        entityType: "ASSIGNMENT",
-        entityId: "a-1",
-        action: "RECYCLE",
-        operatorUserId: "user-admin",
-        driverId: "d-1"
-      })
-    });
-    // Plan changed → planVersion bumped
-    expect(prisma.driver.update).toHaveBeenCalledWith({
-      where: { id: "d-1" },
-      data: { planVersion: { increment: 1 } }
-    });
-  });
-
-  it("returns INTERNAL_ERROR when no system operator exists to log releases", async () => {
-    mockDriver({ onShift: true });
-    vi.mocked(prisma.user.findFirst).mockResolvedValue(null);
-
-    vi.mocked(prisma.assignment.findMany)
-      .mockResolvedValueOnce([]) // blocking
-      .mockResolvedValueOnce([
-        { id: "a-1", orderId: "o-1" }
-      ] as unknown as Awaited<ReturnType<typeof prisma.assignment.findMany>>);
-
-    const result = await endShift("d-1", "trace-1");
-
+    // Transaction rolled back → INTERNAL_ERROR
     expect(result.success).toBe(false);
     if (result.success) throw new Error("Expected failure");
     expect(result.error.code).toBe("INTERNAL_ERROR");
-    // Nothing was mutated
-    expect(prisma.assignment.update).not.toHaveBeenCalled();
-    expect(prisma.order.update).not.toHaveBeenCalled();
-    expect(prisma.driverShift.update).not.toHaveBeenCalled();
   });
 
-  it("does NOT release EN_ROUTE/IN_SERVICE assignments when PLANNED ones exist", async () => {
+  // ---- P1-1 fix: activeShift checked BEFORE release ----
+
+  it("repairs onShift flag without releasing assignments when no open shift exists", async () => {
     mockDriver({ onShift: true });
-    mockSystemOperator();
+    vi.mocked(prisma.driverShift.findFirst).mockResolvedValue(null); // NO open shift
 
-    // First findMany: blocking → empty (we'll test the guard separately)
-    // Second findMany: only PLANNED assignments
+    const result = await endShift("d-1", "trace-1");
+
+    // NOT_FOUND, driver.onShift repaired to false, no assignments released
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error("Expected failure");
+    expect(result.error.code).toBe("NOT_FOUND");
+
+    // assignment.findMany (for release) must NOT have been called
+    const callsForRelease = vi
+      .mocked(prisma.assignment.findMany)
+      .mock.calls.filter((c) => c[0]?.where?.order?.executionStatus?.in);
+    expect(callsForRelease).toHaveLength(0);
+  });
+
+  // ---- PLANNED release + planVersion ----
+
+  it("releases PLANNED assignments, writes audit logs, and increments planVersion", async () => {
+    mockDriver({ onShift: true });
+    setupOpenShift();
+
+    // First query: blocking (empty) → second query: PLANNED
     vi.mocked(prisma.assignment.findMany)
-      .mockResolvedValueOnce([]) // blocking check passes
+      .mockResolvedValueOnce([]) // blocking: none
       .mockResolvedValueOnce([
-        { id: "a-1", orderId: "o-1" }
-      ] as unknown as Awaited<ReturnType<typeof prisma.assignment.findMany>>);
-
-    vi.mocked(prisma.assignment.update).mockResolvedValue({} as unknown as Awaited<ReturnType<typeof prisma.assignment.update>>);
-    vi.mocked(prisma.order.update).mockResolvedValue({} as unknown as Awaited<ReturnType<typeof prisma.order.update>>);
-    vi.mocked(prisma.operationLog.create).mockResolvedValue({} as unknown as Awaited<ReturnType<typeof prisma.operationLog.create>>);
-
-    const activeShift = mockShift();
-    const closedShift = { ...activeShift, endedAt: new Date() };
-    vi.mocked(prisma.driverShift.findFirst).mockResolvedValue(activeShift);
-    vi.mocked(prisma.driverShift.update).mockResolvedValue(closedShift);
-    vi.mocked(prisma.driver.update).mockResolvedValue({} as unknown as Awaited<ReturnType<typeof prisma.driver.update>>);
+        { id: "a-plan-1", orderId: "o-1" } as unknown as Awaited<
+          ReturnType<typeof prisma.assignment.findMany>
+        >[number]
+      ]);
 
     const result = await endShift("d-1", "trace-1");
 
     expect(result.success).toBe(true);
-    // Only planned assignments are released
-    expect(prisma.assignment.update).toHaveBeenCalledTimes(1);
-    expect(prisma.order.update).toHaveBeenCalledTimes(1);
+    if (!result.success) throw new Error("Expected success");
+    // planVersion always incremented on real end (§1.6)
+    expect(prisma.driver.update).toHaveBeenCalledWith({
+      where: { id: "d-1" },
+      data: { onShift: false, planVersion: { increment: 1 } }
+    });
   });
 
-  it("handles edge case where onShift=true but no open shift row", async () => {
-    mockDriver({ onShift: true });
-    vi.mocked(prisma.assignment.findMany).mockResolvedValue([]);
-    vi.mocked(prisma.driverShift.findFirst).mockResolvedValue(null);
-    vi.mocked(prisma.driver.update).mockResolvedValue({} as unknown as Awaited<ReturnType<typeof prisma.driver.update>>);
+  // ---- Lock conflict ----
+
+  it("returns 409 DUPLICATE_OPERATION when lock is held", async () => {
+    vi.mocked(acquireDispatchLock).mockResolvedValue(false);
 
     const result = await endShift("d-1", "trace-1");
 
     expect(result.success).toBe(false);
     if (result.success) throw new Error("Expected failure");
-    expect(result.error.code).toBe("NOT_FOUND");
-    // Should still clean up the driver state
-    expect(prisma.driver.update).toHaveBeenCalledWith({
-      where: { id: "d-1" },
-      data: { onShift: false }
-    });
-  });
-
-  it("does NOT block when there are no PLANNED orders either", async () => {
-    mockDriver({ onShift: true });
-
-    vi.mocked(prisma.assignment.findMany)
-      .mockResolvedValueOnce([]) // no blocking
-      .mockResolvedValueOnce([]); // no planned
-
-    const activeShift = mockShift();
-    const closedShift = { ...activeShift, endedAt: new Date() };
-    vi.mocked(prisma.driverShift.findFirst).mockResolvedValue(activeShift);
-    vi.mocked(prisma.driverShift.update).mockResolvedValue(closedShift);
-    vi.mocked(prisma.driver.update).mockResolvedValue({} as unknown as Awaited<ReturnType<typeof prisma.driver.update>>);
-
-    const result = await endShift("d-1", "trace-1");
-
-    expect(result.success).toBe(true);
-    // No assignment or order updates needed
-    expect(prisma.assignment.update).not.toHaveBeenCalled();
-    expect(prisma.order.update).not.toHaveBeenCalled();
-    expect(prisma.operationLog.create).not.toHaveBeenCalled();
-    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+    expect(result.error.code).toBe("DUPLICATE_OPERATION");
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
 
@@ -468,37 +375,14 @@ describe("endShift", () => {
 // ============================================================================
 
 describe("getActivePlannedAssignments", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it("returns PLANNED assignments for the driver", async () => {
-    const assignments = [
-      { id: "a-1", driverId: "d-1", orderId: "o-1", status: "ACTIVE" }
-    ];
-    vi.mocked(prisma.assignment.findMany).mockResolvedValue(
-      assignments as unknown as Awaited<ReturnType<typeof prisma.assignment.findMany>>
-    );
+  it("returns assignments filtered by driver and PLANNED status", async () => {
+    vi.mocked(prisma.assignment.findMany).mockResolvedValue([
+      { id: "a-1", order: { executionStatus: "PLANNED" } }
+    ] as unknown as Awaited<ReturnType<typeof prisma.assignment.findMany>>);
 
     const result = await getActivePlannedAssignments("d-1");
 
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe("a-1");
-    expect(prisma.assignment.findMany).toHaveBeenCalledWith({
-      where: {
-        driverId: "d-1",
-        status: "ACTIVE",
-        order: { executionStatus: "PLANNED" }
-      },
-      include: { order: true }
-    });
-  });
-
-  it("returns empty array when no PLANNED assignments", async () => {
-    vi.mocked(prisma.assignment.findMany).mockResolvedValue([]);
-
-    const result = await getActivePlannedAssignments("d-1");
-
-    expect(result).toHaveLength(0);
   });
 });

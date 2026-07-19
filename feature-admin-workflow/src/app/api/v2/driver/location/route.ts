@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 
 import { createApiErrorV2, failV2, okV2 } from "@/lib/contracts/v2";
-import { processLocationBatch } from "@/lib/location";
+import { DbClaimFailedError, processLocationBatch } from "@/lib/location";
 import { extractDriverId } from "../../../driver/_utils";
 
 import type { LocationBatchV2 } from "@/types/v2";
@@ -70,7 +70,21 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
   }
 
-  const result = await processLocationBatch(driverId, samples, traceId);
+  let result;
+  try {
+    result = await processLocationBatch(driverId, samples, traceId);
+  } catch (err) {
+    if (err instanceof DbClaimFailedError) {
+      return failV2(
+        createApiErrorV2(
+          "INTERNAL_ERROR",
+          "Database unavailable — location batch could not be processed. Retry is safe."
+        ),
+        { traceId }
+      );
+    }
+    throw err;
+  }
 
   return okV2(result, { traceId });
 }

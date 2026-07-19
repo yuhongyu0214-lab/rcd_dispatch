@@ -12,7 +12,8 @@ vi.mock("@/lib/prisma", () => ({
       findMany: vi.fn()
     },
     driverShift: {
-      findFirst: vi.fn()
+      findFirst: vi.fn(),
+      findMany: vi.fn()
     },
     user: {
       findUnique: vi.fn()
@@ -20,9 +21,16 @@ vi.mock("@/lib/prisma", () => ({
   }
 }));
 
+vi.mock("@/lib/redis", () => ({
+  getDriverLocationsWithStatus: vi.fn()
+}));
+
+vi.mock("@/lib/location/freshness", () => ({
+  calculateFreshness: vi.fn(() => ({ freshness: "FRESH" as const }))
+}));
+
 vi.mock("@/lib/location", () => ({
-  processLocationBatch: vi.fn(),
-  getDriverLocationFreshness: vi.fn()
+  processLocationBatch: vi.fn()
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -33,8 +41,10 @@ vi.mock("@/lib/logger", () => ({
   })
 }));
 
-import { getDriverLocationFreshness, processLocationBatch } from "@/lib/location";
+import { processLocationBatch } from "@/lib/location";
+import { calculateFreshness } from "@/lib/location/freshness";
 import { prisma } from "@/lib/prisma";
+import { getDriverLocationsWithStatus } from "@/lib/redis";
 
 import { POST as postLocation } from "./location/route";
 import { GET as getMap } from "./map/route";
@@ -76,6 +86,12 @@ function postJson(url: string, rawBody: string) {
 describe("GET /api/v2/driver/map", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: Redis unavailable, no shifts
+    vi.mocked(getDriverLocationsWithStatus).mockResolvedValue({
+      redisAvailable: false,
+      locations: new Map()
+    });
+    vi.mocked(prisma.driverShift.findMany).mockResolvedValue([]);
   });
 
   it("rejects anonymous access with 401 UNAUTHORIZED (P0-3)", async () => {
@@ -104,8 +120,6 @@ describe("GET /api/v2/driver/map", () => {
         store: { code: "STORE_CD_01" }
       }
     ] as unknown as Awaited<ReturnType<typeof prisma.driver.findMany>>);
-    vi.mocked(getDriverLocationFreshness).mockResolvedValue("NONE");
-    vi.mocked(prisma.driverShift.findFirst).mockResolvedValue(null);
 
     const response = await getMap(asNextRequest(new Request(AUTHED_MAP_URL)));
 
@@ -138,8 +152,6 @@ describe("GET /api/v2/driver/map", () => {
         store: { code: "STORE_CD_01" }
       }
     ] as unknown as Awaited<ReturnType<typeof prisma.driver.findMany>>);
-    vi.mocked(getDriverLocationFreshness).mockResolvedValue("NONE");
-    vi.mocked(prisma.driverShift.findFirst).mockResolvedValue(null);
 
     const response = await getMap(asNextRequest(new Request(AUTHED_MAP_URL)));
 
@@ -165,8 +177,7 @@ describe("GET /api/v2/driver/map", () => {
         store: { code: "STORE_CD_01" }
       }
     ] as unknown as Awaited<ReturnType<typeof prisma.driver.findMany>>);
-    vi.mocked(getDriverLocationFreshness).mockResolvedValue("STALE");
-    vi.mocked(prisma.driverShift.findFirst).mockResolvedValue(null);
+    vi.mocked(calculateFreshness).mockReturnValue({ freshness: "STALE" });
 
     const response = await getMap(asNextRequest(new Request(AUTHED_MAP_URL)));
 
@@ -176,7 +187,7 @@ describe("GET /api/v2/driver/map", () => {
     expect(body.data[0].lastLocation).toBeUndefined();
   });
 
-  it("includes accuracy and capture time when they are known", async () => {
+  it("includes accuracy and capture time when they are known (DB fallback)", async () => {
     const capturedAt = new Date("2026-07-18T08:00:00.000Z");
     vi.mocked(prisma.driver.findMany).mockResolvedValue([
       {
@@ -192,8 +203,7 @@ describe("GET /api/v2/driver/map", () => {
         store: { code: "STORE_CD_01" }
       }
     ] as unknown as Awaited<ReturnType<typeof prisma.driver.findMany>>);
-    vi.mocked(getDriverLocationFreshness).mockResolvedValue("FRESH");
-    vi.mocked(prisma.driverShift.findFirst).mockResolvedValue(null);
+    vi.mocked(calculateFreshness).mockReturnValue({ freshness: "FRESH" });
 
     const response = await getMap(asNextRequest(new Request(AUTHED_MAP_URL)));
 
