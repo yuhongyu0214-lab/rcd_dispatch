@@ -13,6 +13,14 @@ import { createLogger } from "@/lib/logger";
 
 const log = createLogger("redis");
 
+/**
+ * 实时键统一 TTL（秒）。
+ * 冻结依据：数据架构 V2 §7.1「Redis 最新位置 TTL：180 秒」。
+ * driver:last_location 与 driver:online 统一使用该值；
+ * ETA / 地图快照 / 派单锁的 TTL 不属于实时键，各自维持原值。
+ */
+const REALTIME_TTL_SECONDS = 180;
+
 // ============================================================================
 // 类型定义
 // ============================================================================
@@ -26,9 +34,24 @@ export interface DriverLocation {
   altitude?: string;
   ts: string;
   server_ts: string;
+  /** 采集时间毫秒值（服务端解析 capturedAt 所得），CAS 单调比较专用 */
+  ts_ms?: string;
   loc_type?: string;
   status: string;
 }
+
+/**
+ * setDriverLocationIfNewer 的原子写入结果：
+ * - applied：样本更新（严格更新于缓存中的 ts_ms），已写入并刷新 TTL
+ * - duplicate：与缓存 ts_ms 相等，未写入
+ * - stale：早于缓存 ts_ms（乱序样本），未写入，缓存不倒退
+ * - unavailable：Redis 降级/异常，调用方应转数据库重判
+ */
+export type SetDriverLocationOutcome =
+  | "applied"
+  | "duplicate"
+  | "stale"
+  | "unavailable";
 
 export interface EtaData {
   driverId: string;
@@ -73,13 +96,13 @@ interface RedisCommand {
   (...args: unknown[]): unknown;
 }
 
-interface PipelineLike {
+export interface PipelineLike {
   hgetall(key: string): void;
   exists(args: string[]): void;
   exec(): Promise<Array<[Error | null, unknown]>>;
 }
 
-interface RedisClientLike {
+export interface RedisClientLike {
   hset(key: string, ...args: string[]): Promise<number>;
   expire(key: string, seconds: number): Promise<number>;
   hgetall(key: string): Promise<Record<string, string>>;
@@ -144,6 +167,13 @@ class RedisCircuitBreaker {
     } catch {
       // 保持降级，下次探测间隔后再试
     }
+  }
+
+  /** 测试专用：复位熔断器状态（生产代码不得调用） */
+  resetForTests(): void {
+    this.degraded = false;
+    this.failureCount = 0;
+    this.lastProbeTime = 0;
   }
 }
 
@@ -278,6 +308,15 @@ export async function closeRedis(): Promise<void> {
   }
 }
 
+/**
+ * 测试专用：注入伪客户端并复位熔断器。
+ * 传 null 可回到「无客户端（降级）」状态。生产代码不得调用。
+ */
+export function __setRedisClientForTests(client: RedisClientLike | null): void {
+  redisClient = client;
+  circuitBreaker.resetForTests();
+}
+
 // ============================================================================
 // 写操作保护（降级模式下静默失败）
 // ============================================================================
@@ -341,30 +380,114 @@ async function safeRead<T>(
 // ============================================================================
 
 /**
+ * 将 DriverLocation 编组为 HSET 的扁平 field/value 序列。
+ * setDriverLocation 与 setDriverLocationIfNewer 共用，保证字段口径一致。
+ */
+function buildLocationFields(data: DriverLocation): string[] {
+  const fields: string[] = [];
+  if (data.lat) fields.push("lat", data.lat);
+  if (data.lng) fields.push("lng", data.lng);
+  if (data.accuracy) fields.push("accuracy", data.accuracy);
+  if (data.speed) fields.push("speed", data.speed);
+  if (data.direction) fields.push("direction", data.direction);
+  if (data.altitude) fields.push("altitude", data.altitude);
+  if (data.ts) fields.push("ts", data.ts);
+  if (data.server_ts) fields.push("server_ts", data.server_ts);
+  if (data.ts_ms) fields.push("ts_ms", data.ts_ms);
+  if (data.loc_type) fields.push("loc_type", data.loc_type);
+  if (data.status) fields.push("status", data.status);
+  return fields;
+}
+
+/**
  * 写入司机位置（HSET + EXPIRE）。
  * 文档参考：tair-key-design 4.1.3 写入命令
+ *
+ * 注意：本函数为无条件覆盖写，不维护 ts_ms、不做单调保护，仅供 V1 遗留
+ * 路径使用；V2 位置上报必须使用 setDriverLocationIfNewer（原子单调）。
  */
 export async function setDriverLocation(
   driverId: string,
   data: DriverLocation
 ): Promise<void> {
   await safeWrite("setDriverLocation", `driver:last_location:{${driverId}}`, async (client) => {
-    const fields: string[] = [];
-    if (data.lat) fields.push("lat", data.lat);
-    if (data.lng) fields.push("lng", data.lng);
-    if (data.accuracy) fields.push("accuracy", data.accuracy);
-    if (data.speed) fields.push("speed", data.speed);
-    if (data.direction) fields.push("direction", data.direction);
-    if (data.altitude) fields.push("altitude", data.altitude);
-    if (data.ts) fields.push("ts", data.ts);
-    if (data.server_ts) fields.push("server_ts", data.server_ts);
-    if (data.loc_type) fields.push("loc_type", data.loc_type);
-    if (data.status) fields.push("status", data.status);
+    const fields = buildLocationFields(data);
 
     // 先 HMSET（新版 ioredis 也支持 hset 多参数）
     await client.hset(`driver:last_location:${driverId}`, ...fields);
-    await client.expire(`driver:last_location:${driverId}`, 300);
+    await client.expire(`driver:last_location:${driverId}`, REALTIME_TTL_SECONDS);
   });
+}
+
+// Lua：原子「读 ts_ms → 比较 → 写入 + EXPIRE」。
+// KEYS[1] = driver:last_location:{driverId}
+// ARGV[1] = 新样本 capturedAt 毫秒值；ARGV[2] = TTL 秒；ARGV[3..] = field/value 对
+// 返回：1 = applied；0 = duplicate（相等）；-1 = stale（更旧）
+// 旧 hash 无 ts_ms（V1 遗留写入）按可覆盖处理，随 TTL 自然收敛。
+export const SET_LOCATION_IF_NEWER_SCRIPT = `
+  local existing = tonumber(redis.call('HGET', KEYS[1], 'ts_ms'))
+  local incoming = tonumber(ARGV[1])
+  if existing then
+    if incoming < existing then return -1 end
+    if incoming == existing then return 0 end
+  end
+  redis.call('HSET', KEYS[1], unpack(ARGV, 3))
+  redis.call('EXPIRE', KEYS[1], ARGV[2])
+  return 1
+`;
+
+/**
+ * 原子单调写入司机位置（Lua CAS）。
+ *
+ * 契约依据：数据架构 V2 §7「司机最新位置：Redis 主存」——并发/乱序样本
+ * 不得让缓存位置倒退；§7.1 冻结 TTL 180 秒。比较、写入与 EXPIRE 在同一
+ * Lua 脚本内完成，不存在「读旧值→判断→HSET」的竞态窗口。
+ *
+ * @param tsMs 服务端解析 capturedAt 所得毫秒值（比较键）
+ * 降级/异常返回 "unavailable"，不抛错；调用方转数据库高水位重判。
+ */
+export async function setDriverLocationIfNewer(
+  driverId: string,
+  data: DriverLocation,
+  tsMs: number
+): Promise<SetDriverLocationOutcome> {
+  const client = getRedisClient();
+  if (!client || typeof client.eval !== "function") {
+    // 无 eval 能力时不做非原子退化写入——那会静默重引入倒退窗口
+    return "unavailable";
+  }
+
+  const key = `driver:last_location:${driverId}`;
+  const fields = buildLocationFields({ ...data, ts_ms: String(tsMs) });
+
+  try {
+    const result = await client.eval(
+      SET_LOCATION_IF_NEWER_SCRIPT,
+      1,
+      key,
+      String(tsMs),
+      String(REALTIME_TTL_SECONDS),
+      ...fields
+    );
+    circuitBreaker.recordSuccess();
+
+    if (result === 1) return "applied";
+    if (result === 0) return "duplicate";
+    if (result === -1) return "stale";
+
+    log.warn("setDriverLocationIfNewer unexpected script result", {
+      driverId,
+      result: String(result)
+    });
+    return "unavailable";
+  } catch (err) {
+    circuitBreaker.recordFailure();
+    log.warn("setDriverLocationIfNewer failed", {
+      keyPattern: `driver:last_location:{${driverId}}`,
+      error: String(err)
+    });
+    return "unavailable";
+  }
 }
 
 /**
@@ -381,22 +504,36 @@ export async function getDriverLocation(
   });
 }
 
+/** getDriverLocationsWithStatus 的返回结构：整体可用性 + 逐司机位置 */
+export interface DriverLocationsBatch {
+  /**
+   * false = Redis 整体不可用（降级、无客户端或管道整体失败），
+   * 此时 locations 全部为 null，调用方应整体回退数据库；
+   * true = Redis 正常，Map 中 null 表示该司机确实没有位置键（个体缺失）。
+   */
+  redisAvailable: boolean;
+  locations: Map<string, DriverLocation | null>;
+}
+
 /**
- * 批量读取司机位置（Pipeline HGETALL）。
+ * 批量读取司机位置（Pipeline HGETALL），并区分两种缺失：
+ * 「Redis 正常但某司机无位置」与「Redis 整体不可用」。
  * 文档参考：tair-key-design 9.2 Pipeline 使用规范
  */
-export async function getDriverLocations(
+export async function getDriverLocationsWithStatus(
   driverIds: string[]
-): Promise<Map<string, DriverLocation | null>> {
-  const result = new Map<string, DriverLocation | null>();
+): Promise<DriverLocationsBatch> {
+  const locations = new Map<string, DriverLocation | null>();
 
-  if (driverIds.length === 0) return result;
+  if (driverIds.length === 0) {
+    return { redisAvailable: isRedisAvailable(), locations };
+  }
 
   const client = getRedisClient();
   if (!client) {
-    // 降级：全部返回 null
-    driverIds.forEach((id) => result.set(id, null));
-    return result;
+    // 降级：整体不可用
+    driverIds.forEach((id) => locations.set(id, null));
+    return { redisAvailable: false, locations };
   }
 
   try {
@@ -412,28 +549,41 @@ export async function getDriverLocations(
 
       const results = await pipeline.exec();
       if (!results) {
-        batch.forEach((id) => result.set(id, null));
+        batch.forEach((id) => locations.set(id, null));
         continue;
       }
 
       batch.forEach((driverId, index) => {
         const [err, data] = results[index] ?? [null, null];
         if (!err && data && typeof data === "object" && Object.keys(data as Record<string, unknown>).length > 0) {
-          result.set(driverId, data as unknown as DriverLocation);
+          locations.set(driverId, data as unknown as DriverLocation);
         } else {
-          result.set(driverId, null);
+          // 单命令错误按个体缺失处理，不影响整体可用性判定
+          locations.set(driverId, null);
         }
       });
     }
 
     circuitBreaker.recordSuccess();
+    return { redisAvailable: true, locations };
   } catch (err) {
     circuitBreaker.recordFailure();
-    log.warn("Batch getDriverLocations failed", { error: String(err) });
-    driverIds.forEach((id) => result.set(id, null));
+    log.warn("Batch getDriverLocationsWithStatus failed", { error: String(err) });
+    driverIds.forEach((id) => locations.set(id, null));
+    return { redisAvailable: false, locations };
   }
+}
 
-  return result;
+/**
+ * 批量读取司机位置（兼容入口）。
+ * 不区分「个体缺失」与「整体不可用」，两者均为 null；
+ * 需要区分时请使用 getDriverLocationsWithStatus。
+ */
+export async function getDriverLocations(
+  driverIds: string[]
+): Promise<Map<string, DriverLocation | null>> {
+  const { locations } = await getDriverLocationsWithStatus(driverIds);
+  return locations;
 }
 
 // ============================================================================
@@ -448,7 +598,7 @@ export async function getDriverLocations(
 export async function setDriverOnline(driverId: string): Promise<void> {
   const ts = String(Date.now());
   await safeWrite("setDriverOnline", `driver:online:{${driverId}}`, async (client) => {
-    await client.set(`driver:online:${driverId}`, ts, "EX", 300);
+    await client.set(`driver:online:${driverId}`, ts, "EX", REALTIME_TTL_SECONDS);
   });
 }
 
