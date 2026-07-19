@@ -690,7 +690,7 @@ export function planSlots(
       // input contract only carries depart/complete times — the pickup time
       // is recomputed deterministically when the proposal is built.)
       const plannedAsg: DispatchAssignmentInputV2 = {
-        assignmentId: `planned:${order.orderId}`,
+        assignmentId: null,
         orderId: order.orderId,
         sequenceNo,
         lockType: "NONE",

@@ -31,7 +31,8 @@ export type DispatchOrderInputV2 = {
 };
 
 export type DispatchAssignmentInputV2 = {
-  assignmentId: string;
+  /** Real assignment ID for existing assignments; null for new plans. */
+  assignmentId: string | null;
   orderId: string;
   sequenceNo: PlanSequenceV2;
   lockType: AssignmentLockTypeV2;
@@ -87,7 +88,8 @@ export type DispatchInputV2 = {
 };
 
 export type DispatchPlannedAssignmentV2 = EtaAvailabilityV2 & {
-  assignmentId: string;
+  /** Real assignment ID for existing assignments; null for new plans. */
+  assignmentId: string | null;
   orderId: string;
   sequenceNo: PlanSequenceV2;
   slot: PlannedAssignmentSlotV2;

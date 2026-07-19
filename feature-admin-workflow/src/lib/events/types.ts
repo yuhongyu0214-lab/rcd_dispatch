@@ -7,12 +7,12 @@ import type { IsoDateTimeStringV2 } from "@/types/v2";
 /**
  * Whitelisted internal event types.
  *
- * Gate 3 frozen set:
+ * Gate 3-0 frozen set (2026-07-19):
  *   1A: ORDER_CREATED, ORDER_UPDATED, ORDER_CANCELLED
  *   1B: DRIVER_LOCATION_UPDATED, DRIVER_SHIFT_STARTED, DRIVER_SHIFT_ENDED
  *   Gate 3: ASSIGNMENT_ASSIGNED, ASSIGNMENT_REASSIGNED,
  *            ASSIGNMENT_WITHDRAWN, ASSIGNMENT_CANCELLED
- *   2B future: DEPART, ARRIVE, COMPLETE, MODULE_CHANGE_APPLIED
+ *   2B execution: DEPART, ARRIVE, COMPLETE, MODULE_CHANGE_APPLIED
  */
 export const WHITELISTED_EVENT_TYPES = [
   // 1A: order lifecycle
@@ -28,6 +28,11 @@ export const WHITELISTED_EVENT_TYPES = [
   "ASSIGNMENT_REASSIGNED",
   "ASSIGNMENT_WITHDRAWN",
   "ASSIGNMENT_CANCELLED",
+  // 2B: execution lifecycle
+  "DEPART",
+  "ARRIVE",
+  "COMPLETE",
+  "MODULE_CHANGE_APPLIED",
 ] as const;
 
 export type WhitelistedEventType = (typeof WHITELISTED_EVENT_TYPES)[number];
@@ -37,7 +42,7 @@ export type WhitelistedEventType = (typeof WHITELISTED_EVENT_TYPES)[number];
  *
  * - eventId: unique identifier for idempotency
  * - type:    one of the whitelisted event types
- * - orderId / driverId: optional subject references
+ * - orderId / driverId / assignmentId: optional subject references
  * - occurredAt: when the business fact occurred
  * - traceId: correlation ID for the originating request
  */
@@ -46,6 +51,7 @@ export type InternalEvent = {
   type: WhitelistedEventType;
   orderId?: string;
   driverId?: string;
+  assignmentId?: string;
   occurredAt: IsoDateTimeStringV2;
   traceId: string;
 };
