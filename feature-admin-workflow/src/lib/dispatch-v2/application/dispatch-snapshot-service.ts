@@ -276,6 +276,10 @@ async function resolveAffectedScope(
  *
  * Frozen rules:
  * - COMPLETED / CANCELLED orders excluded at DB query level.
+ * - Orders: ALL dispatchable orders in the affected stores are loaded.
+ *   The order query MUST NOT filter by a single event orderId — every
+ *   order referenced by any driver's assignment must be in the snapshot,
+ *   otherwise unlocked PLANNED assignments are silently lost to the core.
  * - A driver that enters the snapshot brings ALL of its effective assignments.
  *   The assignment query MUST NOT filter by a single orderId — otherwise
  *   new-order events would see empty timelines and overwrite locked slots.
@@ -294,10 +298,12 @@ export async function buildDispatchSnapshot(
   // 1. Resolve affected stores
   const scope = await resolveAffectedScope(event);
 
-  // 2. Batch-read orders (COMPLETED/CANCELLED excluded at DB level)
+  // 2. Batch-read ALL dispatchable orders in affected stores.
+  //    P0 follow-up: NEVER filter by event orderId. Every order referenced
+  //    by any driver's assignment must be present — otherwise unlocked
+  //    PLANNED assignments are released but cannot re-enter the plan pool.
   const orderRows = await findDispatchableOrders({
     storeIds: scope.storeIds,
-    orderIds: scope.orderIds.length > 0 ? scope.orderIds : undefined,
   });
 
   // 3. Batch-read drivers

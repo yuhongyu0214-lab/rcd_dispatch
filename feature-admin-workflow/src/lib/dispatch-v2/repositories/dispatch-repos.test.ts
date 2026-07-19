@@ -55,11 +55,14 @@ describe("findDispatchableOrders", () => {
     expect(call.where.storeId).toEqual({ in: ["s1"] });
   });
 
-  it("sorts by promisedPickupAt ascending for deterministic output", async () => {
+  it("sorts by promisedPickupAt asc then id asc for deterministic output", async () => {
     await findDispatchableOrders({ storeIds: ["s1"] });
 
     const call = mockOrderFindMany.mock.calls[0][0];
-    expect(call.orderBy).toEqual({ promisedPickupAt: "asc" });
+    expect(call.orderBy).toEqual([
+      { promisedPickupAt: "asc" },
+      { id: "asc" },
+    ]);
   });
 
   it("returns empty array for empty storeIds", async () => {

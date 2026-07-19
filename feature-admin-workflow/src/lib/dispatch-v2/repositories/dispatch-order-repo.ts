@@ -45,7 +45,7 @@ export async function findDispatchableOrders(params: {
       currentAssignmentId: true,
       store: { select: { code: true } },
     },
-    orderBy: { promisedPickupAt: "asc" },
+    orderBy: [{ promisedPickupAt: "asc" }, { id: "asc" }],
   });
 
   const mapped: DispatchableOrderRow[] = rows.map((r) => ({

@@ -203,6 +203,43 @@ describe("P0-1: driver timeline integrity", () => {
     expect(callArgs).toHaveProperty("driverIds");
   });
 
+  it("P0 regression: every order referenced by an assignment MUST be in snapshot.orders", async () => {
+    vi.mocked(prisma.order.findUnique).mockResolvedValue({
+      storeId: "store-1",
+    } as never);
+
+    const allStoreOrders = [
+      makeOrderRow({ id: "new-order", executionStatus: "UNASSIGNED" }),
+      makeOrderRow({ id: "order-x", executionStatus: "PLANNED" }),
+      makeOrderRow({ id: "order-y", executionStatus: "EN_ROUTE" }),
+    ];
+    mockFindDispatchableOrders.mockResolvedValue(allStoreOrders);
+    mockFindDispatchableDrivers.mockResolvedValue([makeDriverRow()]);
+    mockFindEffectiveAssignments.mockResolvedValue([
+      makeAssignmentRow({
+        id: "asg-x", orderId: "order-x", driverId: "driver-1",
+        sequenceNo: 1, lockType: "NONE", orderExecutionStatus: "PLANNED",
+      }),
+      makeAssignmentRow({
+        id: "asg-y", orderId: "order-y", driverId: "driver-1",
+        sequenceNo: 2, lockType: "NONE", orderExecutionStatus: "EN_ROUTE",
+      }),
+    ]);
+    mockFindServicePlans.mockResolvedValue([]);
+
+    const snapshot = await buildDispatchSnapshot(ORDER_RECEIVED);
+
+    const orderIdsInSnapshot = new Set(snapshot.orders.map((o) => o.orderId));
+    for (const driver of snapshot.drivers) {
+      for (const asg of driver.assignments) {
+        expect(orderIdsInSnapshot.has(asg.orderId)).toBe(true);
+      }
+    }
+
+    const orderCallArgs = mockFindDispatchableOrders.mock.calls[0][0];
+    expect(orderCallArgs).not.toHaveProperty("orderIds");
+  });
+
   it("new unassigned order with driver holding EN_ROUTE + IN_SERVICE: full timeline preserved", async () => {
     vi.mocked(prisma.order.findUnique).mockResolvedValue({
       storeId: "store-1",
