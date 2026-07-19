@@ -985,7 +985,7 @@ describe("regression: P0/P1 fixes", () => {
     expect(d1.assignments.some((a) => a.orderId === "o1" && a.sequenceNo === 2)).toBe(true);
   });
 
-  it("P0-3: COMPLETED assignment is immobile (never released) even without the order snapshot", () => {
+  it("P0-3: COMPLETED assignment is discarded — does NOT occupy a slot (reversed per 1C review 2026-07-19)", () => {
     const completedAsg: DispatchAssignmentInputV2 = {
       assignmentId: "completed-ghost",
       orderId: "ghost-completed-order", // NOT present in input.orders
@@ -1006,9 +1006,17 @@ describe("regression: P0/P1 fixes", () => {
     const result = runDispatchV2(input, fixedEtaResolver(10));
 
     const d1 = result.proposals[0];
-    expect(d1.assignments.some((a) => a.assignmentId === "completed-ghost")).toBe(true);
-    // The completed assignment keeps occupying slot A — the new order lands on B.
-    expect(d1.assignments.some((a) => a.orderId === "o1" && a.sequenceNo === 2)).toBe(true);
+    // The COMPLETED assignment is discarded — it must NOT appear in the proposal.
+    expect(d1.assignments.some((a) => a.assignmentId === "completed-ghost")).toBe(false);
+    // The freed slot goes to the new order. Cursor starts from the driver's
+    // real-time position (lastLocation) at the event time — NOT from the stale
+    // completed delivery point / plannedCompleteAt.
+    expect(d1.assignments.some((a) => a.orderId === "o1" && a.sequenceNo === 1)).toBe(true);
+    const slotA = d1.assignments.find((a) => a.sequenceNo === 1)!;
+    expect(slotA.plannedDepartAt).toBe(NOW);
+    // Terminal orders are silently excluded — not infeasible, not ETA-unavailable.
+    expect(result.infeasibleOrderIds).toEqual([]);
+    expect(result.etaUnavailableOrderIds).toEqual([]);
   });
 
   // -----------------------------------------------------------------------
@@ -1321,5 +1329,188 @@ describe("regression: plannedDepartAt overlap bound & immobile cursor", () => {
     // Slots after the unknown-cursor point cannot be planned → data gap.
     expect(result.etaUnavailableOrderIds).toEqual(["o1"]);
     expect(result.infeasibleOrderIds).toEqual([]);
+  });
+});
+
+// =========================================================================
+// Regression tests — 1C Third Review Rework (2026-07-19)
+// =========================================================================
+
+describe("regression: 1C third-review fixes", () => {
+  // -----------------------------------------------------------------------
+  // R1: orphan EN_ROUTE / IN_SERVICE orders never enter the pool
+  // -----------------------------------------------------------------------
+
+  it("R1: orphan EN_ROUTE / IN_SERVICE orders (no assignment) do NOT enter the pool", () => {
+    // Orders whose executionStatus is EN_ROUTE or IN_SERVICE but that have
+    // no assignment in the snapshot must NOT be (re-)dispatched. They are
+    // silently excluded — data inconsistency is not the planner's problem.
+    const input: DispatchInputV2 = {
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [
+        makeOrder({ orderId: "orphan-enroute", executionStatus: "EN_ROUTE" }),
+        makeOrder({ orderId: "orphan-inservice", executionStatus: "IN_SERVICE" }),
+        makeOrder({ orderId: "o1", executionStatus: "UNASSIGNED" }),
+      ],
+      drivers: [makeDriver({ driverId: "d1" })],
+    };
+    const result = runDispatchV2(input, fixedEtaResolver(10));
+
+    const assignedOrderIds = result.proposals.flatMap((p) =>
+      p.assignments.map((a) => a.orderId)
+    );
+    // Only the UNASSIGNED order gets dispatched
+    expect(assignedOrderIds).toEqual(["o1"]);
+    // Orphan orders are silently excluded — not infeasible, not ETA-unavailable
+    expect(result.infeasibleOrderIds).toEqual([]);
+    expect(result.etaUnavailableOrderIds).toEqual([]);
+  });
+
+  // -----------------------------------------------------------------------
+  // R2: COMPLETED assignment is discarded, slot freed for new order
+  //      (reversed assertion vs the old "keeps occupying slot A" test)
+  // -----------------------------------------------------------------------
+
+  it("R2: COMPLETED assignment discarded — new order takes slot A from real-time position", () => {
+    const completedAsg: DispatchAssignmentInputV2 = {
+      assignmentId: "completed-r2",
+      orderId: "completed-order-r2",
+      sequenceNo: 1,
+      lockType: "NONE",
+      executionStatus: "COMPLETED",
+      pickupLocation: { lat: 30.275, lng: 120.156 },
+      deliveryLocation: { lat: 30.32, lng: 120.143 },
+      plannedDepartAt: "2026-07-18T07:30:00.000Z",
+      plannedCompleteAt: "2026-07-18T08:10:00.000Z",
+      serviceModuleMinutes: 0,
+    };
+    const input: DispatchInputV2 = {
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [
+        makeOrder({ orderId: "completed-order-r2", executionStatus: "COMPLETED" }),
+        makeOrder({ orderId: "o1" }),
+      ],
+      drivers: [makeDriver({ driverId: "d1", assignments: [completedAsg] })],
+    };
+    const result = runDispatchV2(input, fixedEtaResolver(10));
+
+    const d1 = result.proposals[0];
+    // The COMPLETED assignment must NOT appear (discarded before classification).
+    expect(d1.assignments.some((a) => a.assignmentId === "completed-r2")).toBe(false);
+    // The new order lands on slot A, departure = event time (real-time position).
+    const slotA = d1.assignments.find((a) => a.sequenceNo === 1);
+    expect(slotA?.orderId).toBe("o1");
+    expect(slotA?.plannedDepartAt).toBe(NOW);
+    // The COMPLETED order is not in the pool — not infeasible, not ETA-unavailable.
+    expect(result.infeasibleOrderIds).toEqual([]);
+    expect(result.etaUnavailableOrderIds).toEqual([]);
+  });
+
+  // -----------------------------------------------------------------------
+  // R2b: MANUAL_LOCKED + COMPLETED → still discarded
+  //       (lock cannot resurrect a terminal assignment)
+  // -----------------------------------------------------------------------
+
+  it("R2b: MANUAL_LOCKED + COMPLETED assignment is still discarded", () => {
+    const lockedCompleted: DispatchAssignmentInputV2 = {
+      assignmentId: "locked-completed",
+      orderId: "locked-completed-order",
+      sequenceNo: 1,
+      lockType: "MANUAL_LOCKED",
+      executionStatus: "COMPLETED",
+      pickupLocation: { lat: 30.275, lng: 120.156 },
+      deliveryLocation: { lat: 30.32, lng: 120.143 },
+      plannedDepartAt: "2026-07-18T07:30:00.000Z",
+      plannedCompleteAt: "2026-07-18T08:10:00.000Z",
+      serviceModuleMinutes: 0,
+    };
+    const input: DispatchInputV2 = {
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [
+        makeOrder({ orderId: "locked-completed-order", executionStatus: "COMPLETED" }),
+        makeOrder({ orderId: "o1" }),
+      ],
+      drivers: [makeDriver({ driverId: "d1", assignments: [lockedCompleted] })],
+    };
+    const result = runDispatchV2(input, fixedEtaResolver(10));
+
+    const d1 = result.proposals[0];
+    // Terminal check precedes lockType — assignment must NOT appear.
+    expect(d1.assignments.some((a) => a.assignmentId === "locked-completed")).toBe(false);
+    // Freed slot goes to new order.
+    expect(d1.assignments.some((a) => a.orderId === "o1" && a.sequenceNo === 1)).toBe(true);
+    expect(result.infeasibleOrderIds).toEqual([]);
+    expect(result.etaUnavailableOrderIds).toEqual([]);
+  });
+
+  // -----------------------------------------------------------------------
+  // R3: A infeasible (overlaps locked B) but C feasible (after B completes)
+  // -----------------------------------------------------------------------
+
+  it("R3: slot A infeasible due to locked B bound, but slot C is feasible", () => {
+    // Locked assignment at slot B: departs 08:30, completes 09:10.
+    const lockedB: DispatchAssignmentInputV2 = {
+      assignmentId: "locked-b",
+      orderId: "locked-order-b",
+      sequenceNo: 2,
+      lockType: "MANUAL_LOCKED",
+      executionStatus: "PLANNED",
+      pickupLocation: { lat: 30.275, lng: 120.156 },
+      deliveryLocation: { lat: 30.32, lng: 120.143 },
+      plannedDepartAt: "2026-07-18T08:30:00.000Z",
+      plannedCompleteAt: "2026-07-18T09:10:00.000Z",
+      serviceModuleMinutes: 0,
+    };
+
+    // With a long ETA (30 min), slot A would complete at 09:00 → overlaps 08:30
+    // bound → INFEASIBLE. But slot C starts from B's completion (09:10), and
+    // with a short deadhead (5 min) the order fits.
+    // deadhead 30 + service 30 in slot A: pickup 08:30, complete 09:00 → > 08:30 ×
+    // deadhead 5  + service 30 in slot C: starts 09:10, pickup 09:15, complete 09:45
+    //   slack = promisedPickupAt(09:00) - 09:15 = -15 ≥ -30 ✓
+
+    const legEta = new Map<string, number | null>();
+
+    // A deadhead: driver position → order pickup (same point) → 30 min (makes A infeasible)
+    legEta.set(`${PT_HZ_XH.lat},${PT_HZ_XH.lng}->${PT_HZ_XH.lat},${PT_HZ_XH.lng}`, 30);
+    // Service leg: order pickup → order delivery → 30 min
+    legEta.set(`${PT_HZ_XH.lat},${PT_HZ_XH.lng}->${PT_GONGSHU.lat},${PT_GONGSHU.lng}`, 30);
+    // C deadhead: B's deliveryLocation → order pickup → 5 min (short, fits in C)
+    // NOTE: B's deliveryLocation uses hard-coded coords (30.32, 120.143), NOT PT_GONGSHU.
+    legEta.set(`30.32,120.143->${PT_HZ_XH.lat},${PT_HZ_XH.lng}`, 5);
+
+    const resolver = mapEtaResolver(legEta);
+
+    const input: DispatchInputV2 = {
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [
+        makeOrder({ orderId: "locked-order-b", executionStatus: "PLANNED" }),
+        makeOrder({
+          orderId: "new-order",
+          executionStatus: "UNASSIGNED",
+          promisedPickupAt: "2026-07-18T09:00:00.000Z",
+        }),
+      ],
+      drivers: [makeDriver({ driverId: "d1", assignments: [lockedB] })],
+    };
+    const result = runDispatchV2(input, resolver);
+
+    const d1 = result.proposals[0];
+    // Locked assignment stays at slot B.
+    expect(d1.assignments.some((a) => a.assignmentId === "locked-b")).toBe(true);
+
+    // New order must land on slot C (seqNo 3), NOT slot A.
+    const newAsg = d1.assignments.find((a) => a.orderId === "new-order");
+    expect(newAsg).toBeDefined();
+    expect(newAsg!.sequenceNo).toBe(3);
+
+    // Cursor for slot C starts at B's plannedCompleteAt (09:10).
+    expect(newAsg!.plannedDepartAt).toBe("2026-07-18T09:10:00.000Z");
+    // pickup = depart + C deadhead (5) = 09:15; complete = pickup + service ETA (30)
+    expect(newAsg!.plannedPickupAt).toBe("2026-07-18T09:15:00.000Z");
+    expect(newAsg!.plannedCompleteAt).toBe("2026-07-18T09:45:00.000Z");
+
+    expect(result.infeasibleOrderIds).toEqual([]);
+    expect(result.etaUnavailableOrderIds).toEqual([]);
   });
 });

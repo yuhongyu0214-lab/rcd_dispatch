@@ -11,6 +11,7 @@ import type {
   PlannedAssignmentSlotV2,
 } from "@/types/v2";
 
+import { filterDispatchableOrders } from "./candidate-filter";
 import { etaUnavailableReason } from "./feasibility";
 import type { DriverCursor, EtaResolver } from "./types";
 
@@ -39,10 +40,11 @@ const SEQ_TO_SLOT: Record<PlanSequenceV2, PlannedAssignmentSlotV2> = {
 };
 
 /**
- * Terminal execution states — orders in these states must NEVER (re-)enter
- * the dispatchable pool, even when no assignment references them.
+ * Terminal execution states — assignments in these states are discarded
+ * outright: they occupy no slot, advance no cursor, and their orders never
+ * (re-)enter the dispatchable pool.
  */
-const TERMINAL_EXECUTION_STATUSES: ReadonlySet<ExecutionStatusV2> = new Set([
+const TERMINAL_ASSIGNMENT_STATUSES: ReadonlySet<ExecutionStatusV2> = new Set([
   "COMPLETED",
   "CANCELLED",
 ]);
@@ -53,11 +55,14 @@ const TERMINAL_EXECUTION_STATUSES: ReadonlySet<ExecutionStatusV2> = new Set([
  *
  * Immobile when:
  *   - lockType = AUTO_FROZEN or MANUAL_LOCKED, OR
- *   - the assignment's OWN executionStatus is EN_ROUTE / IN_SERVICE /
- *     COMPLETED (authoritative — protects execution even when the order
- *     snapshot is missing or inconsistent with assignment reality), OR
+ *   - the assignment's OWN executionStatus is EN_ROUTE / IN_SERVICE
+ *     (authoritative — protects execution even when the order snapshot
+ *     is missing or inconsistent with assignment reality), OR
  *   - the associated order's executionStatus is EN_ROUTE or IN_SERVICE
  *     (fallback for backward compatibility)
+ *
+ * COMPLETED / CANCELLED assignments are discarded before this check
+ * (see TERMINAL_ASSIGNMENT_STATUSES) — they must never reach here.
  */
 function isImmobile(
   assignment: DispatchAssignmentInputV2,
@@ -68,8 +73,7 @@ function isImmobile(
   }
   if (
     assignment.executionStatus === "EN_ROUTE" ||
-    assignment.executionStatus === "IN_SERVICE" ||
-    assignment.executionStatus === "COMPLETED"
+    assignment.executionStatus === "IN_SERVICE"
   ) {
     return true;
   }
@@ -327,7 +331,7 @@ function findBestSlot(
   order: DispatchOrderInputV2,
   candidates: readonly DispatchDriverInputV2[],
   driverSlots: Map<string, PlanSequenceV2[]>,    // available slots per driver
-  driverCursors: Map<string, DriverCursor>,       // cursor for the available slot
+  getCursorForSlot: (driverId: string, seqNo: PlanSequenceV2) => DriverCursor,
   immobileByDriver: Map<string, Map<PlanSequenceV2, DispatchAssignmentInputV2>>,
   etaResolver: EtaResolver
 ): {
@@ -350,72 +354,82 @@ function findBestSlot(
 
   for (const driver of candidates) {
     const slots = driverSlots.get(driver.driverId);
-    const cursor = driverCursors.get(driver.driverId);
-    if (!slots || slots.length === 0 || !cursor) continue;
+    if (!slots || slots.length === 0) continue;
 
-    // The available slot is the first one
-    const seqNo = slots[0];
+    // Iterate ALL open slots for this driver (P1 fix, per review ruling
+    // 2026-07-19). A slot whose preceding immobile bound makes it infeasible
+    // does not preclude a later slot from being feasible.
+    for (const seqNo of slots) {
+      // Compute cursor ON DEMAND for this (driver, seqNo) pair — the
+      // assignment map may have been mutated by earlier order placements.
+      const cursor = getCursorForSlot(driver.driverId, seqNo);
 
-    if (cursor.availableAt == null) {
-      // The driver's timeline past an immobile assignment without a stored
-      // plannedCompleteAt is UNKNOWN — this slot cannot be planned, and the
-      // missing time must never be recomputed via the ETA resolver.
-      cursorTimeUnknown = true;
-      continue;
-    }
-
-    if (!cursor.position || !order.pickupLocation) {
-      // ETA unavailable for this driver
-      continue;
-    }
-
-    const deadhead = etaResolver(cursor.position, order.pickupLocation);
-    if (deadhead == null) {
-      continue;
-    }
-
-    anyEtaAvailable = true;
-    const departAt = cursor.availableAt;
-    const projectedPickupAt = addMinutes(departAt, deadhead);
-    const slack = minutesBetween(projectedPickupAt, order.promisedPickupAt);
-
-    if (slack < -30) {
-      // INFEASIBLE — skip
-      continue;
-    }
-
-    // Filling a gap BEFORE a locked/executing slot must not overlap it: the
-    // new assignment has to be completed before the driver must DEPART for
-    // the locked slot (frozen rule — plannedCompleteAt <= plannedDepartAt).
-    const bound = laterImmobileBound(immobileByDriver.get(driver.driverId), seqNo);
-    if (bound.kind === "FORBIDDEN") {
-      // Defensive: forbidden slots are already excluded from driverSlots.
-      continue;
-    }
-    if (bound.kind === "BOUND") {
-      if (serviceEtaMinutes == null) {
-        // Cannot prove the order fits before the locked slot — skip
-        // conservatively and record the data gap.
-        serviceEtaGapAtLockedBound = true;
+      if (cursor.availableAt == null) {
+        // The driver's timeline past an immobile assignment without a stored
+        // plannedCompleteAt is UNKNOWN — this slot cannot be planned, and the
+        // missing time must never be recomputed via the ETA resolver.
+        cursorTimeUnknown = true;
         continue;
       }
-      const projectedCompleteAt = addMinutes(
-        projectedPickupAt,
-        serviceEtaMinutes + order.serviceModuleMinutes
-      );
-      if (isAfter(projectedCompleteAt, bound.departAt)) {
-        // Would overlap the locked slot's timeline — this gap cannot host it.
+
+      if (!cursor.position || !order.pickupLocation) {
+        // ETA unavailable for this driver-slot combination
         continue;
       }
-    }
 
-    if (deadhead < bestDeadhead) {
-      bestDeadhead = deadhead;
-      bestSlot = { driverId: driver.driverId, sequenceNo: seqNo, cursor, departAt, deadheadMinutes: deadhead, projectedPickupAt };
-    } else if (deadhead === bestDeadhead && bestSlot) {
-      // Tie-break by driverId for deterministic output
-      if (driver.driverId < bestSlot.driverId) {
+      const deadhead = etaResolver(cursor.position, order.pickupLocation);
+      if (deadhead == null) {
+        continue;
+      }
+
+      anyEtaAvailable = true;
+      const departAt = cursor.availableAt;
+      const projectedPickupAt = addMinutes(departAt, deadhead);
+      const slack = minutesBetween(projectedPickupAt, order.promisedPickupAt);
+
+      if (slack < -30) {
+        // INFEASIBLE — skip this slot
+        continue;
+      }
+
+      // Filling a gap BEFORE a locked/executing slot must not overlap it: the
+      // new assignment has to be completed before the driver must DEPART for
+      // the locked slot (frozen rule — plannedCompleteAt <= plannedDepartAt).
+      const bound = laterImmobileBound(immobileByDriver.get(driver.driverId), seqNo);
+      if (bound.kind === "FORBIDDEN") {
+        // Defensive: forbidden slots are already excluded from driverSlots.
+        continue;
+      }
+      if (bound.kind === "BOUND") {
+        if (serviceEtaMinutes == null) {
+          // Cannot prove the order fits before the locked slot — skip
+          // conservatively and record the data gap.
+          serviceEtaGapAtLockedBound = true;
+          continue;
+        }
+        const projectedCompleteAt = addMinutes(
+          projectedPickupAt,
+          serviceEtaMinutes + order.serviceModuleMinutes
+        );
+        if (isAfter(projectedCompleteAt, bound.departAt)) {
+          // Would overlap the locked slot's timeline — this gap cannot host it.
+          continue;
+        }
+      }
+
+      // Comparator: (deadheadMinutes, driverId, seqNo) lexicographic.
+      // Per PRD V2 §6.2: "在可行组合中，优先选择衔接 ETA 最短的司机与槽位".
+      if (deadhead < bestDeadhead) {
+        bestDeadhead = deadhead;
         bestSlot = { driverId: driver.driverId, sequenceNo: seqNo, cursor, departAt, deadheadMinutes: deadhead, projectedPickupAt };
+      } else if (deadhead === bestDeadhead && bestSlot) {
+        // Tie-break by driverId for deterministic output
+        if (driver.driverId < bestSlot.driverId) {
+          bestSlot = { driverId: driver.driverId, sequenceNo: seqNo, cursor, departAt, deadheadMinutes: deadhead, projectedPickupAt };
+        } else if (driver.driverId === bestSlot.driverId && seqNo < bestSlot.sequenceNo) {
+          // Same driver, same deadhead → prefer earlier slot
+          bestSlot = { driverId: driver.driverId, sequenceNo: seqNo, cursor, departAt, deadheadMinutes: deadhead, projectedPickupAt };
+        }
       }
     }
   }
@@ -492,14 +506,27 @@ export function planSlots(
   // driverAssignments: sequenceNo → assignment (immobile stays, mobile is released)
   const driverAssignments = new Map<string, Map<PlanSequenceV2, DispatchAssignmentInputV2>>();
   const driverCursors = new Map<string, DriverCursor>();
+  const releasedPlannedOrderIds = new Set<string>();
 
   for (const d of allDrivers) {
     const seqMap = new Map<PlanSequenceV2, DispatchAssignmentInputV2>();
     for (const a of d.assignments) {
+      // Terminal assignments are discarded outright — they occupy no slot,
+      // advance no cursor, and their orders never re-enter the pool.
+      // This check precedes lockType: a MANUAL_LOCKED + COMPLETED
+      // assignment is still terminal and must be dropped.
+      if (TERMINAL_ASSIGNMENT_STATUSES.has(a.executionStatus)) {
+        continue;
+      }
       if (isImmobile(a, orderMap)) {
         seqMap.set(a.sequenceNo, a);
+      } else {
+        // Mobile PLANNED assignments release their orders for replanning.
+        // (EN_ROUTE / IN_SERVICE are immobile, so they never reach here.)
+        if (a.executionStatus === "PLANNED") {
+          releasedPlannedOrderIds.add(a.orderId);
+        }
       }
-      // mobile assignments are dropped (their orders go back to the pool)
     }
     driverAssignments.set(d.driverId, seqMap);
 
@@ -548,11 +575,6 @@ export function planSlots(
     availableSlots.set(d.driverId, slots);
   }
 
-  // --- Determine the cursor for each candidate driver's FIRST available slot ---
-  // This cursor is computed by processing all assignments at sequenceNos
-  // BEFORE the first available slot.
-  const firstAvailableCursors = new Map<string, DriverCursor>();
-
   function computeCursorForSlot(
     driverId: string,
     targetSeqNo: PlanSequenceV2
@@ -573,13 +595,6 @@ export function planSlots(
     return cursor;
   }
 
-  for (const d of candidateDrivers) {
-    const slots = availableSlots.get(d.driverId);
-    if (slots && slots.length > 0) {
-      firstAvailableCursors.set(d.driverId, computeCursorForSlot(d.driverId, slots[0]));
-    }
-  }
-
   // --- Determine order pool ---
   // Collect all orderIds that are covered by immobile assignments
   const immobileOrderIds = new Set<string>();
@@ -589,15 +604,23 @@ export function planSlots(
     }
   }
 
-  // Pool: orders NOT covered by immobile assignments and NOT in a terminal
-  // state. CANCELLED / COMPLETED orders must never be (re-)dispatched, even
-  // when no assignment references them.
-  // (UNASSIGNED orders + orders from released mobile assignments)
-  const pool = orders.filter(
-    (o) =>
-      !immobileOrderIds.has(o.orderId) &&
-      !TERMINAL_EXECUTION_STATUSES.has(o.executionStatus)
+  // Pool whitelist (P0-1 fix, per review ruling 2026-07-19):
+  //   1. UNASSIGNED orders (via filterDispatchableOrders)
+  //   2. Orders from explicitly released PLANNED assignments
+  // Both legs exclude orders already covered by immobile assignments
+  // (prevents double-planning when snapshots are inconsistent).
+  // EN_ROUTE / IN_SERVICE / COMPLETED / CANCELLED orders never enter the
+  // pool — even when no assignment references them (silently excluded).
+  const unassignedOrders = filterDispatchableOrders(orders).filter(
+    (o) => !immobileOrderIds.has(o.orderId)
   );
+  const releasedOrders = orders.filter(
+    (o) =>
+      o.executionStatus === "PLANNED" &&
+      releasedPlannedOrderIds.has(o.orderId) &&
+      !immobileOrderIds.has(o.orderId)
+  );
+  const pool = [...unassignedOrders, ...releasedOrders];
   const sortedPool = [...pool].sort((a, b) => {
     const t =
       new Date(a.promisedPickupAt).getTime() -
@@ -615,7 +638,7 @@ export function planSlots(
       order,
       candidateDrivers,
       availableSlots,
-      firstAvailableCursors,
+      (driverId, seqNo) => computeCursorForSlot(driverId, seqNo),
       immobileByDriver,
       etaResolver
     );
@@ -653,13 +676,6 @@ export function planSlots(
       const slots = availableSlots.get(driverId)!;
       const idx = slots.indexOf(sequenceNo);
       if (idx >= 0) slots.splice(idx, 1);
-
-      // Recompute cursor for the next available slot
-      if (slots.length > 0) {
-        firstAvailableCursors.set(driverId, computeCursorForSlot(driverId, slots[0]));
-      } else {
-        firstAvailableCursors.delete(driverId);
-      }
     } else if (result.etaUnavailable) {
       etaUnavailableOrderIds.push(order.orderId);
     } else {
