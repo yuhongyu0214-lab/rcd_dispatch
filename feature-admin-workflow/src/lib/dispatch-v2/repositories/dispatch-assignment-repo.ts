@@ -2,22 +2,21 @@ import { prisma } from "@/lib/prisma";
 import type { EffectiveAssignmentRow } from "./types";
 
 /**
- * Batch-read effective assignments for the given drivers and orders.
+ * Batch-read effective assignments for the given drivers.
  *
  * "Effective" means the assignment is currently active (not withdrawn / recycled
  * / completed / cancelled) AND the linked order has not reached a terminal
  * execution status.
  *
- * A non-empty `orderIds` list optionally narrows the result set (in-memory).
+ * IMPORTANT: This function loads ALL effective assignments for every driver
+ * in scope. It MUST NOT filter by a specific orderId — otherwise new-order
+ * events would see an empty timeline and overwrite locked / in-service slots.
  */
 export async function findEffectiveAssignments(params: {
   driverIds: string[];
-  orderIds?: string[];
 }): Promise<EffectiveAssignmentRow[]> {
-  const { driverIds, orderIds } = params;
+  const { driverIds } = params;
 
-  // We query by driver ID scope (already bounded by affected stores).
-  // If there are no drivers, there can be no assignments.
   if (driverIds.length === 0) return [];
 
   const rows = await prisma.assignment.findMany({
@@ -50,9 +49,11 @@ export async function findEffectiveAssignments(params: {
         },
       },
     },
+    // Stable sort: driver first, then sequence within each driver.
+    orderBy: [{ driverId: "asc" }, { sequenceNo: "asc" }],
   });
 
-  const mapped: EffectiveAssignmentRow[] = rows.map((r) => ({
+  return rows.map((r) => ({
     id: r.id,
     orderId: r.orderId,
     driverId: r.driverId,
@@ -68,11 +69,4 @@ export async function findEffectiveAssignments(params: {
     deliveryLat: r.order.deliveryLat,
     deliveryLng: r.order.deliveryLng,
   }));
-
-  if (orderIds && orderIds.length > 0) {
-    const idSet = new Set(orderIds);
-    return mapped.filter((a) => idSet.has(a.orderId));
-  }
-
-  return mapped;
 }

@@ -36,6 +36,7 @@ export async function findDispatchableDrivers(params: {
       lastLocationCapturedAt: true,
       store: { select: { code: true } },
     },
+    orderBy: { id: "asc" },
   });
 
   const mapped: DispatchableDriverRow[] = rows.map((r) => ({

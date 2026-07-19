@@ -22,6 +22,7 @@ export async function findServicePlans(params: {
       assignmentId: true,
       totalModuleMinutes: true,
     },
+    orderBy: { assignmentId: "asc" },
   });
 
   return rows.map((r) => ({
