@@ -37,7 +37,9 @@ export async function commitInternalEvent(
         orderId: event.orderId ?? null,
         payloadSummary: {
           type: event.type,
+          orderId: event.orderId ?? null,
           driverId: event.driverId ?? null,
+          assignmentId: event.assignmentId ?? null,
         },
         receivedAt: new Date(event.occurredAt),
         processedAt: new Date(),

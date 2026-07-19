@@ -18,6 +18,7 @@ const triggerLog = createLogger("gate3-triggers");
 
 export async function triggerAssignmentAssigned(params: {
   eventId: string;
+  assignmentId: string;
   orderId: string;
   driverId: string;
   occurredAt: string;
@@ -26,6 +27,7 @@ export async function triggerAssignmentAssigned(params: {
   const event: InternalEvent = {
     eventId: params.eventId,
     type: "ASSIGNMENT_ASSIGNED",
+    assignmentId: params.assignmentId,
     orderId: params.orderId,
     driverId: params.driverId,
     occurredAt: params.occurredAt,
@@ -43,6 +45,7 @@ export async function triggerAssignmentAssigned(params: {
 
 export async function triggerAssignmentReassigned(params: {
   eventId: string;
+  assignmentId: string;
   orderId: string;
   toDriverId: string;
   occurredAt: string;
@@ -51,6 +54,7 @@ export async function triggerAssignmentReassigned(params: {
   const event: InternalEvent = {
     eventId: params.eventId,
     type: "ASSIGNMENT_REASSIGNED",
+    assignmentId: params.assignmentId,
     orderId: params.orderId,
     driverId: params.toDriverId,
     occurredAt: params.occurredAt,
@@ -68,6 +72,7 @@ export async function triggerAssignmentReassigned(params: {
 
 export async function triggerAssignmentWithdrawn(params: {
   eventId: string;
+  assignmentId: string;
   orderId: string;
   driverId: string;
   occurredAt: string;
@@ -76,6 +81,7 @@ export async function triggerAssignmentWithdrawn(params: {
   const event: InternalEvent = {
     eventId: params.eventId,
     type: "ASSIGNMENT_WITHDRAWN",
+    assignmentId: params.assignmentId,
     orderId: params.orderId,
     driverId: params.driverId,
     occurredAt: params.occurredAt,
@@ -93,6 +99,7 @@ export async function triggerAssignmentWithdrawn(params: {
 
 export async function triggerAssignmentCancelled(params: {
   eventId: string;
+  assignmentId: string;
   orderId: string;
   driverId?: string;
   occurredAt: string;
@@ -101,6 +108,7 @@ export async function triggerAssignmentCancelled(params: {
   const event: InternalEvent = {
     eventId: params.eventId,
     type: "ASSIGNMENT_CANCELLED",
+    assignmentId: params.assignmentId,
     orderId: params.orderId,
     driverId: params.driverId,
     occurredAt: params.occurredAt,

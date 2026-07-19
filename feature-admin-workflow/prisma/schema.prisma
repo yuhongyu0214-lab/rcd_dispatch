@@ -27,6 +27,9 @@ enum OrderSourceSystem {
   PLUGIN
   API
   V1_IMPORT
+  /// Storage namespace reserved for OrderSourceEvent only.
+  /// MUST NOT be written to Order.sourceSystem (enforced by DB CHECK).
+  /// NOT part of CanonicalOrderV2 or any HTTP DTO sourceSystem.
   INTERNAL
 }
 
