@@ -65,10 +65,40 @@ describe("findDispatchableOrders", () => {
     ]);
   });
 
-  it("returns empty array for empty storeIds", async () => {
+  it("returns empty array for empty storeIds AND empty requiredOrderIds", async () => {
     const result = await findDispatchableOrders({ storeIds: [] });
     expect(result).toEqual([]);
     expect(mockOrderFindMany).not.toHaveBeenCalled();
+  });
+
+  it("uses OR union when requiredOrderIds are provided alongside storeIds", async () => {
+    await findDispatchableOrders({
+      storeIds: ["s1"],
+      requiredOrderIds: ["order-z"],
+    });
+
+    expect(mockOrderFindMany).toHaveBeenCalledTimes(1);
+    const call = mockOrderFindMany.mock.calls[0][0];
+    expect(call.where.OR).toBeDefined();
+    expect(call.where.OR).toHaveLength(2);
+    expect(call.where.OR).toEqual(
+      expect.arrayContaining([
+        { storeId: { in: ["s1"] } },
+        { id: { in: ["order-z"] } },
+      ])
+    );
+  });
+
+  it("queries by requiredOrderIds alone when storeIds is empty", async () => {
+    await findDispatchableOrders({
+      storeIds: [],
+      requiredOrderIds: ["order-z", "order-y"],
+    });
+
+    expect(mockOrderFindMany).toHaveBeenCalledTimes(1);
+    const call = mockOrderFindMany.mock.calls[0][0];
+    expect(call.where.id).toEqual({ in: ["order-z", "order-y"] });
+    expect(call.where).not.toHaveProperty("OR");
   });
 });
 

@@ -200,7 +200,6 @@ function mapDriver(
 
 type AffectedScope = {
   storeIds: string[];
-  orderIds: string[];
   driverIds: string[];
 };
 
@@ -215,11 +214,7 @@ async function resolveAffectedScope(
       where: { isActive: true },
       select: { id: true },
     });
-    return {
-      storeIds: stores.map((s) => s.id),
-      orderIds: [],
-      driverIds: [],
-    };
+    return { storeIds: stores.map((s) => s.id), driverIds: [] };
   }
 
   const storeIds = new Set<string>();
@@ -257,11 +252,7 @@ async function resolveAffectedScope(
     }
   }
 
-  return {
-    storeIds: [...storeIds],
-    orderIds: orderId ? [orderId] : [],
-    driverIds: driverId ? [driverId] : [],
-  };
+  return { storeIds: [...storeIds], driverIds: driverId ? [driverId] : [] };
 }
 
 // ---------------------------------------------------------------------------
@@ -276,10 +267,9 @@ async function resolveAffectedScope(
  *
  * Frozen rules:
  * - COMPLETED / CANCELLED orders excluded at DB query level.
- * - Orders: ALL dispatchable orders in the affected stores are loaded.
- *   The order query MUST NOT filter by a single event orderId — every
- *   order referenced by any driver's assignment must be in the snapshot,
- *   otherwise unlocked PLANNED assignments are silently lost to the core.
+ * - Orders: ALL dispatchable orders in the affected stores PLUS any order
+ *   referenced by a loaded assignment (even when the order belongs to a
+ *   different store — cross-store assignments are legitimate in V1).
  * - A driver that enters the snapshot brings ALL of its effective assignments.
  *   The assignment query MUST NOT filter by a single orderId — otherwise
  *   new-order events would see empty timelines and overwrite locked slots.
@@ -298,15 +288,7 @@ export async function buildDispatchSnapshot(
   // 1. Resolve affected stores
   const scope = await resolveAffectedScope(event);
 
-  // 2. Batch-read ALL dispatchable orders in affected stores.
-  //    P0 follow-up: NEVER filter by event orderId. Every order referenced
-  //    by any driver's assignment must be present — otherwise unlocked
-  //    PLANNED assignments are released but cannot re-enter the plan pool.
-  const orderRows = await findDispatchableOrders({
-    storeIds: scope.storeIds,
-  });
-
-  // 3. Batch-read drivers
+  // 2. Batch-read drivers in affected stores
   const driverRows = await findDispatchableDrivers({
     storeIds: scope.storeIds,
     driverIds: scope.driverIds.length > 0 ? scope.driverIds : undefined,
@@ -314,15 +296,29 @@ export async function buildDispatchSnapshot(
 
   const driverIdList = driverRows.map((d) => d.id);
 
-  // 4. Batch-read ALL effective assignments for every driver in scope.
-  //    P0-1: NEVER filter by event orderId — stripping other orders'
+  // 3. Batch-read ALL effective assignments for every driver in scope.
+  //    NEVER filter by a single orderId — stripping other orders'
   //    assignments from candidate drivers would make the core think their
   //    A/B/C slots are empty.
   const assignmentRows = await findEffectiveAssignments({
     driverIds: driverIdList,
   });
 
-  // 5. Batch-read service plans for all effective assignments
+  // 4. Collect order IDs referenced by assignments. These may include
+  //    cross-store orders that would be missed by the store-only filter.
+  //    Pass them as requiredOrderIds (UNION, not intersection) so every
+  //    order referenced by a loaded assignment is guaranteed present.
+  const requiredOrderIds = assignmentRows.length > 0
+    ? [...new Set(assignmentRows.map((a) => a.orderId))]
+    : undefined;
+
+  // 5. Batch-read orders: affected stores ∪ assignment-referenced orders
+  const orderRows = await findDispatchableOrders({
+    storeIds: scope.storeIds,
+    requiredOrderIds,
+  });
+
+  // 6. Batch-read service plans for all effective assignments
   const assignmentIdList = assignmentRows.map((a) => a.id);
   const planRows = await findServicePlans({
     assignmentIds: assignmentIdList,
@@ -332,7 +328,7 @@ export async function buildDispatchSnapshot(
     planMap.set(p.assignmentId, p.totalModuleMinutes);
   }
 
-  // 6. Build per-driver assignment lists AND per-order module-minute totals
+  // 7. Build per-driver assignment lists AND per-order module-minute totals
   //    in a single pass (no N+1, no find() lookups).
   const driverAsgMap = new Map<string, DispatchAssignmentInputV2[]>();
   const orderModuleMap = new Map<string, number>();
@@ -352,12 +348,12 @@ export async function buildDispatchSnapshot(
     );
   }
 
-  // 7. Map orders → DispatchOrderInputV2
+  // 8. Map orders → DispatchOrderInputV2
   const orders: DispatchOrderInputV2[] = orderRows.map((r) =>
     mapOrder(r, orderModuleMap.get(r.id) ?? 0)
   );
 
-  // 8. Map drivers → DispatchDriverInputV2
+  // 9. Map drivers → DispatchDriverInputV2
   const drivers: DispatchDriverInputV2[] = driverRows.map((row) =>
     mapDriver(row, driverAsgMap.get(row.id) ?? [], nowMs)
   );

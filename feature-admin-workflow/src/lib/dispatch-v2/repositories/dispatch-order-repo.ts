@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { DispatchableOrderRow } from "./types";
+import type { Prisma } from "@prisma/client";
 
 /**
  * Batch-read dispatchable orders for the given stores.
@@ -9,25 +10,46 @@ import type { DispatchableOrderRow } from "./types";
  *   - CANCELLED  → excluded from the planning pool
  *   - UNASSIGNED / PLANNED / EN_ROUTE / IN_SERVICE → included
  *
- * If a non-empty `orderIds` list is provided, the result is further narrowed
- * to only those orders. This is an **in-memory filter** that cannot cause N+1
- * — the DB query already covers all candidate stores.
+ * When `requiredOrderIds` is provided, those order IDs are **added via OR**
+ * to the store-scoped query. This is a UNION (not intersection): the result
+ * includes ALL non-terminal orders in the given stores PLUS any orders named
+ * by `requiredOrderIds` that aren't in those stores (cross-store assignments).
  */
 export async function findDispatchableOrders(params: {
   storeIds: string[];
-  orderIds?: string[];
+  requiredOrderIds?: string[];
 }): Promise<DispatchableOrderRow[]> {
-  const { storeIds, orderIds } = params;
+  const { storeIds, requiredOrderIds } = params;
 
-  if (storeIds.length === 0) return [];
+  if (storeIds.length === 0 && (!requiredOrderIds || requiredOrderIds.length === 0)) {
+    return [];
+  }
+
+  // Build OR union: (storeId ∈ storeIds) ∪ (id ∈ requiredOrderIds).
+  // This guarantees every order referenced by a loaded assignment is present
+  // even when the assignment's order belongs to a different store.
+  const orParts: Prisma.OrderWhereInput[] = [];
+
+  if (storeIds.length > 0) {
+    orParts.push({ storeId: { in: storeIds } });
+  }
+
+  if (requiredOrderIds && requiredOrderIds.length > 0) {
+    orParts.push({ id: { in: requiredOrderIds } });
+  }
+
+  const where: Prisma.OrderWhereInput = {
+    executionStatus: { notIn: ["COMPLETED", "CANCELLED"] },
+  };
+
+  if (orParts.length === 1) {
+    Object.assign(where, orParts[0]);
+  } else {
+    where.OR = orParts;
+  }
 
   const rows = await prisma.order.findMany({
-    where: {
-      storeId: { in: storeIds },
-      executionStatus: {
-        notIn: ["COMPLETED", "CANCELLED"],
-      },
-    },
+    where,
     select: {
       id: true,
       orderNo: true,
@@ -48,7 +70,7 @@ export async function findDispatchableOrders(params: {
     orderBy: [{ promisedPickupAt: "asc" }, { id: "asc" }],
   });
 
-  const mapped: DispatchableOrderRow[] = rows.map((r) => ({
+  return rows.map((r) => ({
     id: r.id,
     orderNo: r.orderNo,
     type: r.type,
@@ -65,11 +87,4 @@ export async function findDispatchableOrders(params: {
     storeCode: r.store.code,
     currentAssignmentId: r.currentAssignmentId,
   }));
-
-  if (orderIds && orderIds.length > 0) {
-    const idSet = new Set(orderIds);
-    return mapped.filter((o) => idSet.has(o.id));
-  }
-
-  return mapped;
 }

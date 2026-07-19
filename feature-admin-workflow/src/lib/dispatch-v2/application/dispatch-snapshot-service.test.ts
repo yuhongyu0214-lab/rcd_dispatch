@@ -23,7 +23,7 @@ vi.mock("@/lib/prisma", () => ({
 
 const mockFindDispatchableOrders = vi.fn<(params: {
   storeIds: string[];
-  orderIds?: string[];
+  requiredOrderIds?: string[];
 }) => Promise<DispatchableOrderRow[]>>();
 
 const mockFindDispatchableDrivers = vi.fn<(params: {
@@ -236,8 +236,11 @@ describe("P0-1: driver timeline integrity", () => {
       }
     }
 
+    // The repo MUST receive requiredOrderIds computed from assignmentRows
     const orderCallArgs = mockFindDispatchableOrders.mock.calls[0][0];
-    expect(orderCallArgs).not.toHaveProperty("orderIds");
+    expect(orderCallArgs.requiredOrderIds).toEqual(
+      expect.arrayContaining(["order-x", "order-y"])
+    );
   });
 
   it("new unassigned order with driver holding EN_ROUTE + IN_SERVICE: full timeline preserved", async () => {
@@ -279,6 +282,87 @@ describe("P0-1: driver timeline integrity", () => {
     expect(snapshot.drivers[0].assignments.map((a) => a.executionStatus)).toEqual(
       expect.arrayContaining(["EN_ROUTE", "IN_SERVICE", "PLANNED"])
     );
+  });
+
+  it("P0 cross-store: driver in store-A with assignment for store-B order — the order MUST be in snapshot", async () => {
+    // V1 dispatch allows cross-store drivers within distance criteria.
+    // There is no DB constraint requiring an assignment's order and driver
+    // to share the same store. If a store-A driver has an assignment for
+    // a store-B order, and we only load store-A orders, the store-B order
+    // is missing from snapshot.orders — unlocked PLANNED assignments for
+    // that order would be silently lost when the core runs.
+
+    // Event targets a store-A order.
+    vi.mocked(prisma.order.findUnique).mockResolvedValue({
+      storeId: "store-A",
+    } as never);
+
+    // Driver d1 belongs to store-A.
+    mockFindDispatchableDrivers.mockResolvedValue([
+      makeDriverRow({ id: "driver-1", storeCode: "STORE-A" }),
+    ]);
+
+    // d1 has an assignment for order-z which belongs to store-B.
+    mockFindEffectiveAssignments.mockResolvedValue([
+      makeAssignmentRow({
+        id: "asg-cross",
+        orderId: "order-z",
+        driverId: "driver-1",
+        sequenceNo: 1,
+        lockType: "MANUAL_LOCKED",
+        orderExecutionStatus: "PLANNED",
+      }),
+    ]);
+
+    // Simulate: findDispatchableOrders is called with:
+    //   storeIds: ["store-A"]  ← from affected scope
+    //   requiredOrderIds: ["order-z"]  ← from assignment cross-store reference
+    // The repo should return order-z even though it belongs to store-B.
+    mockFindDispatchableOrders.mockImplementation(async (params) => {
+      const { storeIds, requiredOrderIds } = params;
+      const orders: DispatchableOrderRow[] = [];
+
+      // Store-A orders (affected scope)
+      if (storeIds.includes("store-A")) {
+        orders.push(
+          makeOrderRow({ id: "new-order", storeCode: "STORE-A", executionStatus: "UNASSIGNED" })
+        );
+      }
+
+      // Cross-store orders pulled in by requiredOrderIds
+      if (requiredOrderIds?.includes("order-z")) {
+        orders.push(
+          makeOrderRow({ id: "order-z", storeCode: "STORE-B", executionStatus: "PLANNED" })
+        );
+      }
+
+      return orders;
+    });
+
+    mockFindServicePlans.mockResolvedValue([]);
+
+    const snapshot = await buildDispatchSnapshot(ORDER_RECEIVED);
+
+    // Verify the cross-store order IS in the snapshot
+    const orderIds = snapshot.orders.map((o) => o.orderId);
+    expect(orderIds).toContain("order-z");
+
+    // Verify the store code is preserved correctly
+    const crossOrder = snapshot.orders.find((o) => o.orderId === "order-z");
+    expect(crossOrder?.storeCode).toBe("STORE-B");
+
+    // Verify the assignment → order invariant still holds
+    const orderIdsInSnapshot = new Set(snapshot.orders.map((o) => o.orderId));
+    for (const driver of snapshot.drivers) {
+      for (const asg of driver.assignments) {
+        expect(orderIdsInSnapshot.has(asg.orderId)).toBe(true);
+      }
+    }
+
+    // Verify requiredOrderIds was passed to the repo
+    const orderCallArgs = mockFindDispatchableOrders.mock.calls[0][0];
+    expect(orderCallArgs.storeIds).toContain("store-A");
+    expect(orderCallArgs.requiredOrderIds).toContain("order-z");
   });
 });
 
