@@ -39,12 +39,29 @@ describe("commitInternalEvent", () => {
       type: "ASSIGNMENT_ASSIGNED",
       orderId: "order-1",
       driverId: "driver-1",
+      assignmentId: "asg-001",
       occurredAt: "2026-07-19T08:00:00.000Z",
       traceId: "trace-001",
     });
 
     expect(result).toEqual({ eventId: "assign-asg-001", committed: true });
     expect(prisma.orderSourceEvent.create).toHaveBeenCalledTimes(1);
+
+    // G3-0 contract: assignmentId must appear in payloadSummary so
+    // downstream consumers can correlate events without parsing the eventId.
+    const createArgs = vi.mocked(prisma.orderSourceEvent.create).mock
+      .calls[0][0] as { data: Record<string, unknown> };
+    expect(createArgs.data).toMatchObject({
+      sourceSystem: "INTERNAL",
+      externalOrderId: "assign-asg-001",
+      orderId: "order-1",
+    });
+    expect((createArgs.data as Record<string, unknown>).payloadSummary).toEqual({
+      type: "ASSIGNMENT_ASSIGNED",
+      orderId: "order-1",
+      driverId: "driver-1",
+      assignmentId: "asg-001",
+    });
   });
 
   it("returns DUPLICATE for P2002 unique constraint violation", async () => {
