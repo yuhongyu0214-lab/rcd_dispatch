@@ -2,23 +2,33 @@
 --
 -- Safe to run when zero rows reference 'INTERNAL'. Aborts with a clear error
 -- if any INTERNAL data exists — never silently rewrites or deletes data.
+-- Also safe to run on databases where the Order / OrderSourceEvent tables
+-- do not yet exist (e.g., shadow DB used for schema diffing).
 
 BEGIN;
 
--- 1. Guard: reject rollback if any INTERNAL data exists in either table.
---    The DO block raises an exception to abort the transaction.
+-- 1. Guard: reject rollback if any INTERNAL data exists.
+--    Checks only tables that actually exist — no-op on empty databases.
 DO $$
 DECLARE
-  internal_order_count INTEGER;
-  internal_event_count INTEGER;
+  internal_order_count INTEGER := 0;
+  internal_event_count INTEGER := 0;
 BEGIN
-  SELECT count(*) INTO internal_order_count
-  FROM "Order"
-  WHERE "sourceSystem" = 'INTERNAL';
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'Order' AND column_name = 'sourceSystem'
+  ) THEN
+    EXECUTE 'SELECT count(*) FROM "Order" WHERE "sourceSystem" = ''INTERNAL'''
+    INTO internal_order_count;
+  END IF;
 
-  SELECT count(*) INTO internal_event_count
-  FROM "OrderSourceEvent"
-  WHERE "sourceSystem" = 'INTERNAL';
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'OrderSourceEvent' AND column_name = 'sourceSystem'
+  ) THEN
+    EXECUTE 'SELECT count(*) FROM "OrderSourceEvent" WHERE "sourceSystem" = ''INTERNAL'''
+    INTO internal_event_count;
+  END IF;
 
   IF internal_order_count > 0 OR internal_event_count > 0 THEN
     RAISE EXCEPTION
@@ -31,28 +41,58 @@ END $$;
 
 -- 2. Temporarily remove the default on Order.sourceSystem so the column
 --    can be re-typed without a default-value conflict.
-ALTER TABLE "Order" ALTER COLUMN "sourceSystem" DROP DEFAULT;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'Order' AND column_name = 'sourceSystem'
+  ) THEN
+    ALTER TABLE "Order" ALTER COLUMN "sourceSystem" DROP DEFAULT;
+  END IF;
+END $$;
 
 -- 3. Recreate the enum without INTERNAL.
 ALTER TYPE "OrderSourceSystem" RENAME TO "OrderSourceSystem_old";
 
 CREATE TYPE "OrderSourceSystem" AS ENUM ('HALUO', 'PLUGIN', 'API', 'V1_IMPORT');
 
--- 4. Convert both tables to the new enum.
-ALTER TABLE "Order"
-  ALTER COLUMN "sourceSystem"
-  TYPE "OrderSourceSystem"
-  USING "sourceSystem"::text::"OrderSourceSystem";
+-- 4. Convert both tables to the new enum (skip if the table / column does
+--    not exist — e.g. on a shadow DB).
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'Order' AND column_name = 'sourceSystem'
+  ) THEN
+    ALTER TABLE "Order"
+      ALTER COLUMN "sourceSystem"
+      TYPE "OrderSourceSystem"
+      USING "sourceSystem"::text::"OrderSourceSystem";
+  END IF;
 
-ALTER TABLE "OrderSourceEvent"
-  ALTER COLUMN "sourceSystem"
-  TYPE "OrderSourceSystem"
-  USING "sourceSystem"::text::"OrderSourceSystem";
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'OrderSourceEvent' AND column_name = 'sourceSystem'
+  ) THEN
+    ALTER TABLE "OrderSourceEvent"
+      ALTER COLUMN "sourceSystem"
+      TYPE "OrderSourceSystem"
+      USING "sourceSystem"::text::"OrderSourceSystem";
+  END IF;
+END $$;
 
 -- 5. Drop the old enum.
 DROP TYPE "OrderSourceSystem_old";
 
 -- 6. Restore the default.
-ALTER TABLE "Order" ALTER COLUMN "sourceSystem" SET DEFAULT 'V1_IMPORT';
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'Order' AND column_name = 'sourceSystem'
+  ) THEN
+    ALTER TABLE "Order" ALTER COLUMN "sourceSystem" SET DEFAULT 'V1_IMPORT';
+  END IF;
+END $$;
 
 COMMIT;
