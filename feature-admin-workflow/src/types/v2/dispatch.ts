@@ -104,9 +104,33 @@ export type DispatchDriverPlanProposalV2 = {
   assignments: DispatchPlannedAssignmentV2[];
 };
 
+/**
+ * Per-order dispatch evaluation produced by the pure computation core.
+ *
+ * Frozen discriminated union (2026-07-19 ruling):
+ * - PLANNED / INFEASIBLE variants carry a real bestSlackMinutes (no sentinels).
+ * - UNPLANNED / ETA_UNAVAILABLE variants carry bestSlackMinutes: null because
+ *   no credible slack can be computed without a valid plan or ETA.
+ */
+export type DispatchOrderEvaluationV2 =
+  | {
+      orderId: string;
+      result: "PLANNED" | "INFEASIBLE";
+      bestSlackMinutes: number;
+      reason: "PLANNED" | "SLACK_BELOW_LIMIT";
+    }
+  | {
+      orderId: string;
+      result: "UNPLANNED" | "ETA_UNAVAILABLE";
+      bestSlackMinutes: null;
+      reason:
+        | "NO_ELIGIBLE_DRIVER"
+        | "NO_AVAILABLE_SLOT"
+        | "ETA_UNAVAILABLE";
+    };
+
 export type DispatchOutputV2 = {
   proposals: DispatchDriverPlanProposalV2[];
-  infeasibleOrderIds: string[];
-  etaUnavailableOrderIds: string[];
+  evaluations: DispatchOrderEvaluationV2[];
   calculatedAt: IsoDateTimeStringV2;
 };

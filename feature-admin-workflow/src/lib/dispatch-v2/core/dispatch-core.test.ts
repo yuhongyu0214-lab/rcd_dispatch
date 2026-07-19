@@ -5,6 +5,7 @@ import type {
   DispatchAssignmentInputV2,
   DispatchDriverInputV2,
   DispatchInputV2,
+  DispatchOrderEvaluationV2,
   DispatchOrderInputV2,
   GeoPointV2,
 } from "@/types/v2";
@@ -19,6 +20,11 @@ import type { EtaResolver } from "./types";
 // ---------------------------------------------------------------------------
 // Test fixtures & helpers
 // ---------------------------------------------------------------------------
+
+// Helper: extract orderIds from evaluations array for a specific result kind.
+function evalIds(evals: DispatchOrderEvaluationV2[], result: DispatchOrderEvaluationV2["result"]): string[] {
+  return evals.filter(e => e.result === result).map(e => e.orderId);
+}
 
 const NOW = "2026-07-18T08:00:00.000Z";
 
@@ -252,8 +258,8 @@ describe("runDispatchV2", () => {
     };
     const result = runDispatchV2(input);
     expect(result.proposals).toEqual([]);
-    expect(result.infeasibleOrderIds).toEqual([]);
-    expect(result.etaUnavailableOrderIds).toEqual([]);
+    expect(evalIds(result.evaluations, "INFEASIBLE")).toEqual([]);
+    expect(evalIds(result.evaluations, "ETA_UNAVAILABLE")).toEqual([]);
     expect(result.calculatedAt).toBe(NOW);
   });
 
@@ -267,8 +273,8 @@ describe("runDispatchV2", () => {
       ],
     };
     const result = runDispatchV2(input);
-    expect(result.infeasibleOrderIds).toEqual(["o1"]);
-    expect(result.etaUnavailableOrderIds).toEqual([]);
+    expect(evalIds(result.evaluations, "UNPLANNED")).toEqual(["o1"]);
+    expect(evalIds(result.evaluations, "ETA_UNAVAILABLE")).toEqual([]);
     // Non-candidate drivers still get a (possibly empty) proposal
     expect(result.proposals).toHaveLength(2);
     expect(result.proposals[0].assignments).toEqual([]);
@@ -286,8 +292,8 @@ describe("runDispatchV2", () => {
       drivers: [makeDriver({ driverId: "d1" })],
     };
     const result = runDispatchV2(input, fixedEtaResolver(15));
-    expect(result.infeasibleOrderIds).toEqual([]);
-    expect(result.etaUnavailableOrderIds).toEqual([]);
+    expect(evalIds(result.evaluations, "INFEASIBLE")).toEqual([]);
+    expect(evalIds(result.evaluations, "ETA_UNAVAILABLE")).toEqual([]);
     expect(result.proposals).toHaveLength(1);
 
     const p = result.proposals[0];
@@ -388,7 +394,7 @@ describe("runDispatchV2", () => {
       ],
     };
     const result = runDispatchV2(input, fixedEtaResolver(10));
-    expect(result.infeasibleOrderIds).toContain("new-order");
+    expect(evalIds(result.evaluations, "UNPLANNED")).toContain("new-order");
   });
 
   // -----------------------------------------------------------------------
@@ -570,7 +576,7 @@ describe("runDispatchV2", () => {
     // 60 min deadhead → projected pickup 09:00 → slack = 0 (AT_RISK)
     // That's completely fine.
     const result = runDispatchV2(input, fixedEtaResolver(60));
-    expect(result.infeasibleOrderIds).toEqual([]);
+    expect(evalIds(result.evaluations, "INFEASIBLE")).toEqual([]);
     expect(result.proposals[0].assignments).toHaveLength(1);
   });
 
@@ -587,7 +593,7 @@ describe("runDispatchV2", () => {
     };
     // 91 min deadhead → projected pickup 09:31 → slack = -31 (INFEASIBLE)
     const result = runDispatchV2(input, fixedEtaResolver(91));
-    expect(result.infeasibleOrderIds).toEqual(["o1"]);
+    expect(evalIds(result.evaluations, "INFEASIBLE")).toEqual(["o1"]);
   });
 
   // -----------------------------------------------------------------------
@@ -601,8 +607,8 @@ describe("runDispatchV2", () => {
       drivers: [makeDriver({ driverId: "d1" })],
     };
     const result = runDispatchV2(input, nullEtaResolver);
-    expect(result.etaUnavailableOrderIds).toEqual(["o1"]);
-    expect(result.infeasibleOrderIds).toEqual([]);
+    expect(evalIds(result.evaluations, "ETA_UNAVAILABLE")).toEqual(["o1"]);
+    expect(evalIds(result.evaluations, "INFEASIBLE")).toEqual([]);
   });
 
   it("order without pickupLocation → etaUnavailable", () => {
@@ -612,7 +618,7 @@ describe("runDispatchV2", () => {
       drivers: [makeDriver({ driverId: "d1" })],
     };
     const result = runDispatchV2(input);
-    expect(result.etaUnavailableOrderIds).toEqual(["o1"]);
+    expect(evalIds(result.evaluations, "ETA_UNAVAILABLE")).toEqual(["o1"]);
   });
 
   it("driver without lastLocation → etaUnavailable", () => {
@@ -622,7 +628,7 @@ describe("runDispatchV2", () => {
       drivers: [makeDriver({ driverId: "d1", lastLocation: undefined })],
     };
     const result = runDispatchV2(input);
-    expect(result.etaUnavailableOrderIds).toEqual(["o1"]);
+    expect(evalIds(result.evaluations, "ETA_UNAVAILABLE")).toEqual(["o1"]);
   });
 
   // -----------------------------------------------------------------------
@@ -722,7 +728,7 @@ describe("runDispatchV2", () => {
     // Without an injected resolver the core must NOT invent ETAs — the order
     // is reported as ETA-unavailable instead of being planned.
     expect(result.proposals[0].assignments).toEqual([]);
-    expect(result.etaUnavailableOrderIds).toEqual(["order-v2-001"]);
+    expect(evalIds(result.evaluations, "ETA_UNAVAILABLE")).toEqual(["order-v2-001"]);
   });
 
   // -----------------------------------------------------------------------
@@ -764,8 +770,75 @@ describe("runDispatchV2", () => {
     );
     expect(allAssigned).toContain("o1");
     expect(allAssigned).toContain("o2");
-    expect(result.infeasibleOrderIds).toEqual([]);
-    expect(result.etaUnavailableOrderIds).toEqual([]);
+    expect(evalIds(result.evaluations, "INFEASIBLE")).toEqual([]);
+    expect(evalIds(result.evaluations, "ETA_UNAVAILABLE")).toEqual([]);
+  });
+
+  // -----------------------------------------------------------------------
+  // DispatchOrderEvaluationV2 — contract verification (2026-07-19 ruling)
+  // -----------------------------------------------------------------------
+
+  it("evaluations cover ALL pool orders (no silent omissions)", () => {
+    const input: DispatchInputV2 = {
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [
+        makeOrder({ orderId: "planned", promisedPickupAt: "2026-07-18T09:15:00.000Z" }),
+        makeOrder({ orderId: "tight", promisedPickupAt: "2026-07-18T08:50:00.000Z" }),
+        makeOrder({ orderId: "unplanned", promisedPickupAt: "2026-07-18T08:50:00.000Z" }),
+      ],
+      drivers: [
+        makeDriver({ driverId: "d1" }), // 1 driver, 3 slots (A/B/C)
+      ],
+    };
+    const result = runDispatchV2(input, fixedEtaResolver(10));
+    const allEvalOrderIds = result.evaluations.map((e) => e.orderId).sort();
+    expect(allEvalOrderIds).toEqual(["planned", "tight", "unplanned"]);
+  });
+
+  it("PLANNED evaluation carries real bestSlackMinutes (no sentinel)", () => {
+    const input: DispatchInputV2 = {
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [makeOrder({ orderId: "o1", promisedPickupAt: "2026-07-18T09:15:00.000Z" })],
+      drivers: [makeDriver({ driverId: "d1" })],
+    };
+    const result = runDispatchV2(input, fixedEtaResolver(10));
+    const planned = result.evaluations.filter((e) => e.result === "PLANNED");
+    expect(planned).toHaveLength(1);
+    expect(planned[0].bestSlackMinutes).toBeGreaterThan(0);
+    expect(planned[0].bestSlackMinutes).not.toBe(-999);
+    expect(planned[0].bestSlackMinutes).not.toBe(9999);
+  });
+
+  it("INFEASIBLE evaluation carries real bestSlackMinutes (not a sentinel)", () => {
+    // Promised pickup needs to be BEFORE (NOW + deadhead - 30) to get slack < -30.
+    // Driver at 08:00 + 20 min deadhead → projected pickup 08:20.
+    // promisedPickupAt 07:45 → slack = 07:45 - 08:20 = -35 → INFEASIBLE.
+    const input: DispatchInputV2 = {
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [makeOrder({ orderId: "o1", promisedPickupAt: "2026-07-18T07:45:00.000Z" })],
+      drivers: [makeDriver({ driverId: "d1" })],
+    };
+    const result = runDispatchV2(input, fixedEtaResolver(20));
+    const infeasible = result.evaluations.filter((e) => e.result === "INFEASIBLE");
+    expect(infeasible).toHaveLength(1);
+    expect(infeasible[0].bestSlackMinutes).toBeLessThan(-30);
+    expect(infeasible[0].bestSlackMinutes).not.toBe(-999);
+    expect(infeasible[0].bestSlackMinutes).not.toBe(9999);
+    expect(infeasible[0].reason).toBe("SLACK_BELOW_LIMIT");
+  });
+
+  it("UNPLANNED / ETA_UNAVAILABLE carry bestSlackMinutes: null and correct reason", () => {
+    const input: DispatchInputV2 = {
+      event: { type: "ORDER_RECEIVED", occurredAt: NOW },
+      orders: [makeOrder({ orderId: "o1" })],
+      drivers: [makeDriver({ driverId: "d1", lastLocation: undefined })],
+    };
+    const result = runDispatchV2(input);
+    const nullSlack = result.evaluations.filter((e) => e.bestSlackMinutes === null);
+    expect(nullSlack.length).toBeGreaterThan(0);
+    for (const e of nullSlack) {
+      expect(["UNPLANNED", "ETA_UNAVAILABLE"]).toContain(e.result);
+    }
   });
 });
 
@@ -811,8 +884,8 @@ describe("planSlots", () => {
     expect(d2Assignments).toBeDefined();
 
     // Check no infeasible
-    expect(result.infeasibleOrderIds).toEqual([]);
-    expect(result.etaUnavailableOrderIds).toEqual([]);
+    expect(evalIds(result.evaluations, "INFEASIBLE")).toEqual([]);
+    expect(evalIds(result.evaluations, "ETA_UNAVAILABLE")).toEqual([]);
   });
 
   it("gaps before immobile slots are fillable", () => {
@@ -885,8 +958,8 @@ describe("regression: P0/P1 fixes", () => {
     // No resolver injected — the core must not fall back to haversine/average
     // speed estimation.
     const result = runDispatchV2(input);
-    expect([...result.etaUnavailableOrderIds].sort()).toEqual(["o1", "o2"]);
-    expect(result.infeasibleOrderIds).toEqual([]);
+    expect([...evalIds(result.evaluations, "ETA_UNAVAILABLE")].sort()).toEqual(["o1", "o2"]);
+    expect(evalIds(result.evaluations, "INFEASIBLE")).toEqual([]);
     for (const p of result.proposals) {
       expect(p.assignments).toEqual([]);
     }
@@ -924,7 +997,7 @@ describe("regression: P0/P1 fixes", () => {
     expect(d1.assignments[0].plannedPickupAt).toBeUndefined();
     expect(d1.assignments[0].etaAvailable).toBe(true);
     // The new order cannot be planned without a real ETA source.
-    expect(result.etaUnavailableOrderIds).toEqual(["o1"]);
+    expect(evalIds(result.evaluations, "ETA_UNAVAILABLE")).toEqual(["o1"]);
   });
 
   // -----------------------------------------------------------------------
@@ -949,8 +1022,8 @@ describe("regression: P0/P1 fixes", () => {
     expect(assignedOrderIds).toEqual(["o1"]);
     // Terminal orders are silently excluded — they are neither infeasible
     // nor ETA-unavailable, they are simply not dispatchable.
-    expect(result.infeasibleOrderIds).toEqual([]);
-    expect(result.etaUnavailableOrderIds).toEqual([]);
+    expect(evalIds(result.evaluations, "INFEASIBLE")).toEqual([]);
+    expect(evalIds(result.evaluations, "ETA_UNAVAILABLE")).toEqual([]);
   });
 
   // -----------------------------------------------------------------------
@@ -1015,8 +1088,8 @@ describe("regression: P0/P1 fixes", () => {
     const slotA = d1.assignments.find((a) => a.sequenceNo === 1)!;
     expect(slotA.plannedDepartAt).toBe(NOW);
     // Terminal orders are silently excluded — not infeasible, not ETA-unavailable.
-    expect(result.infeasibleOrderIds).toEqual([]);
-    expect(result.etaUnavailableOrderIds).toEqual([]);
+    expect(evalIds(result.evaluations, "INFEASIBLE")).toEqual([]);
+    expect(evalIds(result.evaluations, "ETA_UNAVAILABLE")).toEqual([]);
   });
 
   // -----------------------------------------------------------------------
@@ -1094,12 +1167,12 @@ describe("regression: P0/P1 fixes", () => {
     // deadhead 30 + service 30 → would complete 09:00 > locked departure
     // 08:30 → timeline overlap → slot A cannot host the order.
     const overlap = runDispatchV2(makeInput(), fixedEtaResolver(30));
-    expect(overlap.infeasibleOrderIds).toEqual(["new-order"]);
+    expect(evalIds(overlap.evaluations, "INFEASIBLE")).toEqual(["new-order"]);
     expect(overlap.proposals[0].assignments.map((a) => a.assignmentId)).toEqual(["locked-b"]);
 
     // deadhead 10 + service 10 → completes 08:20 <= 08:30 → fits in slot A.
     const fits = runDispatchV2(makeInput(), fixedEtaResolver(10));
-    expect(fits.infeasibleOrderIds).toEqual([]);
+    expect(evalIds(fits.evaluations, "INFEASIBLE")).toEqual([]);
     const slotA = fits.proposals[0].assignments.find((a) => a.sequenceNo === 1);
     expect(slotA?.orderId).toBe("new-order");
     expect(slotA?.plannedCompleteAt).toBe("2026-07-18T08:20:00.000Z");
@@ -1107,7 +1180,7 @@ describe("regression: P0/P1 fixes", () => {
     // Boundary: deadhead 15 + service 15 → completes exactly at the locked
     // departure 08:30 → completeAt <= plannedDepartAt → still allowed.
     const boundary = runDispatchV2(makeInput(), fixedEtaResolver(15));
-    expect(boundary.infeasibleOrderIds).toEqual([]);
+    expect(evalIds(boundary.evaluations, "INFEASIBLE")).toEqual([]);
     expect(
       boundary.proposals[0].assignments.find((a) => a.sequenceNo === 1)?.orderId
     ).toBe("new-order");
@@ -1221,8 +1294,8 @@ describe("regression: plannedDepartAt overlap bound & immobile cursor", () => {
     const slotC = d1.assignments.find((a) => a.sequenceNo === 3);
     expect(slotC?.orderId).toBe("new-order");
     expect(slotC?.plannedDepartAt).toBe("2026-07-18T09:10:00.000Z");
-    expect(result.infeasibleOrderIds).toEqual([]);
-    expect(result.etaUnavailableOrderIds).toEqual([]);
+    expect(evalIds(result.evaluations, "INFEASIBLE")).toEqual([]);
+    expect(evalIds(result.evaluations, "ETA_UNAVAILABLE")).toEqual([]);
   });
 
   it("locked slot without plannedDepartAt forbids ALL earlier empty slots (sole driver → infeasible)", () => {
@@ -1252,8 +1325,8 @@ describe("regression: plannedDepartAt overlap bound & immobile cursor", () => {
     expect(result.proposals[0].assignments.map((a) => a.assignmentId)).toEqual([
       "locked-c-nodepart",
     ]);
-    expect(result.infeasibleOrderIds).toEqual(["new-order"]);
-    expect(result.etaUnavailableOrderIds).toEqual([]);
+    expect(evalIds(result.evaluations, "UNPLANNED")).toEqual(["new-order"]);
+    expect(evalIds(result.evaluations, "ETA_UNAVAILABLE")).toEqual([]);
   });
 
   it("locked slot without plannedDepartAt: the order stays available for other drivers", () => {
@@ -1285,7 +1358,7 @@ describe("regression: plannedDepartAt overlap bound & immobile cursor", () => {
     expect(d1.assignments.map((a) => a.assignmentId)).toEqual(["locked-c-nodepart"]);
     const d2 = result.proposals.find((p) => p.driverId === "d2")!;
     expect(d2.assignments.find((a) => a.sequenceNo === 1)?.orderId).toBe("new-order");
-    expect(result.infeasibleOrderIds).toEqual([]);
+    expect(evalIds(result.evaluations, "INFEASIBLE")).toEqual([]);
   });
 
   // -----------------------------------------------------------------------
@@ -1327,8 +1400,8 @@ describe("regression: plannedDepartAt overlap bound & immobile cursor", () => {
     expect(slotA.plannedCompleteAt).toBeUndefined();
     expect(slotA.etaAvailable).toBe(false);
     // Slots after the unknown-cursor point cannot be planned → data gap.
-    expect(result.etaUnavailableOrderIds).toEqual(["o1"]);
-    expect(result.infeasibleOrderIds).toEqual([]);
+    expect(evalIds(result.evaluations, "ETA_UNAVAILABLE")).toEqual(["o1"]);
+    expect(evalIds(result.evaluations, "INFEASIBLE")).toEqual([]);
   });
 });
 
@@ -1362,8 +1435,8 @@ describe("regression: 1C third-review fixes", () => {
     // Only the UNASSIGNED order gets dispatched
     expect(assignedOrderIds).toEqual(["o1"]);
     // Orphan orders are silently excluded — not infeasible, not ETA-unavailable
-    expect(result.infeasibleOrderIds).toEqual([]);
-    expect(result.etaUnavailableOrderIds).toEqual([]);
+    expect(evalIds(result.evaluations, "INFEASIBLE")).toEqual([]);
+    expect(evalIds(result.evaluations, "ETA_UNAVAILABLE")).toEqual([]);
   });
 
   // -----------------------------------------------------------------------
@@ -1402,8 +1475,8 @@ describe("regression: 1C third-review fixes", () => {
     expect(slotA?.orderId).toBe("o1");
     expect(slotA?.plannedDepartAt).toBe(NOW);
     // The COMPLETED order is not in the pool — not infeasible, not ETA-unavailable.
-    expect(result.infeasibleOrderIds).toEqual([]);
-    expect(result.etaUnavailableOrderIds).toEqual([]);
+    expect(evalIds(result.evaluations, "INFEASIBLE")).toEqual([]);
+    expect(evalIds(result.evaluations, "ETA_UNAVAILABLE")).toEqual([]);
   });
 
   // -----------------------------------------------------------------------
@@ -1439,8 +1512,8 @@ describe("regression: 1C third-review fixes", () => {
     expect(d1.assignments.some((a) => a.assignmentId === "locked-completed")).toBe(false);
     // Freed slot goes to new order.
     expect(d1.assignments.some((a) => a.orderId === "o1" && a.sequenceNo === 1)).toBe(true);
-    expect(result.infeasibleOrderIds).toEqual([]);
-    expect(result.etaUnavailableOrderIds).toEqual([]);
+    expect(evalIds(result.evaluations, "INFEASIBLE")).toEqual([]);
+    expect(evalIds(result.evaluations, "ETA_UNAVAILABLE")).toEqual([]);
   });
 
   // -----------------------------------------------------------------------
@@ -1510,7 +1583,7 @@ describe("regression: 1C third-review fixes", () => {
     expect(newAsg!.plannedPickupAt).toBe("2026-07-18T09:15:00.000Z");
     expect(newAsg!.plannedCompleteAt).toBe("2026-07-18T09:45:00.000Z");
 
-    expect(result.infeasibleOrderIds).toEqual([]);
-    expect(result.etaUnavailableOrderIds).toEqual([]);
+    expect(evalIds(result.evaluations, "INFEASIBLE")).toEqual([]);
+    expect(evalIds(result.evaluations, "ETA_UNAVAILABLE")).toEqual([]);
   });
 });
