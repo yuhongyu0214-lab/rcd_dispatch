@@ -25,8 +25,8 @@ export { filterCandidateDrivers, filterDispatchableOrders };
  *   - locked / frozen / executing assignments are still respected (and keep
  *     their stored planned times),
  *   - but no new deadhead ETA can be computed, so orders that would need a
- *     fresh plan are reported via `etaUnavailableOrderIds` instead of being
- *     planned with invented times.
+ *     fresh plan are reported via `evaluations` with result "ETA_UNAVAILABLE"
+ *     instead of being planned with invented times.
  */
 const noEtaResolver: EtaResolver = () => null;
 
@@ -50,8 +50,10 @@ const noEtaResolver: EtaResolver = () => null;
  *   (Gate 3: Amap-backed matrix). The core itself never generates ETA values.
  *   When absent, the core runs in "no ETA" mode: immobile assignments are
  *   preserved, but orders needing a new deadhead ETA end up in
- *   `etaUnavailableOrderIds` (never planned with fake ETAs).
- * @returns Dispatch output with proposals, infeasible IDs, and unavailable IDs
+ *   `evaluations` with result "ETA_UNAVAILABLE" (never planned with fake ETAs).
+ * @returns Dispatch output with proposals and per-order evaluations.
+ *   No sentinel slack values (-999/9999); ETA_UNAVAILABLE / UNPLANNED carry
+ *   bestSlackMinutes: null.
  */
 export function runDispatchV2(
   input: DispatchInputV2,
@@ -84,8 +86,7 @@ export function runDispatchV2(
 
   return {
     proposals,
-    infeasibleOrderIds: result.infeasibleOrderIds,
-    etaUnavailableOrderIds: result.etaUnavailableOrderIds,
+    evaluations: result.evaluations,
     calculatedAt: input.event.occurredAt,
   };
 }

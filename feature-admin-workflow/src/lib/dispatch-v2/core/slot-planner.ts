@@ -1,6 +1,7 @@
 import type {
   DispatchAssignmentInputV2,
   DispatchDriverInputV2,
+  DispatchOrderEvaluationV2,
   DispatchOrderInputV2,
   DispatchPlannedAssignmentV2 as PlannedAssignment,
   EtaUnavailableReasonV2,
@@ -339,12 +340,17 @@ function findBestSlot(
   serviceEtaMinutes: number | null;
   etaUnavailable: boolean;
   infeasible: boolean;
+  /** Best slack value observed across all driver-slot combos (may be < -30). */
+  bestSlackObserved: number | undefined;
 } {
   let bestSlot: CandidateSlot | null = null;
   let bestDeadhead = Infinity;
   let anyEtaAvailable = false;
   let serviceEtaGapAtLockedBound = false;
   let cursorTimeUnknown = false;
+  /** Track the highest (least-negative) slack seen across all combos, for
+   *  reporting on INFEASIBLE orders.  Sentinel -999/9999 are forbidden. */
+  let bestSlackObserved: number | undefined = undefined;
 
   // The service leg (pickup → delivery) is driver-independent — resolve once.
   const serviceEtaMinutes =
@@ -386,6 +392,11 @@ function findBestSlot(
       const departAt = cursor.availableAt;
       const projectedPickupAt = addMinutes(departAt, deadhead);
       const slack = minutesBetween(projectedPickupAt, order.promisedPickupAt);
+
+      // Track best (highest) slack for INFEASIBLE evaluation reporting.
+      if (bestSlackObserved === undefined || slack > bestSlackObserved) {
+        bestSlackObserved = slack;
+      }
 
       if (slack < -30) {
         // INFEASIBLE — skip this slot
@@ -435,7 +446,7 @@ function findBestSlot(
   }
 
   if (bestSlot) {
-    return { best: bestSlot, serviceEtaMinutes, etaUnavailable: false, infeasible: false };
+    return { best: bestSlot, serviceEtaMinutes, etaUnavailable: false, infeasible: false, bestSlackObserved };
   }
 
   // Determine whether ANY candidate driver has an available slot.
@@ -450,7 +461,7 @@ function findBestSlot(
   }
 
   if (!anyHasSlot) {
-    return { best: null, serviceEtaMinutes, etaUnavailable: false, infeasible: true };
+    return { best: null, serviceEtaMinutes, etaUnavailable: false, infeasible: true, bestSlackObserved };
   }
 
   // A candidate was rejected only because of a DATA GAP — either the
@@ -458,17 +469,17 @@ function findBestSlot(
   // or the driver's timeline past an immobile assignment is unknown (missing
   // stored plannedCompleteAt). Data gaps are not proven infeasibility.
   if (serviceEtaGapAtLockedBound || cursorTimeUnknown) {
-    return { best: null, serviceEtaMinutes, etaUnavailable: true, infeasible: false };
+    return { best: null, serviceEtaMinutes, etaUnavailable: true, infeasible: false, bestSlackObserved };
   }
 
   // Slots exist. Distinguish "ETA unavailable for all" vs "all infeasible".
   if (anyEtaAvailable) {
     // We had valid ETA data for some combos but none met the constraints
-    return { best: null, serviceEtaMinutes, etaUnavailable: false, infeasible: true };
+    return { best: null, serviceEtaMinutes, etaUnavailable: false, infeasible: true, bestSlackObserved };
   }
 
   // Slots exist but ETA was unavailable for every candidate combination
-  return { best: null, serviceEtaMinutes, etaUnavailable: true, infeasible: false };
+  return { best: null, serviceEtaMinutes, etaUnavailable: true, infeasible: false, bestSlackObserved };
 }
 
 // ---------------------------------------------------------------------------
@@ -477,8 +488,7 @@ function findBestSlot(
 
 export type PlannerResult = {
   proposals: Map<string, PlannedAssignment[]>;
-  infeasibleOrderIds: string[];
-  etaUnavailableOrderIds: string[];
+  evaluations: DispatchOrderEvaluationV2[];
 };
 
 /**
@@ -630,8 +640,8 @@ export function planSlots(
   });
 
   // --- Assign orders ---
-  const infeasibleOrderIds: string[] = [];
-  const etaUnavailableOrderIds: string[] = [];
+  const evaluations: DispatchOrderEvaluationV2[] = [];
+  const noEligibleDrivers = candidateDrivers.length === 0;
 
   for (const order of sortedPool) {
     const result = findBestSlot(
@@ -644,11 +654,21 @@ export function planSlots(
     );
 
     if (result.best && !result.infeasible && !result.etaUnavailable) {
-      const { driverId, sequenceNo, departAt, projectedPickupAt } = result.best;
+      const { driverId, sequenceNo, departAt, projectedPickupAt, deadheadMinutes } = result.best;
       const pickupAt = projectedPickupAt;
       const completeAt = result.serviceEtaMinutes != null
         ? addMinutes(pickupAt, result.serviceEtaMinutes + order.serviceModuleMinutes)
         : undefined;
+
+      // Compute the actual slack for the PLANNED order.
+      const plannedSlack = minutesBetween(projectedPickupAt, order.promisedPickupAt);
+
+      evaluations.push({
+        orderId: order.orderId,
+        result: "PLANNED",
+        bestSlackMinutes: plannedSlack,
+        reason: "PLANNED",
+      });
 
       // Create a synthetic assignment input for this new plan. The computed
       // planned times are carried on the input so downstream cursor
@@ -677,9 +697,41 @@ export function planSlots(
       const idx = slots.indexOf(sequenceNo);
       if (idx >= 0) slots.splice(idx, 1);
     } else if (result.etaUnavailable) {
-      etaUnavailableOrderIds.push(order.orderId);
+      evaluations.push({
+        orderId: order.orderId,
+        result: "ETA_UNAVAILABLE",
+        bestSlackMinutes: null,
+        reason: "ETA_UNAVAILABLE",
+      });
     } else {
-      infeasibleOrderIds.push(order.orderId);
+      // Infeasible branch — distinguish NO_ELIGIBLE_DRIVER vs NO_AVAILABLE_SLOT vs INFEASIBLE
+      if (noEligibleDrivers) {
+        evaluations.push({
+          orderId: order.orderId,
+          result: "UNPLANNED",
+          bestSlackMinutes: null,
+          reason: "NO_ELIGIBLE_DRIVER",
+        });
+      } else if (result.bestSlackObserved === undefined) {
+        // No driver-slot combo produced a computable slack (no ETA data at all
+        // for any driver, yet candidates exist — e.g. all drivers have slots
+        // but positions are missing). This is UNPLANNED, not INFEASIBLE.
+        evaluations.push({
+          orderId: order.orderId,
+          result: "UNPLANNED",
+          bestSlackMinutes: null,
+          reason: "NO_AVAILABLE_SLOT",
+        });
+      } else {
+        // Real slack values were computed but all fell below -30.
+        // bestSlackObserved carries the highest (least-negative) observed value.
+        evaluations.push({
+          orderId: order.orderId,
+          result: "INFEASIBLE",
+          bestSlackMinutes: result.bestSlackObserved,
+          reason: "SLACK_BELOW_LIMIT",
+        });
+      }
     }
   }
 
@@ -709,5 +761,5 @@ export function planSlots(
     proposals.set(d.driverId, out);
   }
 
-  return { proposals, infeasibleOrderIds, etaUnavailableOrderIds };
+  return { proposals, evaluations };
 }
