@@ -1,7 +1,7 @@
 # 人车单 V2 API 契约
 
-> 契约版本：`RCD-API-V2.0-20260717`
-> 状态：Gate 0 已冻结
+> 契约版本：`RCD-API-V2.0-R5-20260730`
+> 状态：Gate 0 主体与 R4-Demo 补充契约已由 Gate 3-R R7 统一冻结
 > 实施约束：本文件只冻结契约，不含任何代码；TypeScript DTO、错误类型和契约测试在 Gate 2 落地
 > 上游依据：[PRD V2](prd-v2.md) · [数据架构 V2](data-architecture-v2.md) · [项目规则 V2](project-rules-v2.md)
 
@@ -103,6 +103,8 @@
 | GET | `/api/v2/map/snapshot` | 全局快照：上班司机位置 + 全部可见订单点位 + OPEN 预警计数 |
 | GET | `/api/v2/orders` | 订单池分页；过滤：`executionStatus`、`feasibility`、`slot`、`storeCode`、`keyword` |
 | GET | `/api/v2/orders/{orderId}` | 订单详情（含当前 Assignment、可行性、预警、修改历史摘要） |
+| GET | `/api/v2/orders/{orderId}/dispatch-candidates` | 候选解释：只返回通过硬条件与可行性检查的“司机 + 建议槽位”，按真实衔接 ETA 升序；默认分页首屏 3 条，可继续请求更多 |
+| GET | `/api/v2/orders/{orderId}/route-preview` | 选中候选的同源路线预览；查询参数 `driverId`、`slot`，返回空驶段与工单段路径，分钟数必须与候选计算使用同一次服务端高德结果 |
 | PATCH | `/api/v2/orders/{orderId}` | 修改 `promisedPickupAt` / `pickupAddress` / `deliveryAddress`；`reason` 必填；立即重算 |
 | POST | `/api/v2/orders/{orderId}/cancel` | 取消订单 `{ reason }`；合法前置状态 `UNASSIGNED / PLANNED / EN_ROUTE`；副作用见下方“取消语义” |
 | GET | `/api/v2/drivers` | 司机列表；含班次状态、可用性、位置新鲜度、A/B/C 摘要 |
@@ -139,6 +141,8 @@
 
 - 司机访问非本人 `assignmentId` 返回 403 `FORBIDDEN`。
 - 司机无拒单和改派接口；此类操作不存在于 driver 路径下。
+- 正式 V2 Demo 的司机 H5 第一版只调用身份认证与位置上报能力；任务、模块、出发、到达和完成接口保留为后续司机业务端及受控端到端验证使用。
+- 浏览器锁屏或进入后台后不承诺持续调用位置接口；恢复前台时应立即采集新样本，禁止把旧样本改写为当前时间。
 
 ### 2.3 订单接入（ingest）
 
@@ -256,6 +260,50 @@ lat, lng, accuracyMeters, capturedAt
 - (driverId, capturedAt) 重复          → skipped, reason=DUPLICATE
 ```
 
+### 3.7 DispatchCandidateV2
+
+```text
+orderId,
+driverId, driverName,
+suggestedSlot: A | B | C,
+rank,
+deadheadEtaMinutes,
+serviceEtaMinutes,
+slackMinutes,
+feasibility: NORMAL | AT_RISK,
+etaCalculatedAt
+```
+
+- 本列表不返回 `UNKNOWN` 或 `INFEASIBLE` 组合，也不返回未通过当班、可用、位置新鲜或锁定检查的司机。
+- `rank` 按 `deadheadEtaMinutes` 升序生成；同值时使用服务端冻结的确定性次序，不由前端自行重排。
+- 该 DTO 是自动排程结果的解释视图，不建立 Assignment；人工选择仍调用 `POST /api/v2/assignments`。
+
+### 3.8 RoutePreviewV2
+
+```text
+orderId, driverId, suggestedSlot,
+etaAvailable: boolean, etaUnavailableReason?,
+etaCalculatedAt,
+deadhead: {
+  origin: { lat, lng },
+  destination: { lat, lng },
+  distanceMeters,
+  durationMinutes,
+  path: [{ lat, lng }]
+},
+service: {
+  origin: { lat, lng },
+  destination: { lat, lng },
+  distanceMeters,
+  durationMinutes,
+  path: [{ lat, lng }]
+}
+```
+
+- `deadhead.durationMinutes` 必须等于对应候选的 `deadheadEtaMinutes`；`service.durationMinutes` 必须等于 `serviceEtaMinutes`。
+- 路径和 ETA 均由服务端高德结果产生，前端不得再次计算或以直线距离、演示常量替代。
+- 高德不可用时正常返回 `etaAvailable: false` 与 `etaUnavailableReason`，此时 `deadhead` 和 `service` 为空，不返回伪造路径。
+
 ## 4. 与调度核心的关系
 
 - 本契约的 DTO 是页面与 API 的边界；调度核心只接收内部输入类型（Gate 2 定义），不直接消费 HTTP DTO。
@@ -271,3 +319,4 @@ lat, lng, accuracyMeters, capturedAt
 | V2.0-r2 | 2026-07-17 | Gate 0 三轮返修：§1.6 冻结命令两分类（计划编辑命令带 `expected*`，业务事实/控制命令服务端事务内递增）；§2.3 冻结来源取消遇终态的返回语义（`success` + `FOLLOW_UP_REQUIRED`，不整批 400）与 `sourceStatusRaw` 存储边界（仅 `OrderSourceEvent`）；§1.1 区分 V1 读/写接口存续时点；§1.7 ingest 凭证绑定唯一 `sourceSystem`；可用性设置幂等 `replayed` |
 | V2.0-r3 | 2026-07-17 | Gate 0 四轮返修：§1.6 版本携带规则改封闭式（仅四类计划编辑命令带版本，其余含模块修改/位置变化/订单接入/周期校验一律服务端递增）；§2.2 模块端点标注不携带 `expectedPlanVersion` |
 | V2.0-r4 | 2026-07-18 | Gate 1 冲突裁决：V2 在线 ingest 禁止 `"v1-migration"`；版本比较器将该迁移/V1 兼容基线恒视为最旧版本 |
+| V2.0-r5 | 2026-07-30 | R4-Demo 契约补充：增加司机+槽位候选解释、同源路线预览和前台定位 H5 调用边界 |

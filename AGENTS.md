@@ -20,6 +20,10 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 HTTP 契约               → docs/versions/v2.0/api-contract-v2.md
 迁移与兼容              → docs/versions/v2.0/v1-v2-compatibility-matrix.md
 代码一致性与设计系统    → docs/versions/v2.0/project-rules-v2.md
+生产基础设施架构        → docs/versions/v2.0/infrastructure-v2.md
+构建、部署与回退        → docs/versions/v2.0/deployment-guide-v2.md
+生产运行与恢复          → docs/versions/v2.0/operations-guide-v2.md
+基础设施决策与替代历史  → docs/versions/v2.0/infrastructure-decision-log.md
 ```
 
 - 数据安全与不可逆操作原则高于以上一切。
@@ -37,6 +41,9 @@ Gate -1 基线整理（已通过，develop @ 37ee8a3）
 → 第二轮并行（Web / 司机接口 / 观测）→ 迁移与端到端验证 → Gate 4 稳定化
 ```
 
+- Gate 3-R 的 R0～R7 文档冻结已完成；Gate 3 平台无关成果仍只作为受保护候选现场，Gate 3 与第二轮并行在阿里云实施验收和 Gate 3 终审通过前继续暂停。
+- 阿里云是目标正式生产主线；Railway 只保留历史 Demo 身份。任何文档中的 Railway 正式生产旧裁决均已失效。
+- 正式 V2 Demo 包含可提前部署的极简司机定位 H5：只要求页面前台真实定位，锁屏/后台不要求持续定位；完整司机业务 H5 不纳入首版 Demo。
 - 每个 Gate 通过验收后才能创建下一阶段分支；不得提前建分支。
 - V2 分支命名 `feature/v2-*`；合并路径仍为 `feature/* → develop → main`。
 - 每个分支只能修改自己的独占文件范围；Schema、公共 DTO、共享样式、logger、调度事务各有唯一所有者线。
