@@ -10,6 +10,7 @@ vi.mock("@/lib/logger", () => ({
 
 import {
   __setRedisClientForTests,
+  acquireDispatchLock,
   acquireResourceLock,
   acquireResourceLocks,
   cacheEta,
@@ -25,6 +26,7 @@ import {
   isDriverOnline,
   isRedisAvailable,
   normalizePointHash,
+  releaseDispatchLock,
   releaseResourceLock,
   SET_LOCATION_IF_NEWER_SCRIPT,
   setDriverLocation,
@@ -114,10 +116,19 @@ class FakeRedisClient implements RedisClientLike {
   ): Promise<unknown> {
     if (this.evalFails) throw new Error("eval failed (injected)");
 
-    expect(script).toBe(SET_LOCATION_IF_NEWER_SCRIPT);
     expect(numkeys).toBe(1);
 
     const key = String(args[0]);
+
+    if (script !== SET_LOCATION_IF_NEWER_SCRIPT) {
+      const token = String(args[1]);
+      if (this.strings.get(key)?.value === token) {
+        await this.del(key);
+        return 1;
+      }
+      return 0;
+    }
+
     const argv = args.slice(1).map(String);
     const incoming = Number(argv[0]);
     const ttl = Number(argv[1]);
@@ -406,6 +417,33 @@ describe("Redis key prefix isolation", () => {
     process.env.REDIS_KEY_PREFIX = "rcd:v2:*:";
 
     expect(isRedisAvailable()).toBe(false);
+  });
+});
+
+describe("legacy dispatch lock prefix isolation", () => {
+  beforeEach(() => {
+    (globalThis as { __traceId?: string }).__traceId = "trace-prefix-test";
+  });
+
+  afterEach(() => {
+    delete (globalThis as { __traceId?: string }).__traceId;
+  });
+
+  it("prefixes the legacy dispatch lock SET key", async () => {
+    await expect(acquireDispatchLock("order-1")).resolves.toBe(true);
+
+    expect(
+      fake.strings.get(`${TEST_REDIS_PREFIX}dispatch:lock:order-1`)?.value
+    ).toBe("trace-prefix-test");
+  });
+
+  it("passes the prefixed legacy lock key to the Lua release script", async () => {
+    await acquireDispatchLock("order-1");
+    await releaseDispatchLock("order-1");
+
+    expect(
+      fake.strings.has(`${TEST_REDIS_PREFIX}dispatch:lock:order-1`)
+    ).toBe(false);
   });
 });
 
