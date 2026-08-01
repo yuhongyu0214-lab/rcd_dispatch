@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     $transaction: vi.fn(),
+    $queryRaw: vi.fn(),
     driver: {
       findUnique: vi.fn(),
       update: vi.fn(),
@@ -34,8 +35,16 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 vi.mock("@/lib/redis", () => ({
-  acquireDispatchLock: vi.fn(),
-  releaseDispatchLock: vi.fn()
+  acquireResourceLock: vi.fn(),
+  releaseResourceLock: vi.fn()
+}));
+
+vi.mock("@/lib/events/store", () => ({
+  enqueueInternalEvent: vi.fn()
+}));
+
+vi.mock("@/lib/events/processor", () => ({
+  processInternalEvent: vi.fn()
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -46,10 +55,16 @@ vi.mock("@/lib/logger", () => ({
   })
 }));
 
-import { acquireDispatchLock, releaseDispatchLock } from "@/lib/redis";
+import { acquireResourceLock, releaseResourceLock } from "@/lib/redis";
+import { processInternalEvent } from "@/lib/events/processor";
+import { enqueueInternalEvent } from "@/lib/events/store";
 import { prisma } from "@/lib/prisma";
 
-import { endShift, getActivePlannedAssignments, startShift } from "./shift-service";
+import {
+  endShift,
+  getActivePlannedAssignments,
+  startShift
+} from "./shift-service";
 
 // ============================================================================
 // Helpers
@@ -59,7 +74,8 @@ function mockDriver(props: { onShift: boolean; isActive?: boolean }) {
   vi.mocked(prisma.driver.findUnique).mockResolvedValue({
     id: "d-1",
     onShift: props.onShift,
-    isActive: props.isActive ?? true
+    isActive: props.isActive ?? true,
+    planVersion: 5
   } as unknown as Awaited<ReturnType<typeof prisma.driver.findUnique>>);
 }
 
@@ -77,8 +93,8 @@ function mockShift(overrides: { endedAt?: Date | null } = {}) {
 /** Make $transaction run its callback with the mock prisma object. */
 function runTransactionWithPrisma() {
   const fn = prisma.$transaction as ReturnType<typeof vi.fn>;
-  fn.mockImplementation(
-    (callback: (tx: typeof prisma) => Promise<unknown>) => callback(prisma)
+  fn.mockImplementation((callback: (tx: typeof prisma) => Promise<unknown>) =>
+    callback(prisma)
   );
 }
 
@@ -96,13 +112,14 @@ describe("startShift", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     runTransactionWithPrisma();
-    vi.mocked(acquireDispatchLock).mockResolvedValue(true);
-    vi.mocked(releaseDispatchLock).mockResolvedValue(undefined);
+    vi.mocked(acquireResourceLock).mockResolvedValue("acquired");
+    vi.mocked(releaseResourceLock).mockResolvedValue(undefined);
     vi.mocked(prisma.driver.updateMany).mockResolvedValue({ count: 1 });
     vi.mocked(prisma.driverShift.create).mockResolvedValue(mockShift());
+    mockSystemOperator();
   });
 
-  it("creates a shift, increments planVersion, sets onShift+AVAILABLE in one transaction", async () => {
+  it("creates a shift and increments planVersion without restoring availability", async () => {
     mockDriver({ onShift: false });
 
     const result = await startShift("d-1", "trace-1");
@@ -113,16 +130,41 @@ describe("startShift", () => {
     // conditional update + planVersion
     expect(prisma.driver.updateMany).toHaveBeenCalledWith({
       where: { id: "d-1", isActive: true, onShift: false },
-      data: { onShift: true, availability: "AVAILABLE", planVersion: { increment: 1 } }
+      data: { onShift: true, planVersion: { increment: 1 } }
     });
     // shift created in the same txn
     expect(prisma.driverShift.create).toHaveBeenCalledTimes(1);
+    expect(prisma.operationLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        entityType: "DRIVER_SHIFT",
+        entityId: "shift-1",
+        action: "SHIFT_START",
+        operatorUserId: "user-admin",
+        driverId: "d-1",
+        traceId: "trace-1"
+      })
+    });
+    expect(enqueueInternalEvent).toHaveBeenCalledWith(
+      prisma,
+      expect.objectContaining({
+        eventId: "driver-shift-started:shift-1",
+        type: "DRIVER_SHIFT_STARTED",
+        driverId: "d-1",
+        traceId: "trace-1"
+      })
+    );
+    expect(processInternalEvent).toHaveBeenCalledWith(
+      "driver-shift-started:shift-1"
+    );
     // lock released
-    expect(releaseDispatchLock).toHaveBeenCalled();
+    expect(releaseResourceLock).toHaveBeenCalledWith(
+      "dispatch:lock:d-1",
+      expect.any(String)
+    );
   });
 
   it("returns 409 DUPLICATE_OPERATION when lock is held", async () => {
-    vi.mocked(acquireDispatchLock).mockResolvedValue(false);
+    vi.mocked(acquireResourceLock).mockResolvedValue("busy");
 
     const result = await startShift("d-1", "trace-1");
 
@@ -195,14 +237,18 @@ describe("startShift", () => {
   it("throws when shift create fails inside transaction (DB rollback)", async () => {
     mockDriver({ onShift: false });
     // updateMany succeeds but shift create throws — transaction rolls back
-    vi.mocked(prisma.driverShift.create).mockRejectedValue(new Error("DB write error"));
+    vi.mocked(prisma.driverShift.create).mockRejectedValue(
+      new Error("DB write error")
+    );
 
     // $transaction throws → propagates to caller. The caller is responsible for
     // returning INTERNAL_ERROR; startShift does not catch this exception itself.
     // The DB state is clean (rollback).
-    await expect(startShift("d-1", "trace-1")).rejects.toThrow("DB write error");
+    await expect(startShift("d-1", "trace-1")).rejects.toThrow(
+      "DB write error"
+    );
     // Lock is released in finally (even on throw)
-    expect(releaseDispatchLock).toHaveBeenCalled();
+    expect(releaseResourceLock).toHaveBeenCalled();
   });
 });
 
@@ -214,8 +260,9 @@ describe("endShift", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     runTransactionWithPrisma();
-    vi.mocked(acquireDispatchLock).mockResolvedValue(true);
-    vi.mocked(releaseDispatchLock).mockResolvedValue(undefined);
+    vi.mocked(acquireResourceLock).mockResolvedValue("acquired");
+    vi.mocked(releaseResourceLock).mockResolvedValue(undefined);
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([{ id: "d-1" }]);
     vi.mocked(prisma.driverShift.update).mockResolvedValue(
       mockShift({ endedAt: new Date() })
     );
@@ -223,7 +270,9 @@ describe("endShift", () => {
   });
 
   function setupOpenShift() {
-    vi.mocked(prisma.driverShift.findFirst).mockResolvedValue(mockShift({ endedAt: null }));
+    vi.mocked(prisma.driverShift.findFirst).mockResolvedValue(
+      mockShift({ endedAt: null })
+    );
   }
 
   function setupNoBlockingAssignments() {
@@ -241,12 +290,40 @@ describe("endShift", () => {
     if (!result.success) throw new Error("Expected success");
     expect(result.shift.id).toBe("shift-1");
 
-    // planVersion always incremented (§1.6)
+    // One aggregate command produces exactly one version step.
     expect(prisma.driver.update).toHaveBeenCalledWith({
       where: { id: "d-1" },
-      data: { onShift: false, planVersion: { increment: 1 } }
+      data: { onShift: false, planVersion: 6 }
     });
-    expect(releaseDispatchLock).toHaveBeenCalled();
+    expect(enqueueInternalEvent).toHaveBeenCalledWith(
+      prisma,
+      expect.objectContaining({
+        eventId: "driver-shift-ended:shift-1",
+        type: "DRIVER_SHIFT_ENDED",
+        driverId: "d-1",
+        traceId: "trace-1"
+      })
+    );
+    expect(processInternalEvent).toHaveBeenCalledWith(
+      "driver-shift-ended:shift-1"
+    );
+    expect(prisma.operationLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        entityType: "DRIVER_SHIFT",
+        entityId: "shift-1",
+        action: "SHIFT_END",
+        operatorUserId: "user-admin",
+        driverId: "d-1",
+        traceId: "trace-1",
+        metadataJson: expect.objectContaining({
+          releasedAssignmentCount: 0
+        })
+      })
+    });
+    expect(releaseResourceLock).toHaveBeenCalledWith(
+      "dispatch:lock:d-1",
+      expect.any(String)
+    );
   });
 
   it("runs the whole endShift flow inside a single transaction (P0-2)", async () => {
@@ -293,6 +370,13 @@ describe("endShift", () => {
     expect(result.success).toBe(false);
     if (result.success) throw new Error("Expected failure");
     expect(result.error.code).toBe("ILLEGAL_TRANSITION");
+    expect(prisma.assignment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: { in: ["ACTIVE", "ACCEPTED"] }
+        })
+      })
+    );
   });
 
   it("rolls back and returns INTERNAL_ERROR when a write step fails mid-transaction", async () => {
@@ -300,7 +384,9 @@ describe("endShift", () => {
     setupOpenShift();
     setupNoBlockingAssignments();
     // Shift close throws inside the txn
-    vi.mocked(prisma.driverShift.update).mockRejectedValue(new Error("write failure"));
+    vi.mocked(prisma.driverShift.update).mockRejectedValue(
+      new Error("write failure")
+    );
 
     const result = await endShift("d-1", "trace-1");
 
@@ -326,7 +412,14 @@ describe("endShift", () => {
     // assignment.findMany (for release) must NOT have been called
     const callsForRelease = vi
       .mocked(prisma.assignment.findMany)
-      .mock.calls.filter((c) => c[0]?.where?.order?.executionStatus?.in);
+      .mock.calls.filter((c) => {
+        const executionStatus = c[0]?.where?.order?.executionStatus;
+        return (
+          typeof executionStatus === "object" &&
+          executionStatus !== null &&
+          "in" in executionStatus
+        );
+      });
     expect(callsForRelease).toHaveLength(0);
   });
 
@@ -349,17 +442,18 @@ describe("endShift", () => {
 
     expect(result.success).toBe(true);
     if (!result.success) throw new Error("Expected success");
-    // planVersion always incremented on real end (§1.6)
+    // Compatibility triggers may fire per row, but the service normalizes the
+    // aggregate to one version step while holding the driver row lock.
     expect(prisma.driver.update).toHaveBeenCalledWith({
       where: { id: "d-1" },
-      data: { onShift: false, planVersion: { increment: 1 } }
+      data: { onShift: false, planVersion: 6 }
     });
   });
 
   // ---- Lock conflict ----
 
   it("returns 409 DUPLICATE_OPERATION when lock is held", async () => {
-    vi.mocked(acquireDispatchLock).mockResolvedValue(false);
+    vi.mocked(acquireResourceLock).mockResolvedValue("busy");
 
     const result = await endShift("d-1", "trace-1");
 
@@ -384,5 +478,12 @@ describe("getActivePlannedAssignments", () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe("a-1");
+    expect(prisma.assignment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: { in: ["ACTIVE", "ACCEPTED"] }
+        })
+      })
+    );
   });
 });

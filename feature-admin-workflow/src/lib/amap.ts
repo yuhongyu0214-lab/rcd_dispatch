@@ -212,10 +212,11 @@ function getRetryDelay(attempt: number): number {
  * 判断错误是否应重试
  */
 function shouldRetry(status: number | undefined, infocode: string | undefined): boolean {
-  // 网络错误（无 status）可重试
-  if (status === undefined) return true;
+  // 网络错误（HTTP status 和高德 infocode 均缺失）可重试。
+  // 明确的高德业务错误（例如配额耗尽）不得误判为网络故障。
+  if (status === undefined && infocode === undefined) return true;
   // 5xx 可重试
-  if (status >= 500 && status < 600) return true;
+  if (status !== undefined && status >= 500 && status < 600) return true;
   // 高德服务端内部错误可重试
   if (infocode === "30000") return true;
   return false;

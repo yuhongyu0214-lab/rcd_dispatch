@@ -2,13 +2,12 @@ import { fail, ok } from "@/lib/api-response";
 import { createLogger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 
-import { resolveSystemOperatorUserId } from "../../../_utils";
+import {
+  extractDriverId,
+  resolveSystemOperatorUserId
+} from "../../../_utils";
 
 export const dynamic = "force-dynamic";
-
-type DriverCompleteBody = {
-  driverId?: string;
-};
 
 type DriverCompleteResult =
   | {
@@ -33,22 +32,13 @@ export async function POST(
   const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
   const orderId = context.params.id.trim();
 
-  let body: DriverCompleteBody;
-
-  try {
-    body = (await request.json()) as DriverCompleteBody;
-  } catch {
-    return fail("请求体格式错误", { status: 400, traceId });
-  }
-
-  const driverId = body.driverId?.trim();
-
   if (!orderId) {
     return fail("请提供订单 ID", { status: 400, traceId });
   }
 
+  const driverId = await extractDriverId(request);
   if (!driverId) {
-    return fail("请提供司机 ID", { status: 400, traceId });
+    return fail("司机身份认证失败", { status: 401, traceId });
   }
 
   try {

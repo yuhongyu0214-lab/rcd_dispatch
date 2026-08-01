@@ -1,12 +1,16 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { isPublicAdminRegistrationEnabled } from "@/lib/auth/public-registration";
 import { isAdminRole } from "@/lib/auth/roles";
 
 import { RegisterForm } from "./components/register-form";
 
 export default async function AdminRegisterPage() {
+  if (!isPublicAdminRegistrationEnabled()) {
+    notFound();
+  }
   const currentUser = await getCurrentUser();
 
   if (currentUser && isAdminRole(currentUser.role)) {

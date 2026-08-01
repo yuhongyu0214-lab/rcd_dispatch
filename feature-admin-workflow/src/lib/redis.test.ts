@@ -16,6 +16,7 @@ import {
   getCachedEtaV2,
   getDriverLocations,
   getDriverLocationsWithStatus,
+  isRedisAvailable,
   normalizePointHash,
   releaseResourceLock,
   SET_LOCATION_IF_NEWER_SCRIPT,
@@ -36,7 +37,13 @@ class FakeRedisClient implements RedisClientLike {
   expires = new Map<string, number>();
   evalFails = false;
   pipelineFails = false;
+  connectCalls = 0;
   status = "ready";
+
+  async connect(): Promise<void> {
+    this.connectCalls += 1;
+    this.status = "ready";
+  }
 
   async hset(key: string, ...args: string[]): Promise<number> {
     const hash = this.hashes.get(key) ?? {};
@@ -397,6 +404,24 @@ describe("acquireResourceLock", () => {
     await acquireResourceLock("lock:o1", "tok-a");
     fakeV3.store.delete("lock:o1");
     expect(await acquireResourceLock("lock:o1", "tok-b")).toBe("acquired");
+  });
+});
+
+describe("lazy Redis connection", () => {
+  it("awaits readiness when availability is checked during cold start", async () => {
+    fake.status = "wait";
+
+    await expect(isRedisAvailable()).resolves.toBe(true);
+    expect(fake.connectCalls).toBe(1);
+  });
+
+  it("connects before issuing the first command when offline queueing is disabled", async () => {
+    fake.status = "wait";
+
+    await expect(
+      acquireResourceLock("lock:first-command", "token")
+    ).resolves.toBe("acquired");
+    expect(fake.connectCalls).toBe(1);
   });
 });
 

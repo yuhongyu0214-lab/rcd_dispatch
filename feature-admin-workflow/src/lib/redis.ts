@@ -123,6 +123,8 @@ export interface PipelineLike {
 }
 
 export interface RedisClientLike {
+  connect?(): Promise<void>;
+  disconnect?(): void;
   hset(key: string, ...args: string[]): Promise<number>;
   expire(key: string, seconds: number): Promise<number>;
   hgetall(key: string): Promise<Record<string, string>>;
@@ -141,6 +143,7 @@ export interface RedisClientLike {
 }
 
 let redisClient: RedisClientLike | null = null;
+let redisConnectPromise: Promise<void> | null = null;
 
 // ============================================================================
 // 熔断器（Circuit Breaker）
@@ -180,6 +183,7 @@ class RedisCircuitBreaker {
     if (!client) return;
 
     try {
+      if (!(await ensureRedisClientReady(client))) return;
       await client.ping();
       this.degraded = false;
       this.failureCount = 0;
@@ -255,15 +259,6 @@ function getRedisClientInternal(): RedisClientLike | null {
       log.info("Redis connected");
     });
 
-    // 异步连接
-    setImmediate(() => {
-      if (redisClient) {
-        redisClient.ping().catch(() => {
-          /* 连接失败由熔断器处理 */
-        });
-      }
-    });
-
     return redisClient;
   } catch {
     log.warn("ioredis not installed — run: pnpm add ioredis. Redis features degraded.");
@@ -286,12 +281,44 @@ function getRedisClient(): RedisClientLike | null {
   return getRedisClientInternal();
 }
 
+async function ensureRedisClientReady(
+  client: RedisClientLike
+): Promise<boolean> {
+  if (client.status === "ready") return true;
+  if (typeof client.connect !== "function") return true;
+
+  if (!redisConnectPromise) {
+    redisConnectPromise = client.connect().finally(() => {
+      redisConnectPromise = null;
+    });
+  }
+
+  try {
+    await redisConnectPromise;
+    return client.status === "ready";
+  } catch (error) {
+    log.warn("Redis connection failed", {
+      message: error instanceof Error ? error.message : String(error)
+    });
+    return false;
+  }
+}
+
+async function getReadyRedisClient(): Promise<RedisClientLike | null> {
+  const client = getRedisClient();
+  if (!client) return null;
+  if (await ensureRedisClientReady(client)) return client;
+
+  circuitBreaker.recordFailure();
+  return null;
+}
+
 /**
- * 检查 Redis 是否可用（轻量级，不做 ping）。
- * 返回 false 表示 Redis 不可用，调用方应降级处理。
+ * 检查 Redis 是否可用。
+ * lazyConnect 客户端处于 wait 时会先尝试建立连接，不发送 ping。
  */
-export function isRedisAvailable(): boolean {
-  return !circuitBreaker.isDegraded && getRedisClientInternal() !== null;
+export async function isRedisAvailable(): Promise<boolean> {
+  return (await getReadyRedisClient()) !== null;
 }
 
 /**
@@ -299,7 +326,7 @@ export function isRedisAvailable(): boolean {
  * 返回 true 表示 Redis 可用。
  */
 export async function redisHealthCheck(): Promise<boolean> {
-  const client = getRedisClientInternal();
+  const client = await getReadyRedisClient();
   if (!client) return false;
 
   try {
@@ -323,8 +350,10 @@ export async function closeRedis(): Promise<void> {
     log.info("Redis connection closed");
   } catch (err) {
     log.warn("Redis close error", { message: String(err) });
+    redisClient.disconnect?.();
   } finally {
     redisClient = null;
+    redisConnectPromise = null;
   }
 }
 
@@ -334,6 +363,7 @@ export async function closeRedis(): Promise<void> {
  */
 export function __setRedisClientForTests(client: RedisClientLike | null): void {
   redisClient = client;
+  redisConnectPromise = null;
   circuitBreaker.resetForTests();
 }
 
@@ -350,7 +380,7 @@ async function safeWrite(
   keyPattern: string,
   fn: (client: RedisClientLike) => Promise<unknown>
 ): Promise<void> {
-  const client = getRedisClient();
+  const client = await getReadyRedisClient();
   if (!client) {
     log.warn(`Redis write degraded: ${operation}`, { keyPattern });
     return;
@@ -368,6 +398,36 @@ async function safeWrite(
   }
 }
 
+interface RedisReadResult<T> {
+  redisAvailable: boolean;
+  value: T | null;
+}
+
+/**
+ * 执行 Redis 读操作，并区分「Redis 不可用」与「键不存在」。
+ */
+async function safeReadWithStatus<T>(
+  operation: string,
+  keyPattern: string,
+  fn: (client: RedisClientLike) => Promise<T | null>
+): Promise<RedisReadResult<T>> {
+  const client = await getReadyRedisClient();
+  if (!client) return { redisAvailable: false, value: null };
+
+  try {
+    const result = await fn(client);
+    circuitBreaker.recordSuccess();
+    return { redisAvailable: true, value: result };
+  } catch (err) {
+    circuitBreaker.recordFailure();
+    log.warn(`Redis read failed: ${operation}`, {
+      keyPattern,
+      error: String(err)
+    });
+    return { redisAvailable: false, value: null };
+  }
+}
+
 /**
  * 执行 Redis 读操作。
  * 降级模式或读取失败时返回 null。
@@ -377,21 +437,8 @@ async function safeRead<T>(
   keyPattern: string,
   fn: (client: RedisClientLike) => Promise<T | null>
 ): Promise<T | null> {
-  const client = getRedisClient();
-  if (!client) return null;
-
-  try {
-    const result = await fn(client);
-    circuitBreaker.recordSuccess();
-    return result;
-  } catch (err) {
-    circuitBreaker.recordFailure();
-    log.warn(`Redis read failed: ${operation}`, {
-      keyPattern,
-      error: String(err)
-    });
-    return null;
-  }
+  const { value } = await safeReadWithStatus(operation, keyPattern, fn);
+  return value;
 }
 
 // ============================================================================
@@ -471,7 +518,7 @@ export async function setDriverLocationIfNewer(
   data: DriverLocation,
   tsMs: number
 ): Promise<SetDriverLocationOutcome> {
-  const client = getRedisClient();
+  const client = await getReadyRedisClient();
   if (!client || typeof client.eval !== "function") {
     // 无 eval 能力时不做非原子退化写入——那会静默重引入倒退窗口
     return "unavailable";
@@ -510,18 +557,42 @@ export async function setDriverLocationIfNewer(
   }
 }
 
+export interface DriverLocationRead {
+  redisAvailable: boolean;
+  location: DriverLocation | null;
+}
+
 /**
- * 读取司机位置（HGETALL）。
+ * 读取司机位置（HGETALL），并返回 Redis 整体可用性。
  * 文档参考：tair-key-design 4.1.4 读取命令
+ */
+export async function getDriverLocationWithStatus(
+  driverId: string
+): Promise<DriverLocationRead> {
+  const result = await safeReadWithStatus(
+    "getDriverLocation",
+    `driver:last_location:{${driverId}}`,
+    async (client) => {
+      const data = await client.hgetall(`driver:last_location:${driverId}`);
+      if (!data || Object.keys(data).length === 0) return null;
+      return data as unknown as DriverLocation;
+    }
+  );
+  return {
+    redisAvailable: result.redisAvailable,
+    location: result.value
+  };
+}
+
+/**
+ * 读取司机位置（兼容入口）。
+ * 需要区分 Redis 不可用与键不存在时，请使用 getDriverLocationWithStatus。
  */
 export async function getDriverLocation(
   driverId: string
 ): Promise<DriverLocation | null> {
-  return safeRead("getDriverLocation", `driver:last_location:{${driverId}}`, async (client) => {
-    const data = await client.hgetall(`driver:last_location:${driverId}`);
-    if (!data || Object.keys(data).length === 0) return null;
-    return data as unknown as DriverLocation;
-  });
+  const { location } = await getDriverLocationWithStatus(driverId);
+  return location;
 }
 
 /** getDriverLocationsWithStatus 的返回结构：整体可用性 + 逐司机位置 */
@@ -546,10 +617,10 @@ export async function getDriverLocationsWithStatus(
   const locations = new Map<string, DriverLocation | null>();
 
   if (driverIds.length === 0) {
-    return { redisAvailable: isRedisAvailable(), locations };
+    return { redisAvailable: await isRedisAvailable(), locations };
   }
 
-  const client = getRedisClient();
+  const client = await getReadyRedisClient();
   if (!client) {
     // 降级：整体不可用
     driverIds.forEach((id) => locations.set(id, null));
@@ -622,16 +693,39 @@ export async function setDriverOnline(driverId: string): Promise<void> {
   });
 }
 
+export interface DriverOnlineRead {
+  redisAvailable: boolean;
+  online: boolean;
+}
+
 /**
- * 检查司机是否在线（EXISTS）。
+ * 检查司机是否在线（EXISTS），并返回 Redis 整体可用性。
  * 文档参考：tair-key-design 4.2.4 读取命令
  */
+export async function getDriverOnlineStatus(
+  driverId: string
+): Promise<DriverOnlineRead> {
+  const result = await safeReadWithStatus(
+    "isDriverOnline",
+    `driver:online:{${driverId}}`,
+    async (client) => {
+      const count = await client.exists(`driver:online:${driverId}`);
+      return count === 1;
+    }
+  );
+  return {
+    redisAvailable: result.redisAvailable,
+    online: result.value ?? false
+  };
+}
+
+/**
+ * 检查司机是否在线（兼容入口）。
+ * Redis 不可用与司机不在线均返回 false；需要区分时请使用 getDriverOnlineStatus。
+ */
 export async function isDriverOnline(driverId: string): Promise<boolean> {
-  const result = await safeRead("isDriverOnline", `driver:online:{${driverId}}`, async (client) => {
-    const count = await client.exists(`driver:online:${driverId}`);
-    return count === 1;
-  });
-  return result ?? false;
+  const { online } = await getDriverOnlineStatus(driverId);
+  return online;
 }
 
 /**
@@ -639,7 +733,7 @@ export async function isDriverOnline(driverId: string): Promise<boolean> {
  * 文档参考：tair-key-design 4.2.4 批量检查
  */
 export async function getOnlineDriverIds(): Promise<string[]> {
-  const client = getRedisClient();
+  const client = await getReadyRedisClient();
   if (!client) return [];
 
   const driverIds: string[] = [];
@@ -814,7 +908,7 @@ export async function acquireDispatchLock(
   orderId: string,
   ttlSec = 10
 ): Promise<boolean> {
-  const client = getRedisClient();
+  const client = await getReadyRedisClient();
   if (!client) {
     // 降级：跳过 Redis 锁，依赖 Prisma 乐观锁
     return true;
@@ -853,7 +947,7 @@ export async function acquireDispatchLock(
  * 文档参考：tair-key-design 4.4.4 释放命令
  */
 export async function releaseDispatchLock(orderId: string): Promise<void> {
-  const client = getRedisClient();
+  const client = await getReadyRedisClient();
   if (!client) return;
 
   const traceId = (globalThis as { __traceId?: string }).__traceId ?? "unknown";
@@ -907,7 +1001,7 @@ export async function acquireResourceLock(
   token: string,
   ttlSeconds = 10
 ): Promise<LockAcquireResult> {
-  const client = getRedisClient();
+  const client = await getReadyRedisClient();
   if (!client) return "unavailable";
 
   try {
@@ -935,7 +1029,7 @@ export async function releaseResourceLock(
   resourceKey: string,
   token: string
 ): Promise<void> {
-  const client = getRedisClient();
+  const client = await getReadyRedisClient();
   if (!client) return;
 
   if (typeof client.eval !== "function") {

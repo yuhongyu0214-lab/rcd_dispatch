@@ -200,7 +200,6 @@ function mapDriver(
 
 type AffectedScope = {
   storeIds: string[];
-  driverIds: string[];
 };
 
 async function resolveAffectedScope(
@@ -214,7 +213,7 @@ async function resolveAffectedScope(
       where: { isActive: true },
       select: { id: true },
     });
-    return { storeIds: stores.map((s) => s.id), driverIds: [] };
+    return { storeIds: stores.map((s) => s.id) };
   }
 
   const storeIds = new Set<string>();
@@ -252,7 +251,7 @@ async function resolveAffectedScope(
     }
   }
 
-  return { storeIds: [...storeIds], driverIds: driverId ? [driverId] : [] };
+  return { storeIds: [...storeIds] };
 }
 
 // ---------------------------------------------------------------------------
@@ -291,7 +290,6 @@ export async function buildDispatchSnapshot(
   // 2. Batch-read drivers in affected stores
   const driverRows = await findDispatchableDrivers({
     storeIds: scope.storeIds,
-    driverIds: scope.driverIds.length > 0 ? scope.driverIds : undefined,
   });
 
   const driverIdList = driverRows.map((d) => d.id);

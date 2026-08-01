@@ -2,6 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth/current-user";
+import {
+  isPublicAdminRegistrationEnabled,
+  shouldShowDemoCredentials
+} from "@/lib/auth/public-registration";
 import { isAdminRole } from "@/lib/auth/roles";
 
 import { LoginForm } from "./components/login-form";
@@ -15,6 +19,10 @@ export default async function AdminLoginPage({
   };
 }) {
   const currentUser = await getCurrentUser();
+  const allowPublicRegistration = isPublicAdminRegistrationEnabled();
+  const demoCredentials = shouldShowDemoCredentials()
+    ? { account: "admin@dispatch.dev", password: "admin123" }
+    : null;
   const nextPath =
     searchParams.next && searchParams.next.startsWith("/admin")
       ? searchParams.next
@@ -34,7 +42,10 @@ export default async function AdminLoginPage({
             </p>
             <h1 className="mt-2 text-3xl font-semibold">后台登录</h1>
           </div>
-          <Link href="/" className="text-sm text-slate-600 underline underline-offset-4">
+          <Link
+            href="/"
+            className="text-sm text-slate-600 underline underline-offset-4"
+          >
             返回首页
           </Link>
         </div>
@@ -45,7 +56,11 @@ export default async function AdminLoginPage({
           </div>
         ) : null}
 
-        <LoginForm nextPath={nextPath} />
+        <LoginForm
+          nextPath={nextPath}
+          allowPublicRegistration={allowPublicRegistration}
+          demoCredentials={demoCredentials}
+        />
       </div>
     </main>
   );

@@ -4,7 +4,7 @@ import type { GeoPointV2 } from "@/types/v2";
 import type {
   DispatchInputV2,
   DispatchDriverInputV2,
-  DispatchOrderInputV2,
+  DispatchOrderInputV2
 } from "@/types/v2/dispatch";
 import type { EtaResolver } from "../core/types";
 import type { EtaCacheValueV2 } from "@/lib/redis";
@@ -13,34 +13,39 @@ import type { EtaCacheValueV2 } from "@/lib/redis";
 // Hoisted mocks — must be defined before the module-level vi.mock calls.
 // ---------------------------------------------------------------------------
 
-const { mockDrivingRoute, mockGetCachedEtaV2, mockCacheEtaV2 } = vi.hoisted(() => ({
-  mockDrivingRoute: vi.fn(),
-  mockGetCachedEtaV2: vi.fn(),
-  mockCacheEtaV2: vi.fn(),
-}));
+const { mockDrivingRoute, mockGetCachedEtaV2, mockCacheEtaV2 } = vi.hoisted(
+  () => ({
+    mockDrivingRoute: vi.fn(),
+    mockGetCachedEtaV2: vi.fn(),
+    mockCacheEtaV2: vi.fn()
+  })
+);
 
 // ---------------------------------------------------------------------------
 // Module mocks
 // ---------------------------------------------------------------------------
 
 vi.mock("@/lib/amap", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/amap")>("@/lib/amap");
+  const actual =
+    await vi.importActual<typeof import("@/lib/amap")>("@/lib/amap");
   return {
     ...actual,
-    drivingRoute: mockDrivingRoute,
+    drivingRoute: mockDrivingRoute
   };
 });
 
 vi.mock("@/lib/redis", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/redis")>("@/lib/redis");
+  const actual =
+    await vi.importActual<typeof import("@/lib/redis")>("@/lib/redis");
   return {
     ...actual,
     getCachedEtaV2: mockGetCachedEtaV2,
-    cacheEtaV2: mockCacheEtaV2,
+    cacheEtaV2: mockCacheEtaV2
   };
 });
 
 import { buildEtaMatrix } from "./eta-matrix-service";
+import { runDispatchV2 } from "../core";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -62,9 +67,14 @@ function makeDriver(
     availability: "AVAILABLE",
     planVersion: 1,
     locationFreshness: "FRESH",
-    lastLocation: { lat: 30.28, lng: 120.16, accuracyMeters: 10, capturedAt: new Date(NOW).toISOString() },
+    lastLocation: {
+      lat: 30.28,
+      lng: 120.16,
+      accuracyMeters: 10,
+      capturedAt: new Date(NOW).toISOString()
+    },
     assignments: [],
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -85,7 +95,7 @@ function makeOrder(
     deliveryLocation: gp(30.32, 120.143),
     storeCode: "STORE-A",
     serviceModuleMinutes: 0,
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -94,14 +104,14 @@ function makeCacheValue(etaMinutes: number): EtaCacheValueV2 {
     etaMinutes,
     distanceMeters: 5000,
     durationSeconds: etaMinutes * 60,
-    cachedAt: NOW - 10_000, // 10 s ago — fresh
+    cachedAt: NOW - 10_000 // 10 s ago — fresh
   };
 }
 
 const BASE_EVENT = {
   type: "ORDER_RECEIVED" as const,
   occurredAt: new Date(NOW).toISOString(),
-  orderId: "o1",
+  orderId: "o1"
 };
 
 beforeEach(() => {
@@ -121,7 +131,7 @@ describe("empty input", () => {
     const input: DispatchInputV2 = {
       event: BASE_EVENT,
       orders: [],
-      drivers: [],
+      drivers: []
     };
 
     const resolver = await buildEtaMatrix(input);
@@ -142,12 +152,10 @@ describe("no locations", () => {
       orders: [
         makeOrder({
           pickupLocation: undefined,
-          deliveryLocation: undefined,
-        }),
+          deliveryLocation: undefined
+        })
       ],
-      drivers: [
-        makeDriver({ lastLocation: undefined }),
-      ],
+      drivers: [makeDriver({ lastLocation: undefined })]
     };
 
     const resolver = await buildEtaMatrix(input);
@@ -158,8 +166,10 @@ describe("no locations", () => {
   it("driver has location but order has no pickup → no deadhead pairs", async () => {
     const input: DispatchInputV2 = {
       event: BASE_EVENT,
-      orders: [makeOrder({ pickupLocation: undefined, deliveryLocation: gp(30, 121) })],
-      drivers: [makeDriver()],
+      orders: [
+        makeOrder({ pickupLocation: undefined, deliveryLocation: gp(30, 121) })
+      ],
+      drivers: [makeDriver()]
     };
 
     // Only service pairs: pickup→delivery. But pickup is undefined, so no pairs.
@@ -179,7 +189,7 @@ describe("cache hits", () => {
     const input: DispatchInputV2 = {
       event: BASE_EVENT,
       orders: [makeOrder()],
-      drivers: [makeDriver()],
+      drivers: [makeDriver()]
     };
 
     const resolver = await buildEtaMatrix(input);
@@ -207,7 +217,7 @@ describe("cache misses", () => {
     const input: DispatchInputV2 = {
       event: BASE_EVENT,
       orders: [makeOrder()],
-      drivers: [makeDriver()],
+      drivers: [makeDriver()]
     };
 
     const resolver = await buildEtaMatrix(input);
@@ -233,15 +243,15 @@ describe("partial cache hit/miss", () => {
     // First pair hits cache, the other two miss.
     mockGetCachedEtaV2
       .mockResolvedValueOnce(makeCacheValue(8)) // pair 1: hit
-      .mockResolvedValueOnce(null)              // pair 2: miss
-      .mockResolvedValueOnce(null);             // pair 3: miss
+      .mockResolvedValueOnce(null) // pair 2: miss
+      .mockResolvedValueOnce(null); // pair 3: miss
 
     mockDrivingRoute.mockResolvedValue({ distance: 6000, duration: 900 }); // 15 min
 
     const input: DispatchInputV2 = {
       event: BASE_EVENT,
       orders: [makeOrder()],
-      drivers: [makeDriver()],
+      drivers: [makeDriver()]
     };
 
     const resolver = await buildEtaMatrix(input);
@@ -270,14 +280,14 @@ describe("Amap failure", () => {
     //   (2) deadhead: delivery→pickup   → fail (AMAP_NO_ROUTE_FOUND)
     //   (3) service:  pickup→delivery   → fail (AMAP_TIMEOUT)
     mockDrivingRoute
-      .mockResolvedValueOnce({ distance: 5000, duration: 600 })    // pair 1
-      .mockRejectedValueOnce(new Error("AMAP_NO_ROUTE_FOUND"))     // pair 2
-      .mockRejectedValueOnce(new Error("AMAP_TIMEOUT"));           // pair 3
+      .mockResolvedValueOnce({ distance: 5000, duration: 600 }) // pair 1
+      .mockRejectedValueOnce(new Error("AMAP_NO_ROUTE_FOUND")) // pair 2
+      .mockRejectedValueOnce(new Error("AMAP_TIMEOUT")); // pair 3
 
     const input: DispatchInputV2 = {
       event: BASE_EVENT,
       orders: [makeOrder()],
-      drivers: [makeDriver()],
+      drivers: [makeDriver()]
     };
 
     const resolver = await buildEtaMatrix(input);
@@ -297,7 +307,7 @@ describe("Amap failure", () => {
     const input: DispatchInputV2 = {
       event: BASE_EVENT,
       orders: [makeOrder()],
-      drivers: [makeDriver()],
+      drivers: [makeDriver()]
     };
 
     const resolver = await buildEtaMatrix(input);
@@ -320,7 +330,7 @@ describe("cache writes on success", () => {
     const input: DispatchInputV2 = {
       event: BASE_EVENT,
       orders: [makeOrder()],
-      drivers: [makeDriver()],
+      drivers: [makeDriver()]
     };
 
     await buildEtaMatrix(input);
@@ -347,7 +357,7 @@ describe("Amap failure → no cache write", () => {
     const input: DispatchInputV2 = {
       event: BASE_EVENT,
       orders: [makeOrder()],
-      drivers: [makeDriver()],
+      drivers: [makeDriver()]
     };
 
     await buildEtaMatrix(input);
@@ -370,10 +380,18 @@ describe("deduplication", () => {
     const input: DispatchInputV2 = {
       event: BASE_EVENT,
       orders: [
-        makeOrder({ orderId: "o1", pickupLocation: gp(30.27, 120.15), deliveryLocation: gp(30.32, 120.14) }),
-        makeOrder({ orderId: "o2", pickupLocation: gp(30.27, 120.15), deliveryLocation: gp(30.32, 120.14) }),
+        makeOrder({
+          orderId: "o1",
+          pickupLocation: gp(30.27, 120.15),
+          deliveryLocation: gp(30.32, 120.14)
+        }),
+        makeOrder({
+          orderId: "o2",
+          pickupLocation: gp(30.27, 120.15),
+          deliveryLocation: gp(30.32, 120.14)
+        })
       ],
-      drivers: [makeDriver()],
+      drivers: [makeDriver()]
     };
 
     await buildEtaMatrix(input);
@@ -394,10 +412,16 @@ describe("deduplication", () => {
     const input: DispatchInputV2 = {
       event: BASE_EVENT,
       orders: [
-        makeOrder({ orderId: "o1", pickupLocation: gp(30.2741000001, 120.1551000001) }),
-        makeOrder({ orderId: "o2", pickupLocation: gp(30.2741000002, 120.1551000002) }),
+        makeOrder({
+          orderId: "o1",
+          pickupLocation: gp(30.2741000001, 120.1551000001)
+        }),
+        makeOrder({
+          orderId: "o2",
+          pickupLocation: gp(30.2741000002, 120.1551000002)
+        })
       ],
-      drivers: [makeDriver()],
+      drivers: [makeDriver()]
     };
 
     await buildEtaMatrix(input);
@@ -426,7 +450,7 @@ describe("Redis write resilience", () => {
     const input: DispatchInputV2 = {
       event: BASE_EVENT,
       orders: [makeOrder()],
-      drivers: [makeDriver()],
+      drivers: [makeDriver()]
     };
 
     // Must NOT throw.
@@ -446,7 +470,7 @@ describe("unknown pair → null", () => {
     const input: DispatchInputV2 = {
       event: BASE_EVENT,
       orders: [makeOrder()],
-      drivers: [makeDriver()],
+      drivers: [makeDriver()]
     };
 
     const resolver = await buildEtaMatrix(input);
@@ -472,15 +496,15 @@ describe("cross-order deadhead coverage", () => {
         makeOrder({
           orderId: "o1",
           pickupLocation: gp(30.2741, 120.1551),
-          deliveryLocation: gp(30.32, 120.143),
+          deliveryLocation: gp(30.32, 120.143)
         }),
         makeOrder({
           orderId: "o2",
           pickupLocation: gp(30.33, 120.15),
-          deliveryLocation: gp(30.35, 120.16),
-        }),
+          deliveryLocation: gp(30.35, 120.16)
+        })
       ],
-      drivers: [makeDriver()],
+      drivers: [makeDriver()]
     };
 
     const resolver = await buildEtaMatrix(input);
@@ -500,6 +524,172 @@ describe("cross-order deadhead coverage", () => {
 
     // Service leg: each order's own pickup→delivery.
     expect(resolver(gp(30.2741, 120.1551), gp(30.32, 120.143))).toBe(8); // o1 service
-    expect(resolver(gp(30.33, 120.15), gp(30.35, 120.16))).toBe(8);      // o2 service
+    expect(resolver(gp(30.33, 120.15), gp(30.35, 120.16))).toBe(8); // o2 service
+  });
+
+  it("covers every plan-pool delivery cursor even when the matrix exceeds eight origins", async () => {
+    const orders = Array.from({ length: 12 }, (_, index) =>
+      makeOrder({
+        orderId: `o-${index}`,
+        pickupLocation: gp(30 + index * 0.01, 120 + index * 0.01),
+        deliveryLocation: gp(31 + index * 0.01, 121 + index * 0.01)
+      })
+    );
+    const drivers = Array.from({ length: 12 }, (_, index) =>
+      makeDriver({
+        driverId: `d-${index}`,
+        lastLocation: {
+          lat: 29 + index * 0.01,
+          lng: 119 + index * 0.01,
+          accuracyMeters: 10,
+          capturedAt: new Date(NOW).toISOString()
+        }
+      })
+    );
+
+    await buildEtaMatrix({ event: BASE_EVENT, orders, drivers });
+
+    // 12 pickups × (12 driver origins + 12 possible delivery cursors)
+    // + 12 per-order service legs.
+    expect(mockGetCachedEtaV2).toHaveBeenCalledTimes(
+      (drivers.length + orders.length) * orders.length + orders.length
+    );
+  });
+
+  it("keeps the driver origin and existing timeline cursor when more than eight deliveries are nearer", async () => {
+    const targetPickup = gp(30, 120);
+    const driverOrigin = gp(35, 125);
+    const timelineCursor = gp(34, 124);
+    const timelineOrder = makeOrder({
+      orderId: "timeline-order",
+      executionStatus: "PLANNED",
+      currentAssignmentId: "asg-1",
+      pickupLocation: gp(33.9, 123.9),
+      deliveryLocation: timelineCursor
+    });
+    const targetOrder = makeOrder({
+      orderId: "target-order",
+      pickupLocation: targetPickup,
+      deliveryLocation: gp(32, 122)
+    });
+    const nearbyDeliveryOrders = Array.from({ length: 9 }, (_, index) =>
+      makeOrder({
+        orderId: `nearby-${index}`,
+        pickupLocation: gp(31 + index * 0.001, 121 + index * 0.001),
+        deliveryLocation: gp(
+          30 + (index + 1) * 0.0001,
+          120 + (index + 1) * 0.0001
+        )
+      })
+    );
+
+    const resolver = await buildEtaMatrix({
+      event: BASE_EVENT,
+      orders: [timelineOrder, targetOrder, ...nearbyDeliveryOrders],
+      drivers: [
+        makeDriver({
+          lastLocation: {
+            ...driverOrigin,
+            accuracyMeters: 10,
+            capturedAt: new Date(NOW).toISOString()
+          },
+          assignments: [
+            {
+              assignmentId: "asg-1",
+              orderId: "timeline-order",
+              sequenceNo: 1,
+              lockType: "AUTO_FROZEN",
+              executionStatus: "EN_ROUTE",
+              deliveryLocation: timelineCursor,
+              serviceModuleMinutes: 0
+            }
+          ]
+        })
+      ]
+    });
+
+    expect(resolver(driverOrigin, targetPickup)).toBe(15);
+    expect(resolver(timelineCursor, targetPickup)).toBe(15);
+  });
+
+  it("keeps a newly planned A delivery cursor so the next order can enter B", async () => {
+    mockDrivingRoute.mockResolvedValue({ distance: 3000, duration: 300 });
+
+    const event = {
+      type: "ORDER_RECEIVED" as const,
+      occurredAt: "2026-07-19T08:00:00.000Z",
+      orderId: "order-a"
+    };
+    const orderA = makeOrder({
+      orderId: "order-a",
+      orderNo: "ORDER-A",
+      promisedPickupAt: "2026-07-19T09:00:00.000Z",
+      pickupLocation: gp(30.1, 120.1),
+      deliveryLocation: gp(30.2, 120.2)
+    });
+    const orderB = makeOrder({
+      orderId: "order-b",
+      orderNo: "ORDER-B",
+      promisedPickupAt: "2026-07-19T10:00:00.000Z",
+      pickupLocation: gp(30.3, 120.3),
+      deliveryLocation: gp(30.4, 120.4)
+    });
+    const availableDriver = makeDriver({
+      driverId: "available-driver",
+      lastLocation: {
+        lat: 30,
+        lng: 120,
+        accuracyMeters: 10,
+        capturedAt: event.occurredAt
+      }
+    });
+    const unavailableDrivers = Array.from({ length: 7 }, (_, index) =>
+      makeDriver({
+        driverId: `unavailable-driver-${index}`,
+        availability: "UNAVAILABLE",
+        lastLocation: {
+          lat: 31 + index * 0.01,
+          lng: 121 + index * 0.01,
+          accuracyMeters: 10,
+          capturedAt: event.occurredAt
+        }
+      })
+    );
+    const input: DispatchInputV2 = {
+      event,
+      orders: [orderA, orderB],
+      drivers: [availableDriver, ...unavailableDrivers]
+    };
+
+    const resolver = await buildEtaMatrix(input);
+    const result = runDispatchV2(input, resolver);
+
+    expect(result.evaluations).toEqual([
+      {
+        orderId: "order-a",
+        result: "PLANNED",
+        bestSlackMinutes: 55,
+        reason: "PLANNED"
+      },
+      {
+        orderId: "order-b",
+        result: "PLANNED",
+        bestSlackMinutes: 105,
+        reason: "PLANNED"
+      }
+    ]);
+    expect(result.proposals[0]?.assignments).toMatchObject([
+      {
+        orderId: "order-a",
+        slot: "A",
+        etaAvailable: true
+      },
+      {
+        orderId: "order-b",
+        slot: "B",
+        deadheadEtaMinutes: 5,
+        etaAvailable: true
+      }
+    ]);
   });
 });

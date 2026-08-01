@@ -40,14 +40,18 @@ const mockFindServicePlans = vi.fn<(params: {
 }) => Promise<{ assignmentId: string; totalModuleMinutes: number }[]>>();
 
 vi.mock("../repositories", () => ({
-  findDispatchableOrders: (...args: unknown[]) =>
-    mockFindDispatchableOrders(...args),
-  findDispatchableDrivers: (...args: unknown[]) =>
-    mockFindDispatchableDrivers(...args),
-  findEffectiveAssignments: (...args: unknown[]) =>
-    mockFindEffectiveAssignments(...args),
-  findServicePlans: (...args: unknown[]) =>
-    mockFindServicePlans(...args),
+  findDispatchableOrders: (params: {
+    storeIds: string[];
+    requiredOrderIds?: string[];
+  }) => mockFindDispatchableOrders(params),
+  findDispatchableDrivers: (params: {
+    storeIds: string[];
+    driverIds?: string[];
+  }) => mockFindDispatchableDrivers(params),
+  findEffectiveAssignments: (params: { driverIds: string[] }) =>
+    mockFindEffectiveAssignments(params),
+  findServicePlans: (params: { assignmentIds: string[] }) =>
+    mockFindServicePlans(params)
 }));
 
 import { buildDispatchSnapshot } from "./dispatch-snapshot-service";
@@ -148,6 +152,12 @@ const ORDER_RECEIVED: DispatchEventV2 = {
 const BASELINE: DispatchEventV2 = {
   type: "BASELINE_RECALCULATION",
   occurredAt: NOW_ISO,
+};
+
+const DRIVER_SHIFT_CHANGED: DispatchEventV2 = {
+  type: "DRIVER_SHIFT_CHANGED",
+  occurredAt: NOW_ISO,
+  driverId: "driver-1",
 };
 
 // ===========================================================================
@@ -618,6 +628,31 @@ describe("driver mapping", () => {
     expect(d.onShift).toBe(true);
     expect(d.locationFreshness).toBe("FRESH");
     expect(d.lastLocation?.lat).toBe(30.28);
+  });
+
+  it("driver events load every active driver in the affected store", async () => {
+    vi.mocked(prisma.driver.findUnique).mockResolvedValue({
+      storeId: "store-1",
+    } as never);
+    mockFindDispatchableOrders.mockResolvedValue([
+      makeOrderRow({ id: "released-order" }),
+    ]);
+    mockFindDispatchableDrivers.mockResolvedValue([
+      makeDriverRow({ id: "driver-1", onShift: false }),
+      makeDriverRow({ id: "driver-2", onShift: true }),
+    ]);
+    mockFindEffectiveAssignments.mockResolvedValue([]);
+    mockFindServicePlans.mockResolvedValue([]);
+
+    const snapshot = await buildDispatchSnapshot(DRIVER_SHIFT_CHANGED);
+
+    expect(mockFindDispatchableDrivers).toHaveBeenCalledWith({
+      storeIds: ["store-1"],
+    });
+    expect(snapshot.drivers.map((driver) => driver.driverId)).toEqual([
+      "driver-1",
+      "driver-2",
+    ]);
   });
 });
 

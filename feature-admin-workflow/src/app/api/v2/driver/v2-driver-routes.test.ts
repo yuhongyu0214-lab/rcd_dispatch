@@ -61,8 +61,8 @@ function asNextRequest(request: Request): NextRequest {
   return request as unknown as NextRequest;
 }
 
-// In non-production the driver auth fallback accepts ?driverId= — used here to
-// authenticate test calls without a JWT.
+// Route-focused tests explicitly enable the non-production query fallback.
+// Signature/fail-closed behavior is covered separately in driver/_utils.test.ts.
 const AUTHED_MAP_URL = "http://localhost/api/v2/driver/map?driverId=d-caller";
 const ANON_MAP_URL = "http://localhost/api/v2/driver/map";
 const AUTHED_LOCATION_URL =
@@ -78,6 +78,10 @@ function postJson(url: string, rawBody: string) {
     })
   );
 }
+
+beforeEach(() => {
+  vi.stubEnv("ALLOW_INSECURE_DRIVER_ID", "true");
+});
 
 // ============================================================================
 // GET /api/v2/driver/map — P0-3 regression tests
@@ -177,7 +181,10 @@ describe("GET /api/v2/driver/map", () => {
         store: { code: "STORE_CD_01" }
       }
     ] as unknown as Awaited<ReturnType<typeof prisma.driver.findMany>>);
-    vi.mocked(calculateFreshness).mockReturnValue({ freshness: "STALE" });
+    vi.mocked(calculateFreshness).mockReturnValue({
+      freshness: "STALE",
+      capturedAt: "2026-07-18T08:00:00.000Z"
+    });
 
     const response = await getMap(asNextRequest(new Request(AUTHED_MAP_URL)));
 
@@ -203,7 +210,10 @@ describe("GET /api/v2/driver/map", () => {
         store: { code: "STORE_CD_01" }
       }
     ] as unknown as Awaited<ReturnType<typeof prisma.driver.findMany>>);
-    vi.mocked(calculateFreshness).mockReturnValue({ freshness: "FRESH" });
+    vi.mocked(calculateFreshness).mockReturnValue({
+      freshness: "FRESH",
+      capturedAt: capturedAt.toISOString()
+    });
 
     const response = await getMap(asNextRequest(new Request(AUTHED_MAP_URL)));
 

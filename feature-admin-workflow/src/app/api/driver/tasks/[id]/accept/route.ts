@@ -44,30 +44,10 @@ export async function POST(
   }
 
   // ---- 1. 鉴权 ----
-  let driverId = await extractDriverId(request);
-
-  // 兼容旧版：从请求体获取 driverId
-  if (!driverId) {
-    try {
-      const body = (await request.clone().json()) as { driverId?: string };
-      driverId = body.driverId?.trim() ?? null;
-    } catch {
-      // 忽略
-    }
-  }
+  const driverId = await extractDriverId(request);
 
   if (!driverId) {
-    // 重新读取 body（clone 已消耗，需重新 parse）
-    try {
-      const body = (await request.json()) as { driverId?: string };
-      driverId = body.driverId?.trim() ?? null;
-    } catch {
-      return fail("请提供司机 ID", { status: 401, traceId });
-    }
-  }
-
-  if (!driverId) {
-    return fail("请提供司机 ID", { status: 401, traceId });
+    return fail("司机身份认证失败", { status: 401, traceId });
   }
 
   // ---- 2. 事务执行 ----

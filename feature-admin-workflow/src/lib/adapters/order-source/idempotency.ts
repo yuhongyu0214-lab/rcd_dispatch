@@ -1,13 +1,13 @@
 import type { Prisma } from "@prisma/client";
 
+import { SYSTEM_ROLES } from "@/lib/auth/roles";
+import { processInternalEvent } from "@/lib/events/processor";
+import { enqueueInternalEvent } from "@/lib/events/store";
 import { prisma } from "@/lib/prisma";
 import { createLogger } from "@/lib/logger";
 import { compareSourceVersions } from "@/lib/contracts/v2/source-version";
 
-import type {
-  CanonicalOrderV2,
-  IngestRecordResultV2
-} from "@/types/v2";
+import type { CanonicalOrderV2, IngestRecordResultV2 } from "@/types/v2";
 
 const log = createLogger("order-source");
 
@@ -38,18 +38,11 @@ function isVersionRace(error: unknown): boolean {
 /** 解析操作用户（系统用户或管理员） */
 async function resolveOperatorUser(tx: PrismaTx): Promise<string | null> {
   const user = await tx.user.findFirst({
-    where: { role: "system" },
+    where: { role: { in: [...SYSTEM_ROLES] } },
+    orderBy: { createdAt: "asc" },
     select: { id: true }
   });
-  if (user) return user.id;
-
-  const admin = await tx.user.findFirst({
-    where: { role: "admin" },
-    select: { id: true }
-  });
-  if (admin) return admin.id;
-
-  return null;
+  return user?.id ?? null;
 }
 
 function buildOrderDbData(
@@ -58,8 +51,16 @@ function buildOrderDbData(
 ): Prisma.OrderCreateInput {
   return {
     orderNo: canonical.orderNo,
-    type: canonical.businessType as "STORE_PICKUP" | "STORE_RETURN" | "DOOR_DELIVERY" | "DOOR_PICKUP",
-    sourceSystem: canonical.sourceSystem as "HALUO" | "PLUGIN" | "API" | "V1_IMPORT",
+    type: canonical.businessType as
+      | "STORE_PICKUP"
+      | "STORE_RETURN"
+      | "DOOR_DELIVERY"
+      | "DOOR_PICKUP",
+    sourceSystem: canonical.sourceSystem as
+      | "HALUO"
+      | "PLUGIN"
+      | "API"
+      | "V1_IMPORT",
     externalOrderId: canonical.externalOrderId,
     sourceVersion: canonical.sourceVersion,
     executionStatus: canonical.cancelledAt ? "CANCELLED" : "UNASSIGNED",
@@ -97,7 +98,11 @@ function buildOrderUpdateData(
 ): Prisma.OrderUncheckedUpdateManyInput {
   return {
     orderNo: canonical.orderNo,
-    type: canonical.businessType as "STORE_PICKUP" | "STORE_RETURN" | "DOOR_DELIVERY" | "DOOR_PICKUP",
+    type: canonical.businessType as
+      | "STORE_PICKUP"
+      | "STORE_RETURN"
+      | "DOOR_DELIVERY"
+      | "DOOR_PICKUP",
     sourceVersion: canonical.sourceVersion,
     storeId,
     licensePlateSnapshot: canonical.licensePlateSnapshot ?? null,
@@ -117,6 +122,49 @@ function buildOrderUpdateData(
     remark: canonical.remark ?? null,
     cancelledAt: canonical.cancelledAt ? new Date(canonical.cancelledAt) : null
   };
+}
+
+const ORDER_AUDIT_FIELDS = [
+  "orderNo",
+  "type",
+  "sourceVersion",
+  "storeId",
+  "licensePlateSnapshot",
+  "vehicleTypeSnapshot",
+  "pickupAddress",
+  "pickupLat",
+  "pickupLng",
+  "returnAddress",
+  "returnLat",
+  "returnLng",
+  "deliveryAddress",
+  "deliveryLat",
+  "deliveryLng",
+  "scheduledAt",
+  "promisedPickupAt",
+  "receivedAt",
+  "remark",
+  "cancelledAt"
+] as const;
+
+function toAuditValue(value: unknown): Prisma.InputJsonValue | null {
+  if (value instanceof Date) return value.toISOString();
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+  return null;
+}
+
+function buildOrderAuditSnapshot(
+  values: Record<string, unknown>
+): Prisma.InputJsonObject {
+  return Object.fromEntries(
+    ORDER_AUDIT_FIELDS.map((field) => [field, toAuditValue(values[field])])
+  );
 }
 
 /**
@@ -141,7 +189,9 @@ async function guardedOrderUpdate(
 
 type EventResult = "SUCCESS" | "SKIPPED" | "FAILED" | "MIGRATED";
 
-function buildEventPayloadSummary(canonical: CanonicalOrderV2): Record<string, string | number | boolean | null> {
+function buildEventPayloadSummary(
+  canonical: CanonicalOrderV2
+): Record<string, string | number | boolean | null> {
   return {
     orderNo: canonical.orderNo,
     businessType: canonical.businessType,
@@ -170,14 +220,22 @@ async function upsertSourceEvent(
   return tx.orderSourceEvent.upsert({
     where: {
       sourceSystem_externalOrderId_sourceVersion: {
-        sourceSystem: params.sourceSystem as "HALUO" | "PLUGIN" | "API" | "V1_IMPORT",
+        sourceSystem: params.sourceSystem as
+          | "HALUO"
+          | "PLUGIN"
+          | "API"
+          | "V1_IMPORT",
         externalOrderId: params.externalOrderId,
         sourceVersion: params.sourceVersion
       }
     },
     create: {
       orderId: params.orderId,
-      sourceSystem: params.sourceSystem as "HALUO" | "PLUGIN" | "API" | "V1_IMPORT",
+      sourceSystem: params.sourceSystem as
+        | "HALUO"
+        | "PLUGIN"
+        | "API"
+        | "V1_IMPORT",
       externalOrderId: params.externalOrderId,
       sourceVersion: params.sourceVersion,
       sourceStatusRaw: params.sourceStatusRaw,
@@ -212,16 +270,14 @@ async function writeOperationLog(
     action: "IMPORT" | "CANCEL" | "ORDER_MODIFY";
     traceId: string;
     reason: string;
-    metadataJson: Record<string, string | number | boolean | null>;
+    metadataJson: Prisma.InputJsonObject;
+    driverId?: string | null;
+    assignmentId?: string | null;
   }
 ) {
   const operatorUserId = await resolveOperatorUser(tx);
   if (!operatorUserId) {
-    log.warn("未找到操作人用户，跳过 OperationLog", {
-      traceId: params.traceId,
-      entityId: params.entityId
-    });
-    return;
+    throw new Error("SYSTEM_OPERATOR_NOT_CONFIGURED");
   }
 
   await tx.operationLog.create({
@@ -231,8 +287,8 @@ async function writeOperationLog(
       action: params.action,
       operatorUserId,
       orderId: params.entityId,
-      driverId: null,
-      assignmentId: null,
+      driverId: params.driverId ?? null,
+      assignmentId: params.assignmentId ?? null,
       traceId: params.traceId,
       reason: params.reason,
       metadataJson: params.metadataJson
@@ -245,6 +301,7 @@ interface IngestTransactionResult {
   eventResult: "success" | "skipped" | "failed";
   reason?: string;
   replayed?: boolean;
+  dispatchEventId?: string;
 }
 
 async function executeIngestTransaction(
@@ -258,7 +315,11 @@ async function executeIngestTransaction(
     const existingEvent = await txClient.orderSourceEvent.findUnique({
       where: {
         sourceSystem_externalOrderId_sourceVersion: {
-          sourceSystem: canonical.sourceSystem as "HALUO" | "PLUGIN" | "API" | "V1_IMPORT",
+          sourceSystem: canonical.sourceSystem as
+            | "HALUO"
+            | "PLUGIN"
+            | "API"
+            | "V1_IMPORT",
           externalOrderId: canonical.externalOrderId,
           sourceVersion: canonical.sourceVersion
         }
@@ -280,7 +341,11 @@ async function executeIngestTransaction(
     const existingOrder = await txClient.order.findUnique({
       where: {
         sourceSystem_externalOrderId: {
-          sourceSystem: canonical.sourceSystem as "HALUO" | "PLUGIN" | "API" | "V1_IMPORT",
+          sourceSystem: canonical.sourceSystem as
+            | "HALUO"
+            | "PLUGIN"
+            | "API"
+            | "V1_IMPORT",
           externalOrderId: canonical.externalOrderId
         }
       }
@@ -289,10 +354,16 @@ async function executeIngestTransaction(
     // 3. 版本比较
     const isNewer = !existingOrder
       ? true // 新订单，视为更新版本
-      : compareSourceVersions(canonical.sourceVersion, existingOrder.sourceVersion) > 0;
+      : compareSourceVersions(
+          canonical.sourceVersion,
+          existingOrder.sourceVersion
+        ) > 0;
 
     const isEqual = existingOrder
-      ? compareSourceVersions(canonical.sourceVersion, existingOrder.sourceVersion) === 0
+      ? compareSourceVersions(
+          canonical.sourceVersion,
+          existingOrder.sourceVersion
+        ) === 0
       : false;
 
     const isStale = existingOrder && !isNewer && !isEqual;
@@ -419,7 +490,21 @@ async function executeIngestTransaction(
         }
       });
 
-      return { orderId, eventResult: "success" };
+      const dispatchEventId = [
+        "order-created",
+        canonical.sourceSystem,
+        canonical.externalOrderId,
+        canonical.sourceVersion
+      ].join(":");
+      await enqueueInternalEvent(txClient, {
+        eventId: dispatchEventId,
+        type: "ORDER_CREATED",
+        orderId,
+        occurredAt: canonical.receivedAt,
+        traceId
+      });
+
+      return { orderId, eventResult: "success", dispatchEventId };
     }
 
     // 更新 —— P0-1: 仅元数据（地址/坐标/时间/车辆快照/备注），
@@ -430,9 +515,22 @@ async function executeIngestTransaction(
     const afterVersion = canonical.sourceVersion;
 
     const updateData = buildOrderUpdateData(canonical, storeId);
+    const before = buildOrderAuditSnapshot(
+      existingOrder as unknown as Record<string, unknown>
+    );
+    const after = buildOrderAuditSnapshot({
+      ...updateData,
+      type: canonical.businessType,
+      storeId
+    });
 
     // P0-3: 乐观锁 —— 并发不同版本写入时，落后的事务命中 0 行并重试
-    await guardedOrderUpdate(txClient, existingOrder.id, beforeVersion, updateData);
+    await guardedOrderUpdate(
+      txClient,
+      existingOrder.id,
+      beforeVersion,
+      updateData
+    );
 
     const orderId = existingOrder.id;
     const afterExecutionStatus = beforeExecutionStatus;
@@ -470,18 +568,39 @@ async function executeIngestTransaction(
         beforeVersion,
         afterVersion,
         beforeExecutionStatus,
-        afterExecutionStatus
+        afterExecutionStatus,
+        before,
+        after
       }
     });
 
-    return { orderId, eventResult: "success" };
+    const dispatchEventId = [
+      "order-updated",
+      canonical.sourceSystem,
+      canonical.externalOrderId,
+      canonical.sourceVersion
+    ].join(":");
+    await enqueueInternalEvent(txClient, {
+      eventId: dispatchEventId,
+      type: "ORDER_UPDATED",
+      orderId,
+      occurredAt: canonical.receivedAt,
+      traceId
+    });
+
+    return { orderId, eventResult: "success", dispatchEventId };
   });
 }
 
 async function handleCancel(
   txClient: PrismaTx,
   canonical: CanonicalOrderV2,
-  existingOrder: { id: string; executionStatus: string; currentAssignmentId: string | null; sourceVersion: string } | null,
+  existingOrder: {
+    id: string;
+    executionStatus: string;
+    currentAssignmentId: string | null;
+    sourceVersion: string;
+  } | null,
   storeId: string,
   traceId: string
 ): Promise<IngestTransactionResult> {
@@ -524,7 +643,31 @@ async function handleCancel(
     return { orderId: newOrder.id, eventResult: "success" };
   }
 
-  const currentStatus = existingOrder.executionStatus;
+  await txClient.$queryRaw`
+    SELECT "id"
+    FROM "Order"
+    WHERE "id" = ${existingOrder.id}
+    FOR UPDATE
+  `;
+
+  const lockedOrder = await txClient.order.findUnique({
+    where: { id: existingOrder.id },
+    select: {
+      id: true,
+      executionStatus: true,
+      currentAssignmentId: true,
+      sourceVersion: true
+    }
+  });
+
+  if (
+    !lockedOrder ||
+    lockedOrder.sourceVersion !== existingOrder.sourceVersion
+  ) {
+    throw new Error(VERSION_RACE_ERROR);
+  }
+
+  const currentStatus = lockedOrder.executionStatus;
 
   // 已取消的订单 → 幂等更新快照
   if (currentStatus === "CANCELLED") {
@@ -536,7 +679,7 @@ async function handleCancel(
     await guardedOrderUpdate(
       txClient,
       existingOrder.id,
-      existingOrder.sourceVersion,
+      lockedOrder.sourceVersion,
       updateData
     );
 
@@ -550,7 +693,7 @@ async function handleCancel(
       reason: null,
       payloadSummary: {
         ...summary,
-        beforeVersion: existingOrder.sourceVersion,
+        beforeVersion: lockedOrder.sourceVersion,
         afterVersion: canonical.sourceVersion,
         beforeExecutionStatus: "CANCELLED",
         afterExecutionStatus: "CANCELLED"
@@ -560,7 +703,11 @@ async function handleCancel(
       processedAt: new Date()
     });
 
-    return { orderId: existingOrder.id, eventResult: "success" };
+    return {
+      orderId: existingOrder.id,
+      eventResult: "success",
+      replayed: true
+    };
   }
 
   // IN_SERVICE / COMPLETED → FOLLOW_UP_REQUIRED（仅更新元数据，不改变执行状态）
@@ -570,7 +717,7 @@ async function handleCancel(
     await guardedOrderUpdate(
       txClient,
       existingOrder.id,
-      existingOrder.sourceVersion,
+      lockedOrder.sourceVersion,
       updateData
     );
 
@@ -584,7 +731,7 @@ async function handleCancel(
       reason: "FOLLOW_UP_REQUIRED",
       payloadSummary: {
         ...summary,
-        beforeVersion: existingOrder.sourceVersion,
+        beforeVersion: lockedOrder.sourceVersion,
         afterVersion: canonical.sourceVersion,
         beforeExecutionStatus: currentStatus,
         afterExecutionStatus: currentStatus
@@ -603,36 +750,97 @@ async function handleCancel(
       metadataJson: {
         sourceSystem: canonical.sourceSystem,
         externalOrderId: canonical.externalOrderId,
-        beforeVersion: existingOrder.sourceVersion,
+        beforeVersion: lockedOrder.sourceVersion,
         afterVersion: canonical.sourceVersion,
         executionStatus: currentStatus,
         followUpRequired: true
       }
     });
 
-    return { orderId: existingOrder.id, eventResult: "success", reason: "FOLLOW_UP_REQUIRED" };
+    return {
+      orderId: existingOrder.id,
+      eventResult: "success",
+      reason: "FOLLOW_UP_REQUIRED"
+    };
   }
 
-  // UNASSIGNED / PLANNED / EN_ROUTE → 取消：只落地来源事实与取消意图。
-  // 所有权边界（P0 返修，恢复并行设计原分工）：
-  // - 1A 在本事务内原子保存订单 CANCELLED 事实（executionStatus / status / cancelledAt）；
-  // - currentAssignmentId 保持原值，作为"计划待释放"的取消意图供下游识别
-  //   （executionStatus=CANCELLED 且 currentAssignmentId 非空 = 待 Gate 3 释放）；
-  // - Assignment 终止、Driver.planVersion 递增、DispatchAlert 解决与重排触发
-  //   由 Gate 3 调度事务单一所有者在其并发边界（订单/司机短锁）内统一完成，
-  //   1A 不越权写入这些实体。
-  const pendingReleaseAssignmentId = existingOrder.currentAssignmentId;
+  // UNASSIGNED / PLANNED / EN_ROUTE → cancel the complete aggregate in one
+  // transaction. Keeping a terminal order attached to an effective assignment
+  // would hide the orphan from later dispatch snapshots.
+  const currentAssignmentId = lockedOrder.currentAssignmentId;
+  let affectedDriverId: string | null = null;
+  let affectedAssignmentId: string | null = null;
+  let basePlanVersion: number | null = null;
+
+  if (currentAssignmentId) {
+    const assignment = await txClient.assignment.findUnique({
+      where: { id: currentAssignmentId },
+      select: { id: true, driverId: true, status: true }
+    });
+
+    if (
+      assignment &&
+      (assignment.status === "ACTIVE" || assignment.status === "ACCEPTED")
+    ) {
+      await txClient.$queryRaw`
+        SELECT "id"
+        FROM "Driver"
+        WHERE "id" = ${assignment.driverId}
+        FOR UPDATE
+      `;
+      const driver = await txClient.driver.findUnique({
+        where: { id: assignment.driverId },
+        select: { planVersion: true }
+      });
+      if (!driver) {
+        throw new Error("ASSIGNMENT_DRIVER_NOT_FOUND");
+      }
+
+      affectedDriverId = assignment.driverId;
+      affectedAssignmentId = assignment.id;
+      basePlanVersion = driver.planVersion;
+
+      await txClient.assignment.update({
+        where: { id: assignment.id },
+        data: {
+          status: "CANCELLED",
+          sequenceNo: null,
+          lockType: "NONE"
+        }
+      });
+    }
+  }
 
   const updateData = buildOrderUpdateData(canonical, storeId);
   updateData.executionStatus = "CANCELLED";
   updateData.status = "CANCELLED";
+  updateData.currentAssignmentId = null;
 
   await guardedOrderUpdate(
     txClient,
     existingOrder.id,
-    existingOrder.sourceVersion,
+    lockedOrder.sourceVersion,
     updateData
   );
+
+  await txClient.dispatchAlert.updateMany({
+    where: { orderId: existingOrder.id, status: "OPEN" },
+    data: {
+      status: "RESOLVED",
+      resolvedAt: new Date(),
+      resolvedBy: "ORDER_CANCELLED"
+    }
+  });
+
+  if (affectedDriverId && basePlanVersion !== null) {
+    // The compatibility trigger may already have incremented once for the
+    // assignment status change. Set the aggregate's final version explicitly
+    // while the driver row is locked so this command is exactly one step.
+    await txClient.driver.update({
+      where: { id: affectedDriverId },
+      data: { planVersion: basePlanVersion + 1 }
+    });
+  }
 
   await upsertSourceEvent(txClient, {
     orderId: existingOrder.id,
@@ -644,7 +852,7 @@ async function handleCancel(
     reason: null,
     payloadSummary: {
       ...summary,
-      beforeVersion: existingOrder.sourceVersion,
+      beforeVersion: lockedOrder.sourceVersion,
       afterVersion: canonical.sourceVersion,
       beforeExecutionStatus: currentStatus,
       afterExecutionStatus: "CANCELLED"
@@ -663,16 +871,40 @@ async function handleCancel(
     metadataJson: {
       sourceSystem: canonical.sourceSystem,
       externalOrderId: canonical.externalOrderId,
-      beforeVersion: existingOrder.sourceVersion,
+      beforeVersion: lockedOrder.sourceVersion,
       afterVersion: canonical.sourceVersion,
       beforeExecutionStatus: currentStatus,
       afterExecutionStatus: "CANCELLED",
-      // 取消意图：非空表示计划释放待 Gate 3 处理（本阶段不触碰 Assignment）
-      pendingReleaseAssignmentId
-    }
+      releasedAssignmentId: affectedAssignmentId
+    },
+    driverId: affectedDriverId,
+    assignmentId: affectedAssignmentId
   });
 
-  return { orderId: existingOrder.id, eventResult: "success" };
+  let dispatchEventId: string | undefined;
+  if (affectedDriverId) {
+    dispatchEventId = [
+      "order-cancelled",
+      canonical.sourceSystem,
+      canonical.externalOrderId,
+      canonical.sourceVersion
+    ].join(":");
+    await enqueueInternalEvent(txClient, {
+      eventId: dispatchEventId,
+      type: "ORDER_CANCELLED",
+      orderId: existingOrder.id,
+      driverId: affectedDriverId,
+      assignmentId: affectedAssignmentId ?? undefined,
+      occurredAt: canonical.cancelledAt ?? canonical.receivedAt,
+      traceId
+    });
+  }
+
+  return {
+    orderId: existingOrder.id,
+    eventResult: "success",
+    dispatchEventId
+  };
 }
 
 export async function processIngestRecord(
@@ -689,6 +921,20 @@ export async function processIngestRecord(
   for (let attempt = 1; attempt <= MAX_WRITE_RACE_ATTEMPTS; attempt++) {
     try {
       const result = await executeIngestTransaction(canonical, traceId);
+      if (result.dispatchEventId) {
+        try {
+          await processInternalEvent(result.dispatchEventId);
+        } catch (error) {
+          // The business fact and outbox row are already committed. Leave the
+          // row pending for retry instead of misreporting the accepted source
+          // event as failed.
+          log.error("取消重排即时处理失败，已保留 outbox 等待重试", {
+            traceId,
+            dispatchEventId: result.dispatchEventId,
+            error: error instanceof Error ? error.message : String(error)
+          });
+        }
+      }
       return {
         index: 0, // caller fills this
         externalOrderId: canonical.externalOrderId,

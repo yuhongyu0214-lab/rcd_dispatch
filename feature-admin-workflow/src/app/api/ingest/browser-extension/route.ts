@@ -119,9 +119,9 @@ function isUniqueConstraintError(error: unknown): boolean {
   return typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2002";
 }
 
-/** CORS 白名单：从 INGEST_ALLOWED_ORIGINS 读取（逗号分隔），未配置时拒绝所有跨域来源 */
+/** CORS 白名单：从统一的 CORS_ORIGINS 读取（逗号分隔），未配置时拒绝所有跨域来源 */
 function getAllowedOrigins(): string[] {
-  return (process.env.INGEST_ALLOWED_ORIGINS ?? "")
+  return (process.env.CORS_ORIGINS ?? "")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);

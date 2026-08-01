@@ -46,7 +46,11 @@ describe("orders logs route", () => {
         id: "log-new",
         metadataJson: { fromDriverId: "driver-old", toDriverId: "driver-new" },
         operatorUserId: "user-admin",
-        reason: "司机临时不可用"
+        reason: "司机临时不可用",
+        driverId: null,
+        orderId: "order-1",
+        assignmentId: null,
+        traceId: "trace-new"
       },
       {
         action: "ASSIGN",
@@ -56,7 +60,11 @@ describe("orders logs route", () => {
         id: "log-old",
         metadataJson: { driverId: "driver-old" },
         operatorUserId: "user-admin",
-        reason: null
+        reason: null,
+        driverId: "driver-old",
+        orderId: "order-1",
+        assignmentId: null,
+        traceId: "trace-old"
       }
     ]);
     vi.mocked(prisma.$transaction).mockImplementation(async (operations: unknown) =>

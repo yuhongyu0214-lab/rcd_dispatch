@@ -7,7 +7,7 @@ import {
   normalizePointHash,
   getCachedEtaV2,
   cacheEtaV2,
-  DEFAULT_ETA_TTL_SECONDS,
+  DEFAULT_ETA_TTL_SECONDS
 } from "@/lib/redis";
 import type { EtaCacheValueV2 } from "@/lib/redis";
 
@@ -67,17 +67,21 @@ function uniquePositions(
  *   DEADHEAD  — driver.lastLocation (or prior order.deliveryLocation) → next order.pickupLocation
  *   SERVICE   — order.pickupLocation → order.deliveryLocation
  *
- * This function extracts the full cross-product of all relevant origins and
- * destinations from the snapshot so the async Amap/Redis layer can pre-compute
- * every value before the synchronous resolver is handed to the core.
+ * Every plan-pool order delivery is a possible cursor created during this
+ * planning run, so all delivery → pickup combinations must be present before
+ * the synchronous core starts.
  */
 function collectPairs(input: DispatchInputV2): EtaPair[] {
-  // Collect unique origins for deadhead legs.
-  const origins: GeoPointV2[] = [];
+  const deadheadOrigins: GeoPointV2[] = [];
 
   // Driver lastLocation → deadhead origin
   for (const d of input.drivers) {
-    if (d.lastLocation) origins.push(d.lastLocation);
+    if (d.lastLocation) deadheadOrigins.push(d.lastLocation);
+    for (const assignment of d.assignments) {
+      if (assignment.deliveryLocation) {
+        deadheadOrigins.push(assignment.deliveryLocation);
+      }
+    }
   }
 
   // Extract order positions while building the full position set.
@@ -89,12 +93,12 @@ function collectPairs(input: DispatchInputV2): EtaPair[] {
       // An order's deliveryLocation is also a deadhead origin — after
       // completing slot A at this location, the driver can deadhead to
       // another order's pickup.
-      origins.push(o.deliveryLocation);
+      deadheadOrigins.push(o.deliveryLocation);
     }
   }
 
   // Deduplicate by normalized hash.
-  const originMap = uniquePositions(origins);
+  const deadheadOriginMap = uniquePositions(deadheadOrigins);
   const pickupMap = uniquePositions(pickups);
 
   // Build unique pairs with dedup.
@@ -111,9 +115,12 @@ function collectPairs(input: DispatchInputV2): EtaPair[] {
     }
   }
 
-  // Deadhead: (driver.lastLocation + order.deliveryLocation) × order.pickupLocation
-  for (const from of originMap.values()) {
-    for (const to of pickupMap.values()) {
+  // Deadhead: include every possible cursor that the core can use.
+  const requiredOrigins = [...deadheadOriginMap.values()].sort((a, b) =>
+    normalizePointHash(a).localeCompare(normalizePointHash(b))
+  );
+  for (const to of pickupMap.values()) {
+    for (const from of requiredOrigins) {
       addPair(from, to);
     }
   }
@@ -202,11 +209,17 @@ export async function buildEtaMatrix(
           etaMinutes,
           distanceMeters: route.distance,
           durationSeconds: route.duration,
-          cachedAt: Date.now(),
+          cachedAt: Date.now()
         };
 
         cacheWrites.push(
-          cacheEtaV2(pair.fromHash, pair.toHash, MODE, cacheValue, DEFAULT_ETA_TTL_SECONDS)
+          cacheEtaV2(
+            pair.fromHash,
+            pair.toHash,
+            MODE,
+            cacheValue,
+            DEFAULT_ETA_TTL_SECONDS
+          )
         );
       }
       // status === "rejected" → Amap unavailable for this pair.

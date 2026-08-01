@@ -18,9 +18,13 @@ describe("WHITELISTED_EVENT_TYPES", () => {
     expect(WHITELISTED_EVENT_TYPES).toContain("MODULE_CHANGE_APPLIED");
   });
 
-  it("contains exactly 14 entries covering 1A, 1B, Gate 3, and 2B", () => {
-    // 3 (1A) + 3 (1B) + 4 (Gate 3) + 4 (2B) = 14
-    expect(WHITELISTED_EVENT_TYPES).toHaveLength(14);
+  it("contains the periodic baseline recalculation event", () => {
+    expect(WHITELISTED_EVENT_TYPES).toContain("BASELINE_RECALCULATION");
+  });
+
+  it("contains exactly 15 entries covering 1A, 1B, Gate 3, 2B, and baseline", () => {
+    // 3 (1A) + 3 (1B) + 4 (Gate 3) + 4 (2B) + 1 baseline = 15
+    expect(WHITELISTED_EVENT_TYPES).toHaveLength(15);
   });
 
   it("no duplicates in the whitelist", () => {
