@@ -409,20 +409,20 @@ describe("Redis key prefix isolation", () => {
     );
   });
 
-  it("does not expose a Redis client when the required prefix is missing", () => {
+  it("does not expose a Redis client when the required prefix is missing", async () => {
     __setRedisClientForTests(null);
     process.env.REDIS_URL = "redis://127.0.0.1:6379";
     delete process.env.REDIS_KEY_PREFIX;
 
-    expect(isRedisAvailable()).toBe(false);
+    await expect(isRedisAvailable()).resolves.toBe(false);
   });
 
-  it("rejects unsafe prefixes before any Redis connection is created", () => {
+  it("rejects unsafe prefixes before any Redis connection is created", async () => {
     __setRedisClientForTests(null);
     process.env.REDIS_URL = "redis://127.0.0.1:6379";
     process.env.REDIS_KEY_PREFIX = "rcd:v2:*:";
 
-    expect(isRedisAvailable()).toBe(false);
+    await expect(isRedisAvailable()).resolves.toBe(false);
   });
 });
 

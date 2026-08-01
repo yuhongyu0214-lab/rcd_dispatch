@@ -16,6 +16,8 @@ import { filterDispatchCandidates } from "@/lib/dispatch/filter";
 import { getDriverLocationFreshness } from "@/lib/location";
 import { __setRedisClientForTests } from "@/lib/redis";
 
+const TEST_REDIS_PREFIX = "rcd:v2:test:";
+
 class ColdStartRedisClient {
   status = "wait";
   connectCalls = 0;
@@ -43,17 +45,19 @@ let redis: ColdStartRedisClient;
 beforeEach(() => {
   driverFindUnique.mockReset();
   driverFindUnique.mockResolvedValue(null);
+  process.env.REDIS_KEY_PREFIX = TEST_REDIS_PREFIX;
   redis = new ColdStartRedisClient();
   __setRedisClientForTests(redis as never);
 });
 
 afterEach(() => {
   __setRedisClientForTests(null);
+  delete process.env.REDIS_KEY_PREFIX;
 });
 
 describe("Redis cold start callers", () => {
   it("connects before location freshness reads the first Redis sample", async () => {
-    redis.locations.set("driver:last_location:driver-1", {
+    redis.locations.set(`${TEST_REDIS_PREFIX}driver:last_location:driver-1`, {
       lat: "31.2304",
       lng: "121.4737",
       ts: new Date(Date.now() - 10_000).toISOString(),
@@ -69,7 +73,7 @@ describe("Redis cold start callers", () => {
   });
 
   it("connects before V1 candidate filtering checks the first online key", async () => {
-    redis.onlineKeys.add("driver:online:driver-1");
+    redis.onlineKeys.add(`${TEST_REDIS_PREFIX}driver:online:driver-1`);
 
     const result = await filterDispatchCandidates({
       orderType: "DOOR_DELIVERY",
