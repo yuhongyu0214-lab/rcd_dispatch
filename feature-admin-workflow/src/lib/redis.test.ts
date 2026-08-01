@@ -10,14 +10,23 @@ vi.mock("@/lib/logger", () => ({
 
 import {
   __setRedisClientForTests,
+  acquireDispatchLock,
   acquireResourceLock,
   acquireResourceLocks,
+  cacheEta,
   cacheEtaV2,
+  cacheMapSnapshot,
+  getCachedEta,
   getCachedEtaV2,
+  getCachedMapSnapshot,
+  getDriverLocation,
   getDriverLocations,
   getDriverLocationsWithStatus,
+  getOnlineDriverIds,
+  isDriverOnline,
   isRedisAvailable,
   normalizePointHash,
+  releaseDispatchLock,
   releaseResourceLock,
   SET_LOCATION_IF_NEWER_SCRIPT,
   setDriverLocation,
@@ -38,6 +47,7 @@ class FakeRedisClient implements RedisClientLike {
   evalFails = false;
   pipelineFails = false;
   connectCalls = 0;
+  lastScanMatch: string | null = null;
   status = "ready";
 
   async connect(): Promise<void> {
@@ -91,8 +101,18 @@ class FakeRedisClient implements RedisClientLike {
     return "PONG";
   }
 
-  async scan(): Promise<[string, string[]]> {
-    return ["0", []];
+  async scan(
+    _cursor: string | number,
+    options: { match: string; count: number }
+  ): Promise<[string, string[]]> {
+    this.lastScanMatch = options.match;
+    const keyPrefix = options.match.endsWith("*")
+      ? options.match.slice(0, -1)
+      : options.match;
+    const keys = [...this.strings.keys(), ...this.hashes.keys()].filter((key) =>
+      key.startsWith(keyPrefix)
+    );
+    return ["0", keys];
   }
 
   async eval(
@@ -102,10 +122,19 @@ class FakeRedisClient implements RedisClientLike {
   ): Promise<unknown> {
     if (this.evalFails) throw new Error("eval failed (injected)");
 
-    expect(script).toBe(SET_LOCATION_IF_NEWER_SCRIPT);
     expect(numkeys).toBe(1);
 
     const key = String(args[0]);
+
+    if (script !== SET_LOCATION_IF_NEWER_SCRIPT) {
+      const token = String(args[1]);
+      if (this.strings.get(key)?.value === token) {
+        await this.del(key);
+        return 1;
+      }
+      return 0;
+    }
+
     const argv = args.slice(1).map(String);
     const incoming = Number(argv[0]);
     const ttl = Number(argv[1]);
@@ -196,7 +225,8 @@ function sample(overrides: Partial<DriverLocation> = {}): DriverLocation {
   };
 }
 
-const KEY = "driver:last_location:d-1";
+const TEST_REDIS_PREFIX = "rcd:v2:test:";
+const KEY = `${TEST_REDIS_PREFIX}driver:last_location:d-1`;
 const T1 = 1_784_448_000_000;
 const T2 = T1 + 30_000;
 const T3 = T2 + 30_000;
@@ -205,12 +235,15 @@ let fake: FakeRedisClient;
 
 beforeEach(() => {
   delete process.env.REDIS_URL;
+  process.env.REDIS_KEY_PREFIX = TEST_REDIS_PREFIX;
   fake = new FakeRedisClient();
   __setRedisClientForTests(fake);
 });
 
 afterEach(() => {
   __setRedisClientForTests(null);
+  delete process.env.REDIS_KEY_PREFIX;
+  delete process.env.REDIS_URL;
 });
 
 // ============================================================================
@@ -312,7 +345,111 @@ describe("实时键 TTL", () => {
   it("setDriverOnline 的 EX 为 180 秒", async () => {
     await setDriverOnline("d-1");
 
-    expect(fake.strings.get("driver:online:d-1")?.ex).toBe(180);
+    expect(
+      fake.strings.get(`${TEST_REDIS_PREFIX}driver:online:d-1`)?.ex
+    ).toBe(180);
+  });
+});
+
+// ============================================================================
+// Preprod isolation — every Redis key family uses one environment prefix
+// ============================================================================
+
+describe("Redis key prefix isolation", () => {
+  it("prefixes location reads, online checks, SCAN and SCAN results", async () => {
+    await setDriverLocation("d-1", sample());
+    await setDriverOnline("d-1");
+
+    await expect(getDriverLocation("d-1")).resolves.toMatchObject({
+      lat: "30.5728"
+    });
+    await expect(isDriverOnline("d-1")).resolves.toBe(true);
+    await expect(getOnlineDriverIds()).resolves.toEqual(["d-1"]);
+    expect(fake.lastScanMatch).toBe(
+      `${TEST_REDIS_PREFIX}driver:online:*`
+    );
+  });
+
+  it("prefixes legacy ETA, V2 ETA and map snapshot keys", async () => {
+    const cachedAt = Date.now();
+    await cacheEta("order-1", "driver-1", {
+      orderId: "order-1",
+      driverId: "driver-1",
+      etaMinutes: 8,
+      distanceMeters: 2400,
+      durationSeconds: 480,
+      etaStatus: "NORMAL",
+      cachedAt
+    });
+    await cacheEtaV2("origin", "destination", "driving", {
+      etaMinutes: 9,
+      distanceMeters: 2700,
+      durationSeconds: 540,
+      cachedAt
+    });
+    await cacheMapSnapshot("store-1", {
+      storeId: "store-1",
+      orders: [],
+      drivers: [],
+      generatedAt: cachedAt
+    });
+
+    await expect(getCachedEta("order-1", "driver-1")).resolves.not.toBeNull();
+    await expect(
+      getCachedEtaV2("origin", "destination", "driving")
+    ).resolves.not.toBeNull();
+    await expect(getCachedMapSnapshot("store-1")).resolves.not.toBeNull();
+
+    expect([...fake.strings.keys()]).toEqual(
+      expect.arrayContaining([
+        `${TEST_REDIS_PREFIX}eta:order-1:driver-1:driving`,
+        `${TEST_REDIS_PREFIX}eta:origin:destination:driving`,
+        `${TEST_REDIS_PREFIX}map:snapshot:store-1`
+      ])
+    );
+  });
+
+  it("does not expose a Redis client when the required prefix is missing", () => {
+    __setRedisClientForTests(null);
+    process.env.REDIS_URL = "redis://127.0.0.1:6379";
+    delete process.env.REDIS_KEY_PREFIX;
+
+    expect(isRedisAvailable()).toBe(false);
+  });
+
+  it("rejects unsafe prefixes before any Redis connection is created", () => {
+    __setRedisClientForTests(null);
+    process.env.REDIS_URL = "redis://127.0.0.1:6379";
+    process.env.REDIS_KEY_PREFIX = "rcd:v2:*:";
+
+    expect(isRedisAvailable()).toBe(false);
+  });
+});
+
+describe("legacy dispatch lock prefix isolation", () => {
+  beforeEach(() => {
+    (globalThis as { __traceId?: string }).__traceId = "trace-prefix-test";
+  });
+
+  afterEach(() => {
+    delete (globalThis as { __traceId?: string }).__traceId;
+  });
+
+  it("prefixes the legacy dispatch lock SET key", async () => {
+    await expect(acquireDispatchLock("order-1")).resolves.toBe(true);
+
+    expect(
+      fake.strings.get(`${TEST_REDIS_PREFIX}dispatch:lock:order-1`)?.value
+    ).toBe("trace-prefix-test");
+  });
+
+  it("passes the prefixed legacy lock key to the Lua release script", async () => {
+    await acquireDispatchLock("order-1");
+    await releaseDispatchLock("order-1");
+
+    expect(
+      fake.strings.has(`${TEST_REDIS_PREFIX}dispatch:lock:order-1`)
+    ).toBe(false);
   });
 });
 
@@ -402,7 +539,7 @@ describe("acquireResourceLock", () => {
 
   it('returns "acquired" after lock is deleted', async () => {
     await acquireResourceLock("lock:o1", "tok-a");
-    fakeV3.store.delete("lock:o1");
+    fakeV3.store.delete(`${TEST_REDIS_PREFIX}lock:o1`);
     expect(await acquireResourceLock("lock:o1", "tok-b")).toBe("acquired");
   });
 });
@@ -451,26 +588,26 @@ describe("releaseResourceLock", () => {
   });
 
   it("deletes key when token matches via Lua", async () => {
-    await acquireResourceLock("lock:o1", "tok-a");
-    await releaseResourceLock("lock:o1", "tok-a");
-    expect(fakeV3.store.has("lock:o1")).toBe(false);
+    await acquireResourceLock("dispatch:lock:o1", "tok-a");
+    await releaseResourceLock("dispatch:lock:o1", "tok-a");
+    expect(fakeV3.store.has(`${TEST_REDIS_PREFIX}dispatch:lock:o1`)).toBe(false);
   });
 
   it("does NOT delete key when token mismatches", async () => {
-    await acquireResourceLock("lock:o1", "tok-a");
-    await releaseResourceLock("lock:o1", "tok-b");
-    expect(fakeV3.store.has("lock:o1")).toBe(true);
+    await acquireResourceLock("dispatch:lock:o1", "tok-a");
+    await releaseResourceLock("dispatch:lock:o1", "tok-b");
+    expect(fakeV3.store.has(`${TEST_REDIS_PREFIX}dispatch:lock:o1`)).toBe(true);
   });
 
   it("defers to TTL when eval unavailable (no bare DEL)", async () => {
     fakeV3.eval = null;
-    await acquireResourceLock("lock:o1", "tok-a");
-    await releaseResourceLock("lock:o1", "tok-a");
-    expect(fakeV3.store.has("lock:o1")).toBe(true);
+    await acquireResourceLock("dispatch:lock:o1", "tok-a");
+    await releaseResourceLock("dispatch:lock:o1", "tok-a");
+    expect(fakeV3.store.has(`${TEST_REDIS_PREFIX}dispatch:lock:o1`)).toBe(true);
     const delKeys = (fakeV3.del as ReturnType<typeof vi.fn>).mock.calls.map(
       (c: string[]) => c[0]
     );
-    expect(delKeys).not.toContain("lock:o1");
+    expect(delKeys).not.toContain(`${TEST_REDIS_PREFIX}dispatch:lock:o1`);
   });
 });
 
@@ -516,7 +653,7 @@ describe("acquireResourceLocks", () => {
     ]);
     expect(r.get("lock:a")).toBe("acquired");
     expect(r.get("lock:b")).toBe("busy");
-    expect(fakeV3.store.has("lock:a")).toBe(false); // released
+    expect(fakeV3.store.has(`${TEST_REDIS_PREFIX}lock:a`)).toBe(false); // released
   });
 });
 

@@ -3,6 +3,7 @@
  *
  * 依赖：ioredis（需安装：pnpm add ioredis）
  * 环境变量：REDIS_URL (redis://user:pass@host:port)
+ *           REDIS_KEY_PREFIX (例如 rcd:v2:preprod:)
  *
  * 基于 docs/production-tair-key-design.md v1.0 的 Key 设计规范。
  * 降级模式：Redis 不可用时所有读操作返回 null，写操作静默失败但 log warn。
@@ -21,6 +22,35 @@ const log = createLogger("redis");
  * ETA / 地图快照 / 派单锁的 TTL 不属于实时键，各自维持原值。
  */
 const REALTIME_TTL_SECONDS = 180;
+
+const REDIS_KEY_PREFIX_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9:_-]*:$/;
+
+/**
+ * 读取并校验环境隔离前缀。
+ *
+ * 前缀必须显式配置、以冒号结尾，且不能包含通配符或空白字符。
+ * 这样 SCAN 表达式不会越过当前环境边界。
+ */
+function getRedisKeyPrefix(): string | null {
+  const prefix = process.env.REDIS_KEY_PREFIX;
+  if (
+    !prefix ||
+    prefix !== prefix.trim() ||
+    !REDIS_KEY_PREFIX_PATTERN.test(prefix)
+  ) {
+    return null;
+  }
+  return prefix;
+}
+
+/** 所有实际 Redis Key 与 SCAN 模式的唯一构造入口。 */
+function redisKey(logicalKey: string): string {
+  const prefix = getRedisKeyPrefix();
+  if (!prefix) {
+    throw new Error("REDIS_KEY_PREFIX is missing or invalid");
+  }
+  return `${prefix}${logicalKey}`;
+}
 
 // ============================================================================
 // 类型定义
@@ -213,11 +243,26 @@ const circuitBreaker = new RedisCircuitBreaker();
  * 未配置 REDIS_URL 时返回 null，系统降级运行。
  */
 function getRedisClientInternal(): RedisClientLike | null {
-  if (redisClient) return redisClient;
+  if (redisClient) {
+    if (!getRedisKeyPrefix()) {
+      log.error(
+        "REDIS_KEY_PREFIX missing or invalid — Redis features will be degraded"
+      );
+      return null;
+    }
+    return redisClient;
+  }
 
   const redisUrl = process.env.REDIS_URL;
   if (!redisUrl) {
     log.warn("REDIS_URL not configured — Redis features will be degraded");
+    return null;
+  }
+
+  if (!getRedisKeyPrefix()) {
+    log.error(
+      "REDIS_KEY_PREFIX missing or invalid — refusing unprefixed Redis access"
+    );
     return null;
   }
 
@@ -479,10 +524,11 @@ export async function setDriverLocation(
 ): Promise<void> {
   await safeWrite("setDriverLocation", `driver:last_location:{${driverId}}`, async (client) => {
     const fields = buildLocationFields(data);
+    const key = redisKey(`driver:last_location:${driverId}`);
 
     // 先 HMSET（新版 ioredis 也支持 hset 多参数）
-    await client.hset(`driver:last_location:${driverId}`, ...fields);
-    await client.expire(`driver:last_location:${driverId}`, REALTIME_TTL_SECONDS);
+    await client.hset(key, ...fields);
+    await client.expire(key, REALTIME_TTL_SECONDS);
   });
 }
 
@@ -524,7 +570,7 @@ export async function setDriverLocationIfNewer(
     return "unavailable";
   }
 
-  const key = `driver:last_location:${driverId}`;
+  const key = redisKey(`driver:last_location:${driverId}`);
   const fields = buildLocationFields({ ...data, ts_ms: String(tsMs) });
 
   try {
@@ -573,7 +619,9 @@ export async function getDriverLocationWithStatus(
     "getDriverLocation",
     `driver:last_location:{${driverId}}`,
     async (client) => {
-      const data = await client.hgetall(`driver:last_location:${driverId}`);
+      const data = await client.hgetall(
+        redisKey(`driver:last_location:${driverId}`)
+      );
       if (!data || Object.keys(data).length === 0) return null;
       return data as unknown as DriverLocation;
     }
@@ -635,7 +683,7 @@ export async function getDriverLocationsWithStatus(
       const pipeline = client.pipeline();
 
       for (const driverId of batch) {
-        pipeline.hgetall(`driver:last_location:${driverId}`);
+        pipeline.hgetall(redisKey(`driver:last_location:${driverId}`));
       }
 
       const results = await pipeline.exec();
@@ -689,7 +737,12 @@ export async function getDriverLocations(
 export async function setDriverOnline(driverId: string): Promise<void> {
   const ts = String(Date.now());
   await safeWrite("setDriverOnline", `driver:online:{${driverId}}`, async (client) => {
-    await client.set(`driver:online:${driverId}`, ts, "EX", REALTIME_TTL_SECONDS);
+    await client.set(
+      redisKey(`driver:online:${driverId}`),
+      ts,
+      "EX",
+      REALTIME_TTL_SECONDS
+    );
   });
 }
 
@@ -709,7 +762,7 @@ export async function getDriverOnlineStatus(
     "isDriverOnline",
     `driver:online:{${driverId}}`,
     async (client) => {
-      const count = await client.exists(`driver:online:${driverId}`);
+      const count = await client.exists(redisKey(`driver:online:${driverId}`));
       return count === 1;
     }
   );
@@ -738,18 +791,19 @@ export async function getOnlineDriverIds(): Promise<string[]> {
 
   const driverIds: string[] = [];
   let cursor = "0";
+  const onlineKeyPrefix = redisKey("driver:online:");
 
   try {
     do {
       const [nextCursor, keys] = await client.scan(cursor, {
-        match: "driver:online:*",
+        match: `${onlineKeyPrefix}*`,
         count: 200
       });
       cursor = nextCursor;
 
       for (const key of keys) {
-        const prefix = "driver:online:";
-        const driverId = (key as string).replace(prefix, "");
+        if (!key.startsWith(onlineKeyPrefix)) continue;
+        const driverId = key.slice(onlineKeyPrefix.length);
         if (driverId) {
           driverIds.push(driverId);
         }
@@ -781,7 +835,12 @@ export async function cacheEta(
 ): Promise<void> {
   await safeWrite("cacheEta", `eta:{${orderId}}:{${driverId}}:driving`, async (client) => {
     const json = JSON.stringify(etaData);
-    await client.set(`eta:${orderId}:${driverId}:driving`, json, "EX", 60);
+    await client.set(
+      redisKey(`eta:${orderId}:${driverId}:driving`),
+      json,
+      "EX",
+      60
+    );
   });
 }
 
@@ -794,7 +853,9 @@ export async function getCachedEta(
   driverId: string
 ): Promise<EtaData | null> {
   return safeRead("getCachedEta", `eta:{${orderId}}:{${driverId}}:driving`, async (client) => {
-    const raw = await client.get(`eta:${orderId}:${driverId}:driving`);
+    const raw = await client.get(
+      redisKey(`eta:${orderId}:${driverId}:driving`)
+    );
     if (!raw) return null;
 
     try {
@@ -842,10 +903,10 @@ export async function cacheEtaV2(
   value: EtaCacheValueV2,
   ttlSeconds: number = DEFAULT_ETA_TTL_SECONDS
 ): Promise<void> {
-  const key = `eta:${originHash}:${destinationHash}:${mode}`;
-  await safeWrite("cacheEtaV2", key, async (client) => {
+  const logicalKey = `eta:${originHash}:${destinationHash}:${mode}`;
+  await safeWrite("cacheEtaV2", logicalKey, async (client) => {
     const json = JSON.stringify(value);
-    await client.set(key, json, "EX", ttlSeconds);
+    await client.set(redisKey(logicalKey), json, "EX", ttlSeconds);
   });
 }
 
@@ -861,9 +922,9 @@ export async function getCachedEtaV2(
   destinationHash: string,
   mode: string
 ): Promise<EtaCacheValueV2 | null> {
-  const key = `eta:${originHash}:${destinationHash}:${mode}`;
-  return safeRead("getCachedEtaV2", key, async (client) => {
-    const raw = await client.get(key);
+  const logicalKey = `eta:${originHash}:${destinationHash}:${mode}`;
+  return safeRead("getCachedEtaV2", logicalKey, async (client) => {
+    const raw = await client.get(redisKey(logicalKey));
     if (!raw) return null;
     try {
       const parsed = JSON.parse(raw) as EtaCacheValueV2;
@@ -918,7 +979,7 @@ export async function acquireDispatchLock(
 
   try {
     const result = await client.set(
-      `dispatch:lock:${orderId}`,
+      redisKey(`dispatch:lock:${orderId}`),
       traceId,
       "NX",
       "EX",
@@ -960,7 +1021,12 @@ export async function releaseDispatchLock(orderId: string): Promise<void> {
   }
 
   try {
-    await client.eval(RELEASE_LOCK_SCRIPT, 1, `dispatch:lock:${orderId}`, traceId);
+    await client.eval(
+      RELEASE_LOCK_SCRIPT,
+      1,
+      redisKey(`dispatch:lock:${orderId}`),
+      traceId
+    );
     circuitBreaker.recordSuccess();
   } catch (err) {
     // 释放失败可接受，TTL 10s 后自动过期
@@ -1005,7 +1071,13 @@ export async function acquireResourceLock(
   if (!client) return "unavailable";
 
   try {
-    const result = await client.set(resourceKey, token, "NX", "EX", ttlSeconds);
+    const result = await client.set(
+      redisKey(resourceKey),
+      token,
+      "NX",
+      "EX",
+      ttlSeconds
+    );
     circuitBreaker.recordSuccess();
     return result === "OK" ? "acquired" : "busy";
   } catch (err) {
@@ -1040,7 +1112,12 @@ export async function releaseResourceLock(
   }
 
   try {
-    await client.eval(RESOURCE_LOCK_RELEASE_SCRIPT, 1, resourceKey, token);
+    await client.eval(
+      RESOURCE_LOCK_RELEASE_SCRIPT,
+      1,
+      redisKey(resourceKey),
+      token
+    );
     circuitBreaker.recordSuccess();
   } catch (err) {
     // Release failure is acceptable — TTL will expire the lock.
@@ -1098,7 +1175,7 @@ export async function cacheMapSnapshot(
 ): Promise<void> {
   await safeWrite("cacheMapSnapshot", `map:snapshot:{${storeId}}`, async (client) => {
     const json = JSON.stringify(data);
-    await client.set(`map:snapshot:${storeId}`, json, "EX", 10);
+    await client.set(redisKey(`map:snapshot:${storeId}`), json, "EX", 10);
   });
 }
 
@@ -1110,7 +1187,7 @@ export async function getCachedMapSnapshot(
   storeId: string
 ): Promise<MapSnapshot | null> {
   return safeRead("getCachedMapSnapshot", `map:snapshot:{${storeId}}`, async (client) => {
-    const raw = await client.get(`map:snapshot:${storeId}`);
+    const raw = await client.get(redisKey(`map:snapshot:${storeId}`));
     if (!raw) return null;
 
     try {
