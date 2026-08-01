@@ -1,0 +1,76 @@
+name: rcd-v2-preprod
+
+services:
+  app:
+    image: ${RCD_IMAGE_REF:?RCD_IMAGE_REF is required}
+    command: ["node", "server.js"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${APP_DATABASE_URL:?APP_DATABASE_URL is required}
+      REDIS_URL: ${APP_REDIS_URL:?APP_REDIS_URL is required}
+      REDIS_KEY_PREFIX: "rcd:v2:preprod:"
+      AUTH_SESSION_SECRET: ${AUTH_SESSION_SECRET:?AUTH_SESSION_SECRET is required}
+      DRIVER_JWT_SECRET: ${DRIVER_JWT_SECRET:?DRIVER_JWT_SECRET is required}
+      INGEST_API_KEY: ${INGEST_API_KEY:?INGEST_API_KEY is required}
+      INGEST_API_KEY_SOURCE: ${INGEST_API_KEY_SOURCE:?INGEST_API_KEY_SOURCE is required}
+      INTERNAL_CRON_SECRET: ${INTERNAL_CRON_SECRET:?INTERNAL_CRON_SECRET is required}
+      AMAP_SERVER_KEY: ${AMAP_SERVER_KEY:?AMAP_SERVER_KEY is required}
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required}
+      ALLOW_PUBLIC_ADMIN_REGISTRATION: "false"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    expose:
+      - "3000"
+    networks:
+      - rcd-internal
+
+  worker:
+    image: ${RCD_IMAGE_REF:?RCD_IMAGE_REF is required}
+    command: ["node", "scripts/dispatch-event-worker.mjs"]
+    restart: unless-stopped
+    environment:
+      DISPATCH_EVENT_WORKER_ORIGIN: "http://app:3000"
+      INTERNAL_CRON_SECRET: ${INTERNAL_CRON_SECRET:?INTERNAL_CRON_SECRET is required}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - rcd-internal
+
+  migration:
+    image: ${RCD_IMAGE_REF:?RCD_IMAGE_REF is required}
+    command:
+      - ./node_modules/.bin/prisma
+      - migrate
+      - deploy
+      - --schema
+      - prisma/schema.prisma
+    restart: "no"
+    profiles:
+      - migration
+    environment:
+      DATABASE_URL: ${MIGRATION_DATABASE_URL:?MIGRATION_DATABASE_URL is required}
+    networks:
+      - rcd-internal
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    environment:
+      RCD_SERVER_NAME: ${RCD_SERVER_NAME:?RCD_SERVER_NAME is required}
+    ports:
+      - "${RCD_HTTP_PORT:-80}:80"
+      - "${RCD_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./nginx/rcd.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ${NGINX_TLS_CERT_PATH:?NGINX_TLS_CERT_PATH is required}:/etc/nginx/tls/tls.crt:ro
+      - ${NGINX_TLS_KEY_PATH:?NGINX_TLS_KEY_PATH is required}:/etc/nginx/tls/tls.key:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - rcd-internal
+
+networks:
+  rcd-internal:
+    driver: bridge

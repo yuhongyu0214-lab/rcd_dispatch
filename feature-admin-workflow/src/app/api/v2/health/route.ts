@@ -1,8 +1,8 @@
-import { ok } from "@/lib/api-response";
+import { okV2 } from "@/lib/contracts/v2";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
-  return ok({ status: "ok" }, { traceId });
+  return okV2({ status: "ok" as const }, { traceId });
 }

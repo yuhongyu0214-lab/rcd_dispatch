@@ -23,6 +23,7 @@ const log = createLogger("amap");
 const AMAP_BASE_URL = "https://restapi.amap.com/v3";
 const GEOCODE_TIMEOUT_MS = 4000;
 const DRIVING_TIMEOUT_MS = 5000;
+const HEALTH_TIMEOUT_MS = 3000;
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 1000;
 
@@ -315,6 +316,44 @@ async function fetchAmapApi<T>(
     retries: String(MAX_RETRIES)
   });
   throw lastError ?? new Error("AMAP_REQUEST_FAILED");
+}
+
+/**
+ * 高德 Web 服务就绪探针。
+ *
+ * 使用官方 IP 定位基础接口验证网络、Key 与服务响应，不执行路径规划，
+ * 避免 readiness 消耗驾车路线配额或产生任何业务 ETA。
+ */
+export async function amapHealthCheck(): Promise<boolean> {
+  const key = getAmapKey();
+  if (!key) return false;
+
+  const url = new URL(`${AMAP_BASE_URL}/ip`);
+  url.searchParams.set("key", key);
+  url.searchParams.set("ip", "114.247.50.2");
+
+  const { signal, cleanup } = withTimeoutSignal(HEALTH_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      signal,
+      cache: "no-store"
+    });
+    if (!response.ok) return false;
+
+    const payload = (await response.json()) as {
+      status?: string;
+      infocode?: string;
+    };
+    return payload.status === "1" && payload.infocode === "10000";
+  } catch (error) {
+    log.warn("amap_health_check_failed", {
+      reason: error instanceof Error ? error.message : String(error)
+    });
+    return false;
+  } finally {
+    cleanup();
+  }
 }
 
 // ============================================================================
