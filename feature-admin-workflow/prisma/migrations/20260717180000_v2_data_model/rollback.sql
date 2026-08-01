@@ -70,6 +70,11 @@ DROP FUNCTION IF EXISTS "calculate_service_module_minutes"(JSONB);
 DROP TABLE IF EXISTS "DriverShift";
 DROP TABLE IF EXISTS "OrderSourceEvent";
 
+-- Remove the optional User-to-Driver link introduced by this migration.
+ALTER TABLE IF EXISTS "User"
+DROP CONSTRAINT IF EXISTS "User_driverId_fkey",
+DROP COLUMN IF EXISTS "driverId";
+
 -- 2. Restore OperationLog to the V1 shape without deleting rows
 DROP INDEX IF EXISTS "OperationLog_traceId_idx";
 DROP INDEX IF EXISTS "OperationLog_assignmentId_createdAt_idx";
