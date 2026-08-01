@@ -44,8 +44,9 @@ type DriverTaskDTO = {
 export default async function DriverTasksPage({
   searchParams,
 }: {
-  searchParams: { tab?: string };
+  searchParams: Promise<{ tab?: string }>;
 }) {
+  const resolvedSearchParams = await searchParams;
   const user = await getCurrentUser();
 
   if (!user?.driverId) {
@@ -124,7 +125,7 @@ export default async function DriverTasksPage({
     fetchError = "服务暂时不可用";
   }
 
-  const activeTab = searchParams.tab ?? "all";
+  const activeTab = resolvedSearchParams.tab ?? "all";
 
   return (
     <div className="flex flex-col gap-4 pb-16">

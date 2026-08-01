@@ -269,7 +269,6 @@ function getRedisClientInternal(): RedisClientLike | null {
   // ioredis 需通过 pnpm add ioredis 安装
   // 使用 try-catch 包裹动态 require，避免未安装时启动崩溃
   try {
-    // eslint-disable-next-line
     const Redis = require("ioredis") as { default?: new (...args: unknown[]) => RedisClientLike } & (new (...args: unknown[]) => RedisClientLike);
     const RedisCtor =
       typeof Redis === "function"

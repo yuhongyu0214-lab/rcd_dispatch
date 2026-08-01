@@ -66,7 +66,7 @@ describe("legacy driver routes authenticate before trusting request data", () =>
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ driverId: "attacker" })
       }),
-      { params: { id: "order-1" } }
+      { params: Promise.resolve({ id: "order-1" }) }
     );
 
     expect(response.status).toBe(401);
@@ -80,7 +80,7 @@ describe("legacy driver routes authenticate before trusting request data", () =>
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ driverId: "attacker" })
       }),
-      { params: { id: "order-1" } }
+      { params: Promise.resolve({ id: "order-1" }) }
     );
 
     expect(response.status).toBe(401);

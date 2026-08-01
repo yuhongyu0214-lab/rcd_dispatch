@@ -13,19 +13,20 @@ import { LoginForm } from "./components/login-form";
 export default async function AdminLoginPage({
   searchParams
 }: {
-  searchParams: {
+  searchParams: Promise<{
     next?: string;
     registered?: string;
-  };
+  }>;
 }) {
+  const resolvedSearchParams = await searchParams;
   const currentUser = await getCurrentUser();
   const allowPublicRegistration = isPublicAdminRegistrationEnabled();
   const demoCredentials = shouldShowDemoCredentials()
     ? { account: "admin@dispatch.dev", password: "admin123" }
     : null;
   const nextPath =
-    searchParams.next && searchParams.next.startsWith("/admin")
-      ? searchParams.next
+    resolvedSearchParams.next && resolvedSearchParams.next.startsWith("/admin")
+      ? resolvedSearchParams.next
       : "/admin/map";
 
   if (currentUser && isAdminRole(currentUser.role)) {
@@ -50,7 +51,7 @@ export default async function AdminLoginPage({
           </Link>
         </div>
 
-        {searchParams.registered === "1" ? (
+        {resolvedSearchParams.registered === "1" ? (
           <div className="rounded-3xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
             注册成功，请使用手机号账号和密码登录。
           </div>

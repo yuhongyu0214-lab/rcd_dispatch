@@ -73,8 +73,9 @@ const ACTION_LABEL: Record<string, string> = {
 export default async function DriverTaskDetailPage({
   params
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const resolvedParams = await params;
   const user = await getCurrentUser();
 
   if (!user?.driverId) {
@@ -85,7 +86,7 @@ export default async function DriverTaskDetailPage({
     );
   }
 
-  const orderId = params.id;
+  const orderId = resolvedParams.id;
 
   let order: DetailResponse["data"]["order"] | null = null;
   let logs: DetailResponse["data"]["logs"] = [];

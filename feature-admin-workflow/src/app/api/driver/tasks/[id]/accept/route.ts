@@ -32,12 +32,12 @@ const driverLog = createLogger("driver-workflow");
 
 export async function POST(
   request: Request,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
   const startTime = Date.now();
 
-  const orderId = context.params.id.trim();
+  const orderId = (await context.params).id.trim();
 
   if (!orderId) {
     return fail("请提供订单 ID", { status: 400, traceId });
