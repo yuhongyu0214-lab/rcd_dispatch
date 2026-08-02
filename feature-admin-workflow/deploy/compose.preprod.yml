@@ -5,6 +5,7 @@ services:
     image: ${RCD_IMAGE_REF:?RCD_IMAGE_REF is required}
     command: ["node", "server.js"]
     restart: unless-stopped
+    profiles: ["app", "worker", "edge"]
     environment:
       DATABASE_URL: ${APP_DATABASE_URL:?APP_DATABASE_URL is required}
       REDIS_URL: ${APP_REDIS_URL:?APP_REDIS_URL is required}
@@ -20,6 +21,19 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
     expose:
       - "3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/v2/health/readiness',
+          {headers:{'X-Internal-Key':process.env.INTERNAL_CRON_SECRET}})
+          .then(response=>{if(!response.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
     networks:
       - rcd-internal
 
@@ -27,6 +41,7 @@ services:
     image: ${RCD_IMAGE_REF:?RCD_IMAGE_REF is required}
     command: ["node", "scripts/dispatch-event-worker.mjs"]
     restart: unless-stopped
+    profiles: ["worker"]
     environment:
       DISPATCH_EVENT_WORKER_ORIGIN: "http://app:3000"
       INTERNAL_CRON_SECRET: ${INTERNAL_CRON_SECRET:?INTERNAL_CRON_SECRET is required}
@@ -56,6 +71,7 @@ services:
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
+    profiles: ["edge"]
     environment:
       RCD_SERVER_NAME: ${RCD_SERVER_NAME:?RCD_SERVER_NAME is required}
     ports:

@@ -29,4 +29,16 @@ docker build \
 
 标准顺序是：先一次性启动 migration 并确认成功，再启动 app，验证匿名 `/api/v2/health` 和受保护 `/api/v2/health/readiness`，最后启动单副本 worker 与 Nginx。任何一步失败立即停止。
 
-Nginx 只把 app 暴露到公网，内部 outbox 处理端点固定返回 404。真实域名、证书文件、镜像地址和所有秘密只能来自获准的预生产配置或秘密托管，不得写回本目录。
+所有常驻服务均受 Compose profile 保护；裸执行 `docker compose up -d` 不会选择任何业务服务。必须逐步执行：
+
+```text
+docker compose --profile migration run --rm migration
+docker compose --profile app up -d app
+# 人工验证 liveness 与 readiness，确认成功后才继续
+docker compose --profile worker up -d worker
+docker compose --profile edge up -d nginx
+```
+
+app 的 Compose 健康检查使用受保护 readiness；worker 与 Nginx 只在 app 的数据库、Redis/Tair 和高德依赖全部就绪后启动。禁止使用 `--profile "*"` 或同时启用全部 profile 绕过上述顺序。
+
+Nginx 只把 app 暴露到公网，内部 outbox 处理端点固定返回 404。外部 `X-Trace-Id` 仅在符合受控字符集且长度不超过 128 时透传，否则由 Nginx 使用 `$request_id` 重建。真实域名、证书文件、镜像地址和所有秘密只能来自获准的预生产配置或秘密托管，不得写回本目录。

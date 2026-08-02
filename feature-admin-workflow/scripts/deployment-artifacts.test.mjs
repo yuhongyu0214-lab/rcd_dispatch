@@ -32,10 +32,17 @@ describe("deployment artifacts", () => {
   it("uses one application image while keeping worker and migration secrets isolated", async () => {
     const compose = await readProjectFile("deploy/compose.preprod.yml");
     const applicationImageUses = compose.match(/image: \$\{RCD_IMAGE_REF:/g) ?? [];
+    const appBlock = compose.match(/\n  app:[\s\S]*?\n  worker:/)?.[0] ?? "";
     const workerBlock = compose.match(/\n  worker:[\s\S]*?\n  migration:/)?.[0] ?? "";
     const migrationBlock = compose.match(/\n  migration:[\s\S]*?\n  nginx:/)?.[0] ?? "";
+    const nginxBlock = compose.match(/\n  nginx:[\s\S]*?\nnetworks:/)?.[0] ?? "";
 
     expect(applicationImageUses).toHaveLength(3);
+    expect(appBlock).toContain('profiles: ["app", "worker", "edge"]');
+    expect(appBlock).toContain("/api/v2/health/readiness");
+    expect(appBlock).toContain("X-Internal-Key");
+    expect(workerBlock).toContain('profiles: ["worker"]');
+    expect(workerBlock).toContain("condition: service_healthy");
     expect(workerBlock).toContain("DISPATCH_EVENT_WORKER_ORIGIN");
     expect(workerBlock).not.toContain("DATABASE_URL");
     expect(workerBlock).not.toContain("REDIS_URL");
@@ -43,6 +50,8 @@ describe("deployment artifacts", () => {
     expect(migrationBlock).toContain("MIGRATION_DATABASE_URL");
     expect(migrationBlock).not.toContain("SHADOW_DATABASE_URL");
     expect(migrationBlock).not.toContain("REDIS_URL");
+    expect(nginxBlock).toContain('profiles: ["edge"]');
+    expect(nginxBlock).toContain("condition: service_healthy");
   });
 
   it("keeps the internal worker endpoint off the public Nginx surface", async () => {
@@ -54,5 +63,30 @@ describe("deployment artifacts", () => {
     );
     expect(nginx).toContain("proxy_set_header X-Forwarded-For $remote_addr");
     expect(nginx).not.toContain("$proxy_add_x_forwarded_for");
+    expect(nginx).toContain("map $http_x_trace_id $rcd_trace_id");
+    expect(nginx).toContain("default $request_id");
+    expect(
+      nginx.match(/proxy_set_header X-Trace-Id \$rcd_trace_id;/g)
+    ).toHaveLength(2);
+    expect(nginx).not.toContain(
+      "proxy_set_header X-Trace-Id $http_x_trace_id"
+    );
+  });
+
+  it("documents the required staged Compose startup order", async () => {
+    const deploymentReadme = await readProjectFile("deploy/README.md");
+
+    expect(deploymentReadme).toContain(
+      "docker compose --profile migration run --rm migration"
+    );
+    expect(deploymentReadme).toContain(
+      "docker compose --profile app up -d app"
+    );
+    expect(deploymentReadme).toContain(
+      "docker compose --profile worker up -d worker"
+    );
+    expect(deploymentReadme).toContain(
+      "docker compose --profile edge up -d nginx"
+    );
   });
 });

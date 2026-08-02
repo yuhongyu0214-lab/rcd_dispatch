@@ -3,6 +3,11 @@ upstream rcd_app {
   keepalive 32;
 }
 
+map $http_x_trace_id $rcd_trace_id {
+  default $request_id;
+  "~^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" $http_x_trace_id;
+}
+
 server {
   listen 80 default_server;
   server_name ${RCD_SERVER_NAME};
@@ -42,7 +47,7 @@ server {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto https;
-    proxy_set_header X-Trace-Id $http_x_trace_id;
+    proxy_set_header X-Trace-Id $rcd_trace_id;
   }
 
   location / {
@@ -52,7 +57,7 @@ server {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto https;
-    proxy_set_header X-Trace-Id $http_x_trace_id;
+    proxy_set_header X-Trace-Id $rcd_trace_id;
     proxy_hide_header X-Powered-By;
   }
 }
