@@ -17,6 +17,11 @@ describe("deployment artifacts", () => {
     expect(dockerfile).toContain("NEXT_OUTPUT_STANDALONE=true");
     expect(dockerfile).toContain("pnpm install --frozen-lockfile");
     expect(dockerfile).toContain("pnpm exec prisma generate");
+    expect(
+      dockerfile.match(
+        /apt-get install --yes --no-install-recommends ca-certificates openssl/g
+      )
+    ).toHaveLength(2);
     expect(dockerfile).toContain("USER nextjs");
     expect(dockerfile).toContain("/api/v2/health");
     expect(dockerfile).not.toContain("DATABASE_URL");
