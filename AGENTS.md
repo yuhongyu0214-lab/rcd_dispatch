@@ -8,6 +8,21 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 汽车租赁可视化调度平台。V1 链路：订单导入 → 地图看板 → 推荐派单 → 调度闭环。当前正在向 PRD V2（实时滚动调度 + A/B/C 工单时间轴）兼容演进。
 
+## Codex Agent 启动前置上下文
+
+任何 Codex Agent 在本项目开始新任务或恢复旧任务前，必须先完整读取 `docs/context/agent-common-context.md`，再从 `docs/versions/README.md` 的“Agent 角色上下文直接入口”进入自己的角色章节。主控下发任务时必须同时声明角色、代码基线、文档基线和文件白名单；缺少任一项时只能进行只读盘点。
+
+- 公共上下文是所有 Agent 的强制 Layer 0，不替代任何领域权威。
+- 每个 Agent 只读取自己角色章节登记的默认文档，以及主控为本轮任务追加的 Layer 2 材料。
+- Canvas `docs/rcd-v2-project-map.canvas` 提供角色入口的可视化导航，但不定义规则。
+- 状态、决策、代码基线或角色必读文档变化后，旧上下文立即失效；完成文档总入口、公共上下文和 Canvas 同步前不得启动新任务。
+
+### 文档同步确认口令
+
+项目级 `Stop` Hook 会在每个主对话回合结束时提示：`如需提交项目状态上传到文档，回复"提交并更新文档"。`
+
+只有用户明确回复“提交并更新文档”时，当前 Agent 才获得本轮文档同步授权。收到口令后，应先根据本轮已经确认的进展、状态和决策核对证据，再只更新实际受影响的状态文档、决策日志、文档总入口、公共上下文和 Canvas；没有发生变化的文件不得改动。该口令不授权 Git 提交或推送，也不授权数据库迁移、部署、云资源或其他外部系统变更。
+
 ## 文档优先级（V2 生效后）
 
 文档权威**按领域拆分**（唯一口径见 `docs/versions/README.md`，此处为同一内容）：
@@ -20,6 +35,11 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 HTTP 契约               → docs/versions/v2.0/api-contract-v2.md
 迁移与兼容              → docs/versions/v2.0/v1-v2-compatibility-matrix.md
 代码一致性与设计系统    → docs/versions/v2.0/project-rules-v2.md
+应用框架与依赖决策      → docs/versions/v2.0/application-decision-log.md
+生产基础设施架构        → docs/versions/v2.0/infrastructure-v2.md
+构建、部署与回退        → docs/versions/v2.0/deployment-guide-v2.md
+生产运行与恢复          → docs/versions/v2.0/operations-guide-v2.md
+基础设施决策与替代历史  → docs/versions/v2.0/infrastructure-decision-log.md
 ```
 
 - 数据安全与不可逆操作原则高于以上一切。
@@ -38,6 +58,8 @@ Gate -1 基线整理（已通过，develop @ 37ee8a3）
 ```
 
 - 每个 Gate 通过验收后才能创建下一阶段分支；不得提前建分支。
+- Gate 3 当前可追溯应用候选为 `codex/v2-gate3-app-candidate @ 492c86ea51b40da9426b8ad5b6aef861aa429ab5`；Git 远程同名分支与 ACR 镜像已核验到该 SHA，对应 digest 为 `sha256:fb12371fefa3bdd6cba318b8fd25cb8031c0211f2e81a43c85e614174633d27d`。上一候选 `7378303f513d92e781a7930cfff7e14269ec3126@sha256:1292f8f552c5528c20f48737fe6d2b47bd0aa14813e89eaf4a8f4381f77aaf57` 与回退候选 `169f2ad8b27f9f0be2d4630144315694656b6a67@sha256:6e37995289a05a7462bd02b873498ae5cc87fda70ebe73e0d29b53d258cb2674` 继续保留，不得混用。
+- Gate 3-R 生产主线为阿里云；Railway 只保留历史 Demo 证据。Compose 命令修正已完成完整回归、提交、普通推送和 ACR 新镜像追溯；ECS 已安装 Docker、建立 `rcdops` 管理账号并拉取上一候选与回退镜像，当前 `492c86e…` 镜像仍待 ECS 登录后按 digest 拉取。尚未启动容器、注入应用秘密、连接 RDS/Tair、执行 migration 或实施 SLS；Gate 3 未 `PASS`，第二轮并行继续冻结。
 - V2 分支命名 `feature/v2-*`；合并路径仍为 `feature/* → develop → main`。
 - 每个分支只能修改自己的独占文件范围；Schema、公共 DTO、共享样式、logger、调度事务各有唯一所有者线。
 
@@ -48,17 +70,18 @@ Gate -1 基线整理（已通过，develop @ 37ee8a3）
 - 包管理器锁定 `pnpm@10.11.0`，禁止用 npm/yarn
 - API 统一响应格式：`lib/api-response.ts` 导出 `ok()` / `fail()`，含 `traceId`（V2 结构化 error 见 API 契约 V2）
 - 高德 API 服务端 Key 用于路径规划（ETA 计算），JS Key 用于地图前端渲染
-- 默认管理员账号：`admin@dispatch.dev` / `admin123`
+- 默认管理员账号只用于本地 seed；生产环境禁止公开注册、预填或展示演示凭据。
 
 ## 技术栈（锁定）【工程铁律：继续有效】
 
-- 全栈：Next.js 14 (App Router) + TypeScript
+- 全栈：Next.js `15.5.21`（App Router）+ React / React DOM `19.2.8` + TypeScript
 - UI：Tailwind CSS + shadcn/ui
 - 数据库：PostgreSQL + Prisma ORM（迁移用 `prisma migrate dev`，查看用 `npx prisma studio`）
 - 地图：高德 API（服务端 Key：`AMAP_SERVER_KEY`；前端 Key：`NEXT_PUBLIC_AMAP_JS_KEY`）
 - 日志：Pino（stdout 输出），禁止 `console.log`
 - 测试：Vitest（`pnpm test`，`@` 路径别名 = `./src`）
 - 实时/短期数据用 Redis/Tair；业务事实只存 PostgreSQL
+- Excel 解析固定使用 SheetJS 官方 CDN 包 `xlsx 0.20.3`；不得回退到 npm 上长期未更新的 `xlsx 0.18.x`。
 
 ---
 

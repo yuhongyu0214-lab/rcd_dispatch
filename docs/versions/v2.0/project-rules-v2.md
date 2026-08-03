@@ -1,18 +1,21 @@
 # 人车单项目代码与设计规则 V2
 
-> 规则版本：`RCD-RULES-V2.0-20260713`
+> 规则版本：`RCD-RULES-V2.0-R14-20260803`
 > 状态：当前有效
 > 作用：统一代码一致性、开发边界、设计变量和 V1/V2 冲突处理
+> 当前应用事实：`codex/v2-gate3-app-candidate @ 492c86ea51b40da9426b8ad5b6aef861aa429ab5`
 
-## 1. 规则来源与归档结论
+## 1. 规则来源与融合结论
 
-| 来源 | 保留内容 | V2 覆盖内容 |
-|---|---|---|
-| `AGENTS.md` / `CLAUDE.md` | pnpm、技术栈、分支、worktree、API、日志、命名和测试 | V1 阶段名与 V1 业务验收 |
-| V1 守门规范 | 数据安全、边界合规、文档优先、事务和审查等级 | V1 状态机、S1-S4 业务解释、Top N、120 分钟阈值 |
-| `PRODUCT.md` | 克制、专业、调度控制台的产品性格 | 旧业务目的描述 |
-| `docs/demo-v12-ui-ux-spec.md` | 视觉 token、三栏布局、内部滚动、状态不只靠颜色 | Top N dock、车辆调度和旧页面行为 |
-| `docs/demo-v12-api-contract.md` | 统一响应、traceId、分页和错误状态 | V1 DTO、接单、Top N 和旧生命周期 |
+| 来源                        | 保留内容                                   | V2 覆盖内容                          |
+| ------------------------- | -------------------------------------- | -------------------------------- |
+| `AGENTS.md` / `CLAUDE.md` | pnpm、技术栈、分支、worktree、API、日志、命名和测试      | V1 阶段名与 V1 业务验收                  |
+| V1 守门规范                   | 数据安全、边界合规、文档优先、事务和审查等级                 | V1 状态机、S1-S4 业务解释、Top N、120 分钟阈值 |
+| `PRODUCT.md`              | 克制、专业、调度控制台的产品性格                       | 旧业务目的描述                          |
+| 已删除的 demo UI 历史稿          | 视觉 token、三栏布局、内部滚动、状态不只靠颜色已完整写入本文      | Top N dock、车辆调度和旧页面行为不保留         |
+| 已删除的 demo API 历史稿         | 统一响应、traceId、分页和错误状态已完整写入本文与 API 契约 V2 | V1 DTO、接单、Top N 和旧生命周期不保留        |
+
+2026-08-01 起，以上已融合历史稿不再保留工作树全文，也不得作为引用入口。
 
 ## 2. 文档优先级
 
@@ -22,13 +25,15 @@
 
 ### 3.1 继续锁定
 
-- Next.js 14 App Router + TypeScript。
+- Next.js `15.5.21` App Router + React / React DOM `19.2.8` + TypeScript。
 - Tailwind CSS + shadcn/ui，不引入第二套 UI 框架。
 - PostgreSQL + Prisma。
 - Redis/Tair 只保存实时或短期数据，数据库保存业务事实。
 - 高德服务端 Key 只在服务端；JS Key 只用于地图渲染。
 - Pino 结构化日志，禁止 `console.log`。
 - pnpm `10.11.0`，禁止 npm/yarn 和新增 `package-lock.json`。
+- Excel 解析固定为 SheetJS 官方 CDN 包 `xlsx 0.20.3`；包来源和版本必须同时固定，禁止回退到 npm `xlsx 0.18.x`。
+- `pnpm.overrides` 属于安全基线的一部分：仅用于锁定已审计的传递依赖版本或移除当前运行路径不需要的可选原生包；调整时必须重新执行完整依赖审计、测试、lint、类型检查与生产构建。
 - API 使用 `ok()` / `fail()`，统一返回 `{ success, data, error, traceId }`。
 - 枚举 UPPER_SNAKE_CASE，函数/变量 camelCase，文件 kebab-case，组件 PascalCase。
 
@@ -42,15 +47,22 @@
 - 已到达工单的改派必须在服务端拒绝，不能只禁用前端按钮。
 - ETA 不可用时返回明确原因，不得使用假数据。
 - 人工订单修改保存原值、新值、操作者、时间、原因和 traceId。
+- 内部调度事件使用独立事务 outbox；业务事实与事件必须同事务提交，稳定 `eventId` 去重，消费失败必须可重试；不得复用 `OrderSourceEvent` 或扩展外部来源枚举。
+- 认证密钥缺失时必须失败关闭；开发环境的不安全身份回退只能通过显式开关启用，生产环境永久禁用。
+- 生产环境禁止公开管理员注册，不得预填或展示演示账号密码；开发环境公开注册也必须由显式开关启用。
+- 司机 API Route 只能使用统一鉴权函数返回的身份，不得在 Route 内再次采信 query/body 的 `driverId`；司机 JWT 必须包含未过期的有限整数 `exp`。
+- 历史位置按 200m/120s 采样；调度位置按 200m/ETA 缓存到期触发。触发时与司机 `planVersion` 递增和 outbox 同事务提交，满足历史采样时一并落库；普通约 30 秒高水位样本不得触发完整重排。
+- ETA 矩阵必须覆盖司机当前位置、既有时间轴 cursor 和计划池全部订单 deliveryLocation 到各取车点的必要组合；未经冻结的 cursor-aware 方案不得用固定 Top-N 裁剪起点，地理距离不得代替真实 ETA。
+- 司机类调度事件的候选范围不得收窄为触发司机本人；应在受影响门店内比较全部活动司机。相同逻辑计划的 outbox 重试不得重复回收/创建 Assignment、重复写计划日志或递增 `planVersion`。
 - V2 代码不得复用含 V1 业务语义的类型名而不写兼容说明。
 
 ## 4. 开发与分支边界
 
-- V1 文件与主线暂不删除，现有 bug 修复仍按原 worktree 范围执行。
+- V1 代码与维护主线暂不删除，现有 bug 修复仍按原 worktree 范围执行；旧文档是否保留只按文档版本总入口的清场规则处理。
 - V2 新功能使用 `feature/v2-*` 分支或独立 worktree，不把 V2 schema 与 V1 页面修改混进同一提交。
 - 合并路径仍为 `feature/* → develop → main`。
 - V2 顺序：文档 → schema → 内部 DTO/API → Adapter → 调度引擎 → 页面 → 观测与稳定性。
-- 当前文档阶段只修改 Markdown；本版本不授权修改 `.ts/.tsx/.prisma`。
+- Gate 3-R 当前已发布 Git/ACR 候选为 `492c86ea51b40da9426b8ad5b6aef861aa429ab5@sha256:fb12371fefa3bdd6cba318b8fd25cb8031c0211f2e81a43c85e614174633d27d`；上一候选 `7378303f513d92e781a7930cfff7e14269ec3126@sha256:1292f8f552c5528c20f48737fe6d2b47bd0aa14813e89eaf4a8f4381f77aaf57` 与回退候选 `169f2ad8b27f9f0be2d4630144315694656b6a67@sha256:6e37995289a05a7462bd02b873498ae5cc87fda70ebe73e0d29b53d258cb2674` 继续保留。Compose 命令修正已经形成可追溯发布基线，但 ECS 尚未拉取当前镜像；未经后续授权不得执行 migration、秘密注入、容器启动或第二轮并行功能。
 - Schema 变更先生成迁移 SQL 和 rollback SQL，再等待审查。
 - 每阶段退出前通过测试、构建和业务验收，不以“页面能打开”替代闭环验收。
 
@@ -60,7 +72,9 @@
 
 克制、专业、信息密集的调度控制台。禁止回退为普通蓝白 SaaS、营销页、大卡片堆叠、过圆组件和无意义动画。
 
-### 5.2 继承的设计变量
+### 5.2 设计变量与代码事实
+
+`feature-admin-workflow/src/app/globals.css` 的 `:root` 是运行时代码事实；下表是其完整语义索引。设计稿或旧 demo 与下表冲突时，先走设计变更评审，不得在组件内另造同义颜色、尺寸或阴影。
 
 | Token | 值 | 用途 |
 |---|---:|---|
@@ -69,21 +83,46 @@
 | `--surface` | `oklch(0.985 0.003 235)` | 表格、卡片和输入区 |
 | `--map` | `oklch(0.875 0.018 230)` | 地图底色 |
 | `--nav` | `oklch(0.235 0.032 240)` | 深色导航 |
+| `--ink` | `oklch(0.190 0.018 240)` | 主体墨色 |
+| `--muted` | `oklch(0.450 0.020 235)` | 弱化内容 |
+| `--line` | `oklch(0.820 0.014 235)` | 分隔线 |
+| `--primary` | `oklch(0.635 0.115 35)` | 主色别名，与 accent 同值 |
 | `--accent` | `oklch(0.635 0.115 35)` | 主操作和选中态 |
+| `--accent-ink` | `oklch(0.220 0.025 240)` | accent 上的深色文本 |
 | `--success` | `oklch(0.590 0.115 160)` | 可行、在线、时间充足 |
 | `--warning` | `oklch(0.690 0.125 76)` | 风险、等待处理 |
 | `--danger` | `oklch(0.610 0.160 27)` | 不可行、超时和危险操作 |
 | `--info` | `oklch(0.620 0.090 220)` | 中性业务信息 |
+| `--body-muted` / `--text-secondary` | `oklch(0.420 0.030 240)` | 正文次级信息 |
+| `--text-primary` | `oklch(0.220 0.025 240)` | 主文本 |
+| `--text-tertiary` | `oklch(0.560 0.020 240)` | 三级文本 |
+| `--nav-active` | `oklch(0.330 0.045 240)` | 导航激活态 |
+| `--on-nav` | `oklch(0.955 0.006 235)` | 深色导航上的文本 |
+| `--surface-glass` | `surface 82% + transparent` | 半透明表面 |
+| `--surface-glass-hover` | `surface 94% + accent 6%` | 半透明表面悬停态 |
+| `--border-glass` | `line 86% + transparent` | 半透明边线 |
+| `--scrollbar-track` | `panel 78% + transparent` | 滚动轨道 |
+| `--scrollbar-thumb` / `--scrollbar-thumb-hover` | `muted 48% / 68% + transparent` | 滚动滑块 |
 
-| 尺寸 | 值 |
-|---|---:|
-| 导航 rail | 72px |
-| 工作面板 | 420px |
-| 控件高度 | 38px |
-| 最小点击目标 | 44px |
-| 小/中/大圆角 | 8px / 12px / 16px |
+| Token | 值 | 用途 |
+|---|---:|---|
+| `--design-w` / `--design-h` | `1488px / 1000px` | 设计基准画布 |
+| `--app-scale` | `1` | 应用整体缩放 |
+| `--rail-w` / `--work-panel-w` | `72px / 420px` | 导航 rail / 工作面板 |
+| `--right-panel-min-w` | `996px` | 右侧工作区最小宽度 |
+| `--right-head-h` / `--panel-head-h` | `84px / 396px` | 右侧标题区 / 面板标题区 |
+| `--list-content-w` / `--list-scrollbar-w` | `408px / 12px` | 列表内容与滚动条 |
+| `--map-dock-h` | `236px` | 地图 dock 高度 |
+| `--detail-card-h` / `--recommend-card-h` | `208px / 208px` | 详情卡 / 推荐卡高度 |
+| `--card-action-h` / `--kpi-h` / `--tab-h` | `32px / 60px / 36px` | 卡片操作、KPI、标签高度 |
+| `--control-h` / `--tap-target` | `38px / 44px` | 控件高度 / 最小点击目标 |
+| `--radius-sm` / `--radius-md` / `--radius-lg` | `8px / 12px / 16px` | 小、中、大圆角 |
+| `--shadow-card` | `0 6px 8px rgb(31 35 39 / 8%)` | 卡片阴影 |
+| `--shadow-modal` | `0 18px 46px rgb(31 35 39 / 18%)` | 模态阴影 |
+| `--font-system` | 系统中文无衬线字体栈 | 正文与控件 |
+| `--font-mono` | 系统等宽字体栈 | 标识符、日志和代码 |
 
-数值来源：`docs/demo-v12-ui-ux-spec.md` 和 `feature-admin-workflow/.extract-design-system/demo_v12-design-parameters.md`。
+这些数值已冻结在本文；历史稿和提取过程不再作为现行引用入口。
 
 ### 5.3 V2 布局规则
 
@@ -109,7 +148,8 @@
 
 ## 6. API 与状态规则
 
-- V2 API 契约以 [api-contract-v2.md](api-contract-v2.md) 为 HTTP 契约领域的唯一权威，不直接改写 `demo-v12-api-contract.md`。
+- V2 API 契约以 [api-contract-v2.md](api-contract-v2.md) 为 HTTP 契约领域的唯一权威，不再引用已删除的 demo API 历史稿。
+- Next.js 15 的异步 `params`、`searchParams` 与 `cookies()` 只改变服务端内部读取方式；不得借框架适配改变 HTTP 方法、路径、鉴权、请求 DTO、响应 DTO、错误码、状态码或 traceId 语义。
 - 内部路径保持稳定，通过 DTO 兼容，不把外部 API 结构透传给页面。
 - 并发冲突返回 409 和冲突司机当前 `planVersion`（改派返回原/目标司机两个版本）。
 - 非法状态流转返回 400，并包含 `currentStatus` 和 `targetStatus`（流转矩阵见 PRD V2 §10.1）。
@@ -148,3 +188,15 @@
 | V2.0 | 2026-07-13 | 汇总代码一致性、设计变量、设计规则及 V1/V2 冲突裁决 |
 | V2.0-r1 | 2026-07-17 | Gate 0 审查修订：§6 指向 api-contract-v2.md 唯一权威版本，补充流转矩阵引用 |
 | V2.0-r2 | 2026-07-17 | Gate 0 二轮返修：§2 改为按领域拆分的权威顺序（唯一口径在文档版本总入口）；§3.2/§6 对齐 `planVersion` 司机计划聚合归属与改派双版本 |
+| V2.0-r3 | 2026-07-26 | Gate 3-2 审查返修：新增事务 outbox、认证失败关闭规则；开发阶段状态从 Gate 0 文档期更新为 Gate 3-2 返修期 |
+| V2.0-r4 | 2026-07-26 | Gate 3-2 二次返修：禁止 Route 二次采信 driverId，强制 JWT exp；登记位置采样/版本/outbox 原子边界与 ETA 必算起点 |
+| V2.0-r5 | 2026-07-26 | Gate 3-2 追加 ETA P0 返修：禁止固定 Top-N 裁掉本轮动态 delivery cursor，要求计划池 delivery→pickup 必要组合完整 |
+| V2.0-r6 | 2026-07-26 | G3-3：冻结司机事件门店级候选范围与相同逻辑计划重试幂等，更新当前开发边界 |
+| V2.0-r7 | 2026-07-29 | 历史裁决：曾将 Railway 作为正式运行候选；该平台结论已被 Gate 3-R 阿里云生产主线裁决替代，只保留历史 Demo 证据 |
+| V2.0-r8 | 2026-08-01 | 依赖安全返修：锁定 Next.js 15.5.21、React 19.2.8、SheetJS 官方 CDN 0.20.3 与受审计的 pnpm overrides；框架适配不得改变外部契约 |
+| V2.0-r9 | 2026-08-01 | 以应用候选 `7f60fd0d55783d1f057c814e46a3dab7f73e2416` 为唯一代码事实，补齐 `globals.css` 全量设计变量索引并冻结文档/checksum 顺序 |
+| V2.0-r10 | 2026-08-01 | 最终候选更新为 `3dea9260865f7e6ed42938d83e370e3823d31a2d`；两份 rollback 顺序修复完成，空库 migration、最终 Schema、完整回退和安全护栏均通过 |
+| V2.0-r11 | 2026-08-02 | 最终候选更新为 `169f2ad8b27f9f0be2d4630144315694656b6a67`；部署可用性、容器运行和 ACR 镜像追溯通过，Schema/migration 与业务规则零变化 |
+| V2.0-r12 | 2026-08-02 | 本地候选更新为 `7378303f513d92e781a7930cfff7e14269ec3126`；部署入口加固复验通过，远程与新镜像待完成，Schema/migration 与业务规则零变化 |
+| V2.0-r13 | 2026-08-02 | `7378303f...` 远程与 `sha256:1292f8...af57` 镜像追溯通过，`169f2ad8...@sha256:6e3799...2674` 保留回退；Compose 显式配置文件修正未提交，未执行 migration、秘密注入或容器启动 |
+| V2.0-r14 | 2026-08-03 | Compose 完整命令前缀修正形成 `492c86ea...`，Git/ACR digest `sha256:fb1237...d27d` 追溯通过；未修改业务代码、Schema、migration、HTTP 契约、领域枚举或设计变量，ECS 拉取和预生产实施待完成 |
