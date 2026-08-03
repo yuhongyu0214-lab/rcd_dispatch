@@ -76,17 +76,23 @@ describe("deployment artifacts", () => {
   it("documents the required staged Compose startup order", async () => {
     const deploymentReadme = await readProjectFile("deploy/README.md");
 
+    expect(
+      deploymentReadme.match(
+        /docker compose --env-file <受控配置文件> \\\n  -f deploy\/compose\.preprod\.yml \\/g
+      )
+    ).toHaveLength(5);
+    expect(deploymentReadme).toContain("  config --quiet");
     expect(deploymentReadme).toContain(
-      "docker compose --profile migration run --rm migration"
+      "  --profile migration run --rm migration"
     );
     expect(deploymentReadme).toContain(
-      "docker compose --profile app up -d app"
+      "  --profile app up -d app"
     );
     expect(deploymentReadme).toContain(
-      "docker compose --profile worker up -d worker"
+      "  --profile worker up -d worker"
     );
     expect(deploymentReadme).toContain(
-      "docker compose --profile edge up -d nginx"
+      "  --profile edge up -d nginx"
     );
   });
 });

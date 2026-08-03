@@ -31,12 +31,23 @@ docker build \
 
 所有常驻服务均受 Compose profile 保护；裸执行 `docker compose up -d` 不会选择任何业务服务。必须逐步执行：
 
-```text
-docker compose --profile migration run --rm migration
-docker compose --profile app up -d app
+```bash
+docker compose --env-file <受控配置文件> \
+  -f deploy/compose.preprod.yml \
+  config --quiet
+docker compose --env-file <受控配置文件> \
+  -f deploy/compose.preprod.yml \
+  --profile migration run --rm migration
+docker compose --env-file <受控配置文件> \
+  -f deploy/compose.preprod.yml \
+  --profile app up -d app
 # 人工验证 liveness 与 readiness，确认成功后才继续
-docker compose --profile worker up -d worker
-docker compose --profile edge up -d nginx
+docker compose --env-file <受控配置文件> \
+  -f deploy/compose.preprod.yml \
+  --profile worker up -d worker
+docker compose --env-file <受控配置文件> \
+  -f deploy/compose.preprod.yml \
+  --profile edge up -d nginx
 ```
 
 app 的 Compose 健康检查使用受保护 readiness；worker 与 Nginx 只在 app 的数据库、Redis/Tair 和高德依赖全部就绪后启动。禁止使用 `--profile "*"` 或同时启用全部 profile 绕过上述顺序。
