@@ -1,7 +1,7 @@
 # Gate 3-R 状态：应用候选 SHA 收口
 
-> 状态：`GIT_ACR_TRACE_PASS_AWAITING_ECS_PULL`
-> 更新时间：2026-08-03（Asia/Shanghai）
+> 状态：`GIT_ACR_ECS_AND_RDS_PASS_APP_PENDING`
+> 更新时间：2026-08-05（Asia/Shanghai）
 > 当前步骤编号：`G3R-APP-05`
 > 当前可追溯应用候选：`codex/v2-gate3-app-candidate @ 492c86ea51b40da9426b8ad5b6aef861aa429ab5`
 
@@ -34,13 +34,14 @@
 | 空库演练  | 新 SHA 原始对象正向 9/9、Schema diff 0、rollback 8/8、护栏 5/5 |
 | 部署包    | app、HTTP-only worker、一次性 migration 共用同一镜像，按命令和秘密边界分角色 |
 | 容器运行  | `linux/amd64`；OpenSSL/CA、非 root、健康检查与 Prisma 运行时检查通过 |
-| ACR/ECS   | 当前 `492c86e…@sha256:fb1237…d27d` 已在 ACR 核验；上一 `7378303…@sha256:1292f8…af57` 与回退 `169f2ad…@sha256:6e3799…2674` 已在 ECS 保留；未创建 `latest` |
+| ACR/ECS   | 当前 `492c86e…@sha256:fb1237…d27d`、上一 `7378303…@sha256:1292f8…af57` 与回退 `169f2ad…@sha256:6e3799…2674` 均已在 ECS 保留；未创建 `latest` |
+| 预生产 RDS | 0805 全量备份、冻结的 9 个 migration、对象 owner、app 逐表白名单和 worker 零数据库权限验收通过 |
 
 ## 3. 文档口径
 
 - 当前 Gate 3 代码验收只认本页顶部的完整 SHA；中间提交、来源分支和主工作区未提交文件不是候选。
 - `492c86e…` 的 Git 远程、ACR 镜像 revision、digest 和 `linux/amd64` 平台已对齐；`7378303…` 退为上一候选，`169f2ad8…` 继续作为回退候选。
-- Compose 命令修正已经提交并进入当前可追溯候选；ECS 尚未按当前 digest 拉取，仍不得执行 migration、注入秘密或启动容器。
+- Compose 命令修正已经提交并进入当前可追溯候选；ECS 已按当前 digest 拉取并完成一次性 migration。不得重复 migration，app/worker/Nginx 仍须分阶段授权启动。
 - HTTP 契约、领域枚举、数据模型和设计变量分别由 `docs/versions/v2.0/` 下的权威文档定义。
 - 框架适配只改变服务端内部读取方式，没有改变外部 HTTP 行为。
 - Railway 是历史 Demo 证据，不是当前生产架构或发布指令；生产目标以 Gate 3-R 阿里云基建裁决为准。
@@ -59,12 +60,14 @@
 - [x] 部署命令显式选择 `compose.preprod.yml`，对应专项测试于 2026-08-03 独立复验 4/4；
 - [x] 对两项修正执行完整回归、lint、类型检查、Prisma、生产构建与依赖审计；
 - [x] 生成新 SHA、完成普通推送并重新建立 ACR digest 追溯；
-- [ ] ECS 按当前 digest 拉取并核验 revision/platform；
-- [ ] 阿里云 app/worker、RDS/Tair 与运维证据闭环；
+- [x] ECS 按当前 digest 拉取并核验 revision/platform；
+- [x] 阿里云 RDS/Tair 白名单与只读登录检查；
+- [x] 0805 RDS 全量备份、9 个 migration 和迁移后最小权限验收；
+- [ ] 关闭 migration owner 长期入口并完成 app/worker/edge 与运维证据闭环；
 - [ ] Gate 3 终审 PASS。
 
-Gate 3 与第二轮并行继续冻结。Git/ACR 追溯通过不授权连接 RDS/Tair、注入秘密、执行 migration 或启动容器。
+Gate 3 与第二轮并行继续冻结。已完成的 Git/ACR/ECS/RDS 子闸门不授权重复 migration 或启动 app/worker/edge。
 
-指纹清单见 [Gate 3 最终 migration 清单与 checksum](2026-08-01-gate3-migration-manifest.md)，镜像证据见 [ACR 不可变镜像发布](2026-08-02-gate3r-acr-image-publication.md)。
+指纹清单见 [Gate 3 最终 migration 清单与 checksum](2026-08-01-gate3-migration-manifest.md)，镜像证据见 [ACR 不可变镜像发布](2026-08-02-gate3r-acr-image-publication.md)，真实数据库证据见 [RDS 预生产迁移与最小权限验收](2026-08-05-gate3r-rds-preprod-migration-permissions.md)。
 
-大白话：修正版包装箱已经完成体检并放进 ACR；ECS 里仍是上一箱和备用箱。等恢复服务器登录后先把当前箱子拉下来核对，数据库和应用仍不能开机。
+大白话：修正版包装箱已经进入服务器并完成一次性数据库施工；现在要先收回施工钥匙，再只启动应用做健康检查。

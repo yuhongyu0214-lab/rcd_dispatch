@@ -1,7 +1,7 @@
 # Gate 3-R 状态：ACR 不可变镜像发布
 
 > 状态：`CURRENT_PREVIOUS_AND_ROLLBACK_IMAGE_TRACE_PASS`
-> 日期：2026-08-02；状态复核：2026-08-03（Asia/Shanghai）
+> 日期：2026-08-02；状态复核：2026-08-05（Asia/Shanghai）
 > 当前镜像候选：`codex/v2-gate3-app-candidate @ 492c86ea51b40da9426b8ad5b6aef861aa429ab5`
 > 上一镜像候选：`7378303f513d92e781a7930cfff7e14269ec3126`
 > 回退镜像候选：`169f2ad8b27f9f0be2d4630144315694656b6a67`
@@ -18,10 +18,10 @@
 | 镜像 revision | 与对应 Git SHA 一致 | 与对应 Git SHA 一致 | 与对应 Git SHA 一致 |
 | 运行平台 | `linux/amd64` | `linux/amd64` | `linux/amd64` |
 | ACR 可读 | 已确认 | 已确认 | 已确认 |
-| ECS 拉取 | 待恢复登录后执行 | 已确认 | 已确认 |
+| ECS 拉取 | 已确认 | 已确认 | 已确认 |
 
 - 未创建 `latest`；`unknown/unknown` 是构建证明文件，不是额外运行镜像。
-- ECS 当前没有运行应用容器；未执行数据库 migration、注入应用秘密或连接 RDS/Tair。剩余空间在下次登录后重新核验，不沿用旧数值冒充实时事实。
+- ECS 未启动 app、worker 或 Nginx；当前镜像已用于一次性预生产 migration 与权限验收。三份镜像继续保留，剩余空间不沿用旧数值冒充实时事实。
 
 ## 2. 本地独立核验
 
@@ -40,15 +40,15 @@
 回退：<ACR地址>/<命名空间>/<仓库>@sha256:6e37995289a05a7462bd02b873498ae5cc87fda70ebe73e0d29b53d258cb2674
 ```
 
-进入 migration 或容器启动前仍需：
+进入 app 容器启动前仍需：
 
-1. 恢复 `rcdops` 登录后按当前完整 digest 拉取镜像，并核验 revision/platform；
-2. 核对 ECS 与 RDS/Tair 的地域、VPC、安全组、HTTPS、SLS 和秘密注入方案；
-3. 单独取得逐项云资源写入授权；
-4. 保持 migration 为一次性独立闸门，未经授权不得执行。
+1. 保持当前完整 digest，禁止改用 tag 或 `latest`；
+2. 关闭 migration owner 长期连接入口；
+3. 单独取得 app-only 启动与 readiness 授权；
+4. 保持 migration 为一次性独立闸门，不得重复执行。
 
 ## 4. 当前结论
 
-当前、上一与回退镜像的 Git/ACR 追溯子闸门 `PASS`；当前镜像 ECS 拉取与真实预生产运行尚未完成，数据库迁移和 Gate 3 总闸门均未通过，第二轮并行继续冻结。
+当前、上一与回退镜像的 Git/ACR/ECS 追溯子闸门 `PASS`；当前镜像已完成真实预生产 migration 与权限验收，但应用运行和 Gate 3 总闸门尚未通过，第二轮并行继续冻结。
 
-大白话：新包装箱已经在仓库验明身份，服务器里还留着上一箱和备用箱。等恢复登录后先把新箱子拉到服务器核对，数据库和应用仍不能开机。
+大白话：新包装箱、上一箱和备用箱都已在服务器验明身份；新箱子已经完成一次性数据库施工，应用本身仍没有开机。

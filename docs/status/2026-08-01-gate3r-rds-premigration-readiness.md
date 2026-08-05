@@ -1,7 +1,7 @@
 # Gate 3-R 状态：migration 指纹前置闸门
 
-> 状态：`EMPTY_DB_REHEARSAL_PASS_AWAITING_ALIYUN_PREPROD`
-> 更新时间：2026-08-03（Asia/Shanghai）
+> 状态：`FULFILLED_PREPROD_MIGRATION_PASS`
+> 更新时间：2026-08-05（Asia/Shanghai）
 > 当前步骤编号：`G3R-DB-01`
 > 唯一应用候选：`codex/v2-gate3-app-candidate @ 492c86ea51b40da9426b8ad5b6aef861aa429ab5`
 
@@ -43,8 +43,8 @@
 
 ## 4. 下一闸门
 
-1. 保留新 SHA、migration 指纹与空库演练证据；
-2. 另行申请阿里云预生产变更授权；
-3. 在变更窗口验证目标实例、备份点、账号权限、网络和 migration 证据。
+本前置闸门已在获准的阿里云预生产变更窗口兑现：目标实例、0805 全量备份、账号权限、网络、冻结制品、9 个 migration 和迁移后对象权限均已通过。实施结果见 [RDS 预生产迁移与最小权限验收](2026-08-05-gate3r-rds-preprod-migration-permissions.md)。
 
-大白话：两张拆除图已经重新封箱并用新编号完整验收。下一步可以申请进入阿里云预生产施工闸门，但没有变更授权前仍不会连接真实数据库。
+下一步不是重复 migration，而是关闭 owner 长期连接入口，再单独进入 app-only 启动与 readiness 闸门。
+
+大白话：施工图已经在真实预生产库完整执行并验收，不能再重复施工；接下来先收好施工钥匙，再只开应用做健康检查。

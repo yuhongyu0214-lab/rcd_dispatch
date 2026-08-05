@@ -1,31 +1,31 @@
 # Gate 3-R 阿里云预生产准备包
 
-> 状态：`BLOCKED_BEFORE_MIGRATION_AND_CONTAINER_START`
-> 日期：2026-08-02（Asia/Shanghai）
+> 状态：`RDS_SUBGATE_PASS_AWAITING_APP_START`
+> 日期：2026-08-05（Asia/Shanghai）
 > 唯一本地应用候选：`codex/v2-gate3-app-candidate @ 492c86ea51b40da9426b8ad5b6aef861aa429ab5`
 > 正向 migration 清单 SHA-256：`a5f70be102f46a026e7d482155364bb2a513ce6714b2871148a0e9031261d47d`
 > 全部 17 个 SQL 聚合 SHA-256：`b35b7322cd6961249c006dca0d4e18e3a84dc52af8a5bd72a99d5e0b5b89ef5f`
 
 ## 1. 当前结论
 
-本地空库、Schema、rollback、数据安全护栏和镜像追溯子闸门已经通过。Git 远程与 ACR 当前镜像均对应 `492c86ea51b40da9426b8ad5b6aef861aa429ab5`，digest 为 `sha256:fb12371fefa3bdd6cba318b8fd25cb8031c0211f2e81a43c85e614174633d27d`；上一 `7378303…@sha256:1292f8…af57` 与回退 `169f2ad…@sha256:6e3799…2674` 完整保留。ECS 已安装 Docker、建立 `rcdops` 管理账号并拉取上一与回退镜像，但当前镜像尚未拉取；秘密、RDS/Tair 连接、SLS、应用启动和数据库 migration 尚未实施。
+本地空库、Schema、rollback、数据安全护栏和镜像追溯子闸门已经通过。Git 远程、ACR 与 ECS 当前镜像均对应 `492c86ea51b40da9426b8ad5b6aef861aa429ab5`，digest 为 `sha256:fb12371fefa3bdd6cba318b8fd25cb8031c0211f2e81a43c85e614174633d27d`；上一 `7378303…@sha256:1292f8…af57` 与回退 `169f2ad…@sha256:6e3799…2674` 完整保留。受控配置、RDS/Tair 白名单和登录检查已完成，`rcd_v2_preprod` 已完成 0805 全量备份、冻结的 9 个 migration、迁移后逐表授权和失败关闭验收；SLS、应用、worker 与 Nginx 尚未启动。
 
-当前候选已确认 9 个正向 migration 与 Schema 原始字节零变化，462 项测试、7 项条件跳过，lint、类型检查、Prisma、生产构建与依赖审计全部通过；部署命令已经显式携带 `--env-file` 与 `-f deploy/compose.preprod.yml`，并形成新 SHA/ACR 镜像。恢复 ECS 登录后只允许准备部署目录、权限、环境变量模板并按 digest 拉取当前镜像，不得执行 migration、注入秘密或启动容器。之后仍须核对网络、秘密、HTTPS、SLS、责任人与费用上限。
+当前候选已确认 9 个正向 migration 与 Schema 原始字节零变化，462 项测试、7 项条件跳过，lint、类型检查、Prisma、生产构建与依赖审计全部通过；部署命令显式携带 `--env-file` 与 `-f deploy/compose.preprod.yml`。真实预生产迁移严格使用该候选 Git blob 和固定镜像完成，数据库权限子闸门已经 `PASS`。下一步必须先关闭 migration owner 长期入口，再单独批准 app-only 启动与健康检查。
 
-大白话：完整启动命令和新镜像已经准备好，服务器里暂时还是上一箱和备用箱。等恢复登录后先把新箱子拉下来，再摆好目录和空白配置；不能碰数据库或开应用。
+大白话：新镜像已经放到服务器，数据库结构和应用账号权限也已验收。现在先收好施工钥匙，然后才能只开应用做健康检查；worker 和公网入口继续保持关闭。
 
 ## 2. 资源事实与待复核项
 
-以下状态来自 2026-07-31～2026-08-01 已保存的只读盘点，不冒充变更窗口当天的实时事实。本轮尝试通过已登录 Chrome 重新读取控制台，但 RDS 重页面连续超时，未取得新的权威页面状态，也未产生任何云端修改。用户已报告 `rcd_v2_preprod` 和 RDS/Tair app/worker 账号已创建；在独立只读核验前只记为待确认事实，不重复创建。
+以下状态综合 2026-07-31～2026-08-05 的只读盘点和获准实施证据。秘密只记录变量边界与探针结果，不记录真实值。
 
 | 对象 | 已知状态 | 变更窗口前必须复核 |
 |---|---|---|
-| RDS PostgreSQL | 上海现有实例；用户报告 `rcd_v2_preprod` 与分角色账号已创建；权限 SQL/migration 未执行 | 独立核验新库/账号、实例运行、版本、VPC/交换机、剩余空间、自动备份、最新恢复点、续费结果 |
-| Tair/Redis | 上海现有实例；用户报告分角色账号已创建；前缀代码已进入当前候选，真实连接未验收 | 独立核验账号、实例运行、续费结果、VPC/交换机、内存与淘汰策略 |
-| ECS | 上海预生产实例已核对：Ubuntu 26.04 amd64、2C2G/40GiB；SSH 来源收敛；Docker Engine/Compose 已安装，`rcdops` + `sudo` 已验收，上一与回退镜像已按 digest 拉取；当前镜像待拉取，未启动容器 | 恢复登录后重新核验磁盘，继续准备受控部署目录、权限和变量模板并拉取当前 digest；秘密/RDS/Tair/migration/启动仍需后续闸门 |
+| RDS PostgreSQL | 上海现有实例；`rcd_v2_preprod`、owner/app/worker 角色已核验；0805 全量备份、9 个 migration 与迁移后最小权限验收通过 | 关闭 owner 长期连接入口；不得重复 migration 或触碰旧库 |
+| Tair/Redis | 上海现有实例；app/worker 账号边界、白名单和内网 `PING` 已核验；前缀固定 `rcd:v2:preprod:` | app 启动后验证前缀隔离、锁竞争和降级；worker 不注入连接 |
+| ECS | 上海预生产实例已核对：Ubuntu 26.04 amd64、2C2G/40GiB；SSH 来源收敛；Docker Engine/Compose、`rcdops` + `sudo` 已验收；当前、上一与回退镜像已按 digest 保留；一次性 migration 已完成 | app/worker/Nginx 未启动；按 app → worker → edge 顺序逐闸门执行 |
 | ACR | `492c86e…@sha256:fb1237…d27d` 当前镜像、`7378303…@sha256:1292f8…af57` 上一镜像与 `169f2ad…@sha256:6e3799…2674` 回退镜像均已远端核验，未创建 `latest` | ECS 只按当前完整 digest 拉取；现有三份镜像继续保留 |
 | SLS | 尚未开通 | 预算、Project/Logstore、30 天运行日志、180 天安全日志、费用告警 |
-| 高德 API | 用户报告所需 Key 已取得；尚未在预生产按角色注入或完成连通验收 | 服务端 Key 只给 app；前端 JS Key/安全码只作公开构建配置；核对域名限制与真实 ETA 探针 |
+| 高德 API | Key 已按角色准备，服务端 IP 探针返回 `INFOCODE=10000` | 服务端 Key 只给 app；运行后继续验证真实 ETA、无路径与可控故障 |
 | 域名/证书 | 未核验 | 预生产是否只走受限入口；若公网访问，必须明确域名、HTTPS 和访问来源 |
 | RAM/责任人 | 当前盘点来自主账号视角 | 实施账号、审计人、回退决定人、秘密轮换人和费用告警接收人 |
 
@@ -40,7 +40,7 @@
 | PRE-P0-01 | `PASS` | 新候选具备 Dockerfile、`.dockerignore`、Compose、Nginx 和 app/worker/migration 三角色定义；ACR 镜像按 commit SHA/digest 追溯 | ECS 只能引用本轮核验的完整 digest |
 | PRE-P0-02 | `PASS` | V2 liveness/readiness 已实现并测试，匿名入口不暴露依赖，内部 readiness 受保护 | 预生产运行后复核真实依赖与公网边界 |
 | PRE-P1-01 | `PASS` | standalone 构建、静态资源、Prisma Client、OpenSSL/CA、非 root 与健康检查已完成容器验证 | ECS 运行时重复冒烟 |
-| PRE-P1-02 | `PASS_STATIC` | 同一镜像定义一次性 `prisma migrate deploy`，app/worker 启动不自动迁移 | 真实 RDS migration 仍需独立授权和窗口 |
+| PRE-P1-02 | `PASS_PREPROD` | 同一固定镜像使用候选原始 Git blob 在真实预生产 RDS 完成一次性 9 个 migration；app/worker 未自动迁移 | 后续候选变化必须重新进入 migration 闸门 |
 | PRE-P1-03 | `PARTIAL` | Nginx 与 stdout 日志边界已定义；SLS 尚未实施 | ECS/SLS 实施后验证查询、脱敏、保留期和告警 |
 
 ### 3.2 候选返修边界
@@ -55,7 +55,7 @@
 
 ## 4. 推荐的预生产隔离方案
 
-为避免覆盖现有历史库，推荐在现有预生产 RDS 实例上创建新的专用数据库和分角色账号；不删除、改名或清空现有 `rcd_dispatch`、`postgres`、shadow 库及历史数据。该推荐属于待批准实施方案，不表示数据库已创建。
+为避免覆盖现有历史库，现有预生产 RDS 实例已使用独立数据库和分角色账号；未删除、改名或清空 `rcd_dispatch`、shadow 库及历史数据。`rcd_v2_preprod` 已完成迁移与权限验收，不得重复创建或把旧库作为替代目标。
 
 | 边界 | 推荐值/规则 |
 |---|---|
@@ -110,7 +110,7 @@
 11. 观察窗口通过后冻结预生产证据包；失败则停止，不继续 Gate 3
 ```
 
-截至 2026-08-03，步骤 0 的工程、migration、Compose 命令修正、Git 远程与 ACR 当前镜像追溯已经完成；步骤 3 已完成 ECS Docker/管理员账号和上一/回退镜像准备，当前镜像拉取、SLS、秘密、RDS/Tair、migration 与运行实施未完成。步骤 6 的镜像构建/推送已完成，ECS 按 digest 拉取与核验待恢复登录后执行。
+截至 2026-08-05，步骤 0～7 中与当前候选、ACR/ECS 镜像、受控配置、RDS/Tair 白名单与连通、0805 全量备份、9 个 migration、对象 owner 和最小权限相关的验收已完成。步骤 8 只完成数据库侧授权，migration owner 长期入口关闭和 app 启动尚未完成；步骤 9～11、SLS、HTTPS 和运行时证据仍未完成。
 
 ## 7. 回退与失败现场
 
@@ -136,6 +136,6 @@
 
 ## 9. 下一项需要批准的动作
 
-部署 README 与对应测试修正已经专项/完整复验、提交、普通推送并形成当前 ACR 镜像。当前可以继续做的最小动作，是恢复 `rcdops` 登录后准备 ECS 部署目录、权限和不含秘密值的环境变量模板，并按完整 digest 拉取当前镜像。在另行批准前不得执行 migration、注入秘密、连接真实依赖或启动容器。
+部署 README、当前镜像、ECS 拉取、受控配置和 RDS 迁移/权限均已形成证据。当前可以继续做的最小动作，是关闭 migration 任务和 owner 长期连接入口；完成后再单独申请 app-only 启动与 liveness/readiness 验收。不得重复 migration，也不得同时启动 worker 或 Nginx。
 
-上述准备材料复核通过后，再单独申请 ECS、SLS、网络和后续 RDS/Tair/migration 的逐项写入授权。已经完成的 ACR 镜像发布不自动扩大授权范围；授权仍须列明对象、操作、地域、费用和停止条件，不能用一句“全部允许”替代。
+app readiness 通过后，worker、edge/Nginx、SLS、锁竞争、真实 ETA、outbox 和业务冒烟仍需逐项授权与验收。已完成的数据库子闸门不自动扩大授权范围；授权仍须列明对象、操作、费用和停止条件。

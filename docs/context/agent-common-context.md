@@ -1,7 +1,7 @@
 # 人车单 V2 Agent 公共上下文（Layer 0）
 
 > 文档类型：`DERIVED / LAYER_0`
-> 上下文版本：`RCD-AGENT-CONTEXT-20260803-R7`
+> 上下文版本：`RCD-AGENT-CONTEXT-20260805-R8`
 > 适用范围：所有新建或重新启动的 Agent
 > 权威范围：仅提供项目目标、当前阶段、公共纪律、模块边界和命令入口
 > 非权威范围：产品行为、Schema、HTTP DTO、枚举、基础设施细节和任务验收标准
@@ -21,17 +21,17 @@
 | 唯一代码候选 | `codex/v2-gate3-app-candidate` |
 | 本地代码 SHA | `492c86ea51b40da9426b8ad5b6aef861aa429ab5` |
 | 远程代码 SHA | `492c86ea51b40da9426b8ad5b6aef861aa429ab5`，已完成普通快进推送与远端核验 |
-| 数据库演练 | 空 PostgreSQL：9 个 migration、最终 Schema、8 个 rollback、5 类护栏已通过 |
-| 候选状态 | `REQUEST_CHANGES`：Compose 修正已完成完整回归、提交、普通推送与 ACR 新镜像追溯；当前镜像仍待 ECS 按 digest 拉取与预生产实施验收 |
-| 镜像 | 当前 `492c86e…` → `sha256:fb1237…d27d` 已在 ACR 核验；上一候选 `7378303…` → `sha256:1292f8…af57` 与回退 `169f2ad…` → `sha256:6e3799…2674` 已在 ECS 保留 |
-| 基础设施 | 阿里云生产主线；ECS 已安装 Docker、建立 `rcdops` 并拉取上一候选与回退镜像；当前镜像尚未拉取，亦未注入应用秘密、连接 RDS/Tair、实施 SLS、执行 migration 或启动容器 |
+| 数据库实施 | 空 PostgreSQL 演练已验证 9 个 migration、最终 Schema、8 个 rollback 和 5 类护栏；真实预生产 `rcd_v2_preprod` 已完成 0805 全量备份、9 个 migration 与迁移后最小权限验收 |
+| 候选状态 | `REQUEST_CHANGES`：Git/ACR/ECS 镜像追溯和 RDS 子闸门已通过；app、worker、Nginx、SLS 与运行时验收尚未完成 |
+| 镜像 | 当前 `492c86e…` → `sha256:fb1237…d27d`、上一候选 `7378303…` → `sha256:1292f8…af57` 与回退 `169f2ad…` → `sha256:6e3799…2674` 均已在 ACR/ECS 保留 |
+| 基础设施 | 阿里云生产主线；ECS Docker、`rcdops`、受控配置、RDS/Tair 白名单与连通、当前镜像拉取、0805 备份、一次性 migration 和数据库权限已验收；app/worker/Nginx/SLS 未启动或实施 |
 | Gate 3 | `NOT_PASS` |
 | 第二轮并行 | `FROZEN` |
 | Railway | 仅历史 Demo 证据，不是生产基线 |
 
 状态变化只认 [项目状态总览](../status/README.md)；文档入口只认 [文档版本总入口](../versions/README.md)。
 
-当前候选 HEAD、Git 远程和 ACR 镜像均对应 `492c86e…`；Compose 命令修正已经形成可追溯候选。ECS 只完成 Docker/账号以及 `7378303…` 上一候选和 `169f2ad…` 回退镜像准备，当前镜像仍待拉取，尚未执行 migration、启动容器或注入秘密。后续任务必须遵循部署与运维指南并逐项获得授权；高德 Key 已取得不等于已注入或验收，服务端 Key 只能交给 app。
+当前候选 HEAD、Git 远程、ACR 和 ECS 当前镜像均对应 `492c86e…`；Compose 命令修正和真实预生产 9 个 migration/最小权限已形成可追溯证据。app、worker、Nginx 仍未启动。下一步必须先关闭 migration owner 长期入口，再按 app → worker → edge 分阶段授权与验收；服务端高德 Key 只能交给 app。
 
 ## 3. 公共模块边界
 
