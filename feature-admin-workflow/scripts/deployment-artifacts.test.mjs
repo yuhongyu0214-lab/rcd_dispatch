@@ -44,6 +44,11 @@ describe("deployment artifacts", () => {
     expect(workerBlock).toContain('profiles: ["worker"]');
     expect(workerBlock).toContain("condition: service_healthy");
     expect(workerBlock).toContain("DISPATCH_EVENT_WORKER_ORIGIN");
+    expect(workerBlock).toContain("DISPATCH_EVENT_WORKER_HEARTBEAT_PATH");
+    expect(workerBlock).toContain("dispatch-event-worker-heartbeat");
+    expect(workerBlock).toContain("isDispatchWorkerHeartbeatFresh");
+    expect(workerBlock).toContain("start_period: 90s");
+    expect(workerBlock).not.toContain("/api/v2/health");
     expect(workerBlock).not.toContain("DATABASE_URL");
     expect(workerBlock).not.toContain("REDIS_URL");
     expect(workerBlock).not.toContain("AMAP_SERVER_KEY");

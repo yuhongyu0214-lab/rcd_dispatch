@@ -44,8 +44,23 @@ services:
     profiles: ["worker"]
     environment:
       DISPATCH_EVENT_WORKER_ORIGIN: "http://app:3000"
+      DISPATCH_EVENT_WORKER_HEARTBEAT_PATH: "/tmp/dispatch-event-worker-heartbeat"
       INTERNAL_CRON_SECRET: ${INTERNAL_CRON_SECRET:?INTERNAL_CRON_SECRET is required}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          import('./scripts/dispatch-event-worker.mjs')
+          .then(({isDispatchWorkerHeartbeatFresh})=>isDispatchWorkerHeartbeatFresh())
+          .then(fresh=>{if(!fresh)process.exit(1)})
+          .catch(()=>process.exit(1))
+      interval: 30s
+      timeout: 5s
+      start_period: 90s
+      retries: 3
     depends_on:
       app:
         condition: service_healthy

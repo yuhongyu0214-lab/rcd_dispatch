@@ -1,10 +1,46 @@
 import { randomUUID } from "node:crypto";
+import { stat, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 import pino from "pino";
 
 const WORKER_INTERVAL_MS = 60_000;
 const WORKER_REQUEST_TIMEOUT_MS = 30_000;
+export const DEFAULT_WORKER_HEARTBEAT_PATH =
+  "/tmp/dispatch-event-worker-heartbeat";
+export const WORKER_HEARTBEAT_MAX_AGE_MS = 150_000;
+
+function configuredHeartbeatPath() {
+  return (
+    process.env.DISPATCH_EVENT_WORKER_HEARTBEAT_PATH?.trim() ||
+    DEFAULT_WORKER_HEARTBEAT_PATH
+  );
+}
+
+export async function writeDispatchWorkerHeartbeat({
+  path = configuredHeartbeatPath(),
+  now = new Date(),
+  writeFileImpl = writeFile
+} = {}) {
+  await writeFileImpl(path, now.toISOString(), {
+    encoding: "utf8",
+    mode: 0o600
+  });
+}
+
+export async function isDispatchWorkerHeartbeatFresh({
+  path = configuredHeartbeatPath(),
+  nowMs = Date.now(),
+  statImpl = stat
+} = {}) {
+  try {
+    const heartbeat = await statImpl(path);
+    const ageMs = nowMs - heartbeat.mtimeMs;
+    return ageMs >= 0 && ageMs <= WORKER_HEARTBEAT_MAX_AGE_MS;
+  } catch {
+    return false;
+  }
+}
 
 export function createDispatchWorkerConfig(environment) {
   const origin = environment.DISPATCH_EVENT_WORKER_ORIGIN?.trim();
@@ -105,6 +141,7 @@ function waitForNextRun(delayMs, signal) {
 export async function startDispatchEventWorker({
   config,
   fetchImpl = globalThis.fetch,
+  heartbeat = writeDispatchWorkerHeartbeat,
   logger,
   signal
 }) {
@@ -125,6 +162,7 @@ export async function startDispatchEventWorker({
       if (result.failed > 0) {
         logger.warn(logData, "dispatch_event_worker_completed_with_failures");
       } else {
+        await heartbeat();
         logger.info(logData, "dispatch_event_worker_succeeded");
       }
     } catch (error) {
