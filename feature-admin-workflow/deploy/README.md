@@ -17,6 +17,8 @@ docker build \
 
 发布记录必须保存 ACR digest；`latest` 不得作为唯一追溯标签。
 
+运行配置必须把同一个完整 Git SHA 写入 `RCD_RELEASE_REVISION`。app、worker 和 Nginx 的结构化日志均使用该字段关联源码；它不得填写 tag、`latest` 或镜像仓库地址。
+
 ## 三种应用角色
 
 `compose.preprod.yml` 对 app、worker、migration 只接受同一个 `RCD_IMAGE_REF`：

@@ -18,6 +18,8 @@ services:
       AMAP_SERVER_KEY: ${AMAP_SERVER_KEY:?AMAP_SERVER_KEY is required}
       CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required}
       ALLOW_PUBLIC_ADMIN_REGISTRATION: "false"
+      RCD_DEPLOYMENT_ENV: "preprod"
+      RCD_RELEASE_REVISION: ${RCD_RELEASE_REVISION:?RCD_RELEASE_REVISION is required}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     expose:
       - "3000"
@@ -36,6 +38,11 @@ services:
       retries: 3
     networks:
       - rcd-internal
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
 
   worker:
     image: ${RCD_IMAGE_REF:?RCD_IMAGE_REF is required}
@@ -46,6 +53,8 @@ services:
       DISPATCH_EVENT_WORKER_ORIGIN: "http://app:3000"
       DISPATCH_EVENT_WORKER_HEARTBEAT_PATH: "/tmp/dispatch-event-worker-heartbeat"
       INTERNAL_CRON_SECRET: ${INTERNAL_CRON_SECRET:?INTERNAL_CRON_SECRET is required}
+      RCD_DEPLOYMENT_ENV: "preprod"
+      RCD_RELEASE_REVISION: ${RCD_RELEASE_REVISION:?RCD_RELEASE_REVISION is required}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     healthcheck:
       test:
@@ -66,6 +75,11 @@ services:
         condition: service_healthy
     networks:
       - rcd-internal
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
 
   migration:
     image: ${RCD_IMAGE_REF:?RCD_IMAGE_REF is required}
@@ -89,6 +103,8 @@ services:
     profiles: ["edge"]
     environment:
       RCD_SERVER_NAME: ${RCD_SERVER_NAME:?RCD_SERVER_NAME is required}
+      RCD_DEPLOYMENT_ENV: "preprod"
+      RCD_RELEASE_REVISION: ${RCD_RELEASE_REVISION:?RCD_RELEASE_REVISION is required}
     ports:
       - "${RCD_HTTP_PORT:-80}:80"
       - "${RCD_HTTPS_PORT:-443}:443"
@@ -101,6 +117,11 @@ services:
         condition: service_healthy
     networks:
       - rcd-internal
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
 
 networks:
   rcd-internal:

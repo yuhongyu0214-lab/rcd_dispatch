@@ -10,7 +10,16 @@ function normalizePayload(payload: LogPayload) {
 
 const baseLogger = pino({
   level: process.env.LOG_LEVEL ?? "info",
-  base: undefined,
+  base: {
+    environment: process.env.RCD_DEPLOYMENT_ENV ?? "local",
+    service: "app",
+    revision: process.env.RCD_RELEASE_REVISION ?? "development"
+  },
+  formatters: {
+    level(label) {
+      return { level: label };
+    }
+  },
   timestamp: pino.stdTimeFunctions.isoTime
 });
 

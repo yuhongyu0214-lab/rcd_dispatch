@@ -1,11 +1,26 @@
-upstream rcd_app {
-  server app:3000;
-  keepalive 32;
-}
-
 map $http_x_trace_id $rcd_trace_id {
   default $request_id;
   "~^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" $http_x_trace_id;
+}
+
+log_format rcd_json escape=json
+  '{"time":"$time_iso8601",'
+  '"level":"info",'
+  '"environment":"${RCD_DEPLOYMENT_ENV}",'
+  '"service":"nginx",'
+  '"revision":"${RCD_RELEASE_REVISION}",'
+  '"traceId":"$rcd_trace_id",'
+  '"remoteAddress":"$remote_addr",'
+  '"method":"$request_method",'
+  '"path":"$uri",'
+  '"status":$status,'
+  '"requestTimeSeconds":$request_time,'
+  '"bytesSent":$body_bytes_sent,'
+  '"msg":"nginx_access"}';
+
+upstream rcd_app {
+  server app:3000;
+  keepalive 32;
 }
 
 server {
@@ -23,7 +38,7 @@ server {
   ssl_certificate_key /etc/nginx/tls/tls.key;
   ssl_protocols TLSv1.2 TLSv1.3;
 
-  access_log /dev/stdout;
+  access_log /dev/stdout rcd_json;
   error_log /dev/stderr warn;
 
   client_max_body_size 10m;

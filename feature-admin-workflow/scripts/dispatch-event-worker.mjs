@@ -188,8 +188,18 @@ if (
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   const logger = pino({
-    name: "dispatch-event-worker",
-    level: process.env.LOG_LEVEL ?? "info"
+    level: process.env.LOG_LEVEL ?? "info",
+    base: {
+      environment: process.env.RCD_DEPLOYMENT_ENV ?? "local",
+      service: "worker",
+      revision: process.env.RCD_RELEASE_REVISION ?? "development"
+    },
+    formatters: {
+      level(label) {
+        return { level: label };
+      }
+    },
+    timestamp: pino.stdTimeFunctions.isoTime
   });
   const stopController = new AbortController();
   process.once("SIGINT", () => stopController.abort());

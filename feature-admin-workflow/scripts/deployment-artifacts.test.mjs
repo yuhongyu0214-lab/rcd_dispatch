@@ -30,7 +30,11 @@ describe("deployment artifacts", () => {
   });
 
   it("uses one application image while keeping worker and migration secrets isolated", async () => {
-    const compose = await readProjectFile("deploy/compose.preprod.yml");
+    const [compose, appLogger, workerSource] = await Promise.all([
+      readProjectFile("deploy/compose.preprod.yml"),
+      readProjectFile("src/lib/logger.ts"),
+      readProjectFile("scripts/dispatch-event-worker.mjs")
+    ]);
     const applicationImageUses = compose.match(/image: \$\{RCD_IMAGE_REF:/g) ?? [];
     const appBlock = compose.match(/\n  app:[\s\S]*?\n  worker:/)?.[0] ?? "";
     const workerBlock = compose.match(/\n  worker:[\s\S]*?\n  migration:/)?.[0] ?? "";
@@ -52,6 +56,20 @@ describe("deployment artifacts", () => {
     expect(workerBlock).not.toContain("DATABASE_URL");
     expect(workerBlock).not.toContain("REDIS_URL");
     expect(workerBlock).not.toContain("AMAP_SERVER_KEY");
+    expect(appBlock).toContain('RCD_DEPLOYMENT_ENV: "preprod"');
+    expect(workerBlock).toContain('RCD_DEPLOYMENT_ENV: "preprod"');
+    expect(nginxBlock).toContain('RCD_DEPLOYMENT_ENV: "preprod"');
+    expect(compose.match(/RCD_RELEASE_REVISION: \$\{RCD_RELEASE_REVISION:/g)).toHaveLength(3);
+    expect(appLogger).toContain('service: "app"');
+    expect(appLogger).toContain("process.env.RCD_DEPLOYMENT_ENV");
+    expect(appLogger).toContain("process.env.RCD_RELEASE_REVISION");
+    expect(appLogger).toContain("return { level: label }");
+    expect(workerSource).toContain('service: "worker"');
+    expect(workerSource).toContain("process.env.RCD_DEPLOYMENT_ENV");
+    expect(workerSource).toContain("process.env.RCD_RELEASE_REVISION");
+    expect(workerSource).toContain("return { level: label }");
+    expect(compose.match(/max-size: "20m"/g)).toHaveLength(3);
+    expect(compose.match(/max-file: "5"/g)).toHaveLength(3);
     expect(migrationBlock).toContain("MIGRATION_DATABASE_URL");
     expect(migrationBlock).not.toContain("SHADOW_DATABASE_URL");
     expect(migrationBlock).not.toContain("REDIS_URL");
@@ -70,6 +88,16 @@ describe("deployment artifacts", () => {
     expect(nginx).not.toContain("$proxy_add_x_forwarded_for");
     expect(nginx).toContain("map $http_x_trace_id $rcd_trace_id");
     expect(nginx).toContain("default $request_id");
+    expect(nginx).toContain("log_format rcd_json escape=json");
+    expect(nginx).toContain('"environment":"${RCD_DEPLOYMENT_ENV}"');
+    expect(nginx).toContain('"service":"nginx"');
+    expect(nginx).toContain('"revision":"${RCD_RELEASE_REVISION}"');
+    expect(nginx).toContain('"traceId":"$rcd_trace_id"');
+    expect(nginx).toContain('"time":"$time_iso8601"');
+    expect(nginx).toContain('"level":"info"');
+    expect(nginx).toContain('"path":"$uri"');
+    expect(nginx).not.toContain('"path":"$request_uri"');
+    expect(nginx).toContain("access_log /dev/stdout rcd_json;");
     expect(
       nginx.match(/proxy_set_header X-Trace-Id \$rcd_trace_id;/g)
     ).toHaveLength(2);
@@ -99,5 +127,7 @@ describe("deployment artifacts", () => {
     expect(deploymentReadme).toContain(
       "  --profile edge up -d nginx"
     );
+    expect(deploymentReadme).toContain("RCD_RELEASE_REVISION");
+    expect(deploymentReadme).toContain("完整 Git SHA");
   });
 });
