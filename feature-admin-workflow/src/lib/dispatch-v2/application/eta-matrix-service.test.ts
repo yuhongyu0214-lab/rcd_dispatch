@@ -13,13 +13,13 @@ import type { EtaCacheValueV2 } from "@/lib/redis";
 // Hoisted mocks — must be defined before the module-level vi.mock calls.
 // ---------------------------------------------------------------------------
 
-const { mockDrivingRoute, mockGetCachedEtaV2, mockCacheEtaV2 } = vi.hoisted(
-  () => ({
+const { mockDrivingRoute, mockGetCachedEtaV2, mockCacheEtaV2, mockLogWarn } =
+  vi.hoisted(() => ({
     mockDrivingRoute: vi.fn(),
     mockGetCachedEtaV2: vi.fn(),
-    mockCacheEtaV2: vi.fn()
-  })
-);
+    mockCacheEtaV2: vi.fn(),
+    mockLogWarn: vi.fn()
+  }));
 
 // ---------------------------------------------------------------------------
 // Module mocks
@@ -43,6 +43,14 @@ vi.mock("@/lib/redis", async () => {
     cacheEtaV2: mockCacheEtaV2
   };
 });
+
+vi.mock("@/lib/logger", () => ({
+  createLogger: () => ({
+    info: vi.fn(),
+    warn: mockLogWarn,
+    error: vi.fn()
+  })
+}));
 
 import { buildEtaMatrix } from "./eta-matrix-service";
 import { runDispatchV2 } from "../core";
@@ -272,17 +280,17 @@ describe("partial cache hit/miss", () => {
 // ===========================================================================
 
 describe("Amap failure", () => {
-  it("failed Amap call → that pair returns null, successful pairs work", async () => {
+  it("permanent no-route failure → that pair returns null and logs an anonymous diagnostic", async () => {
     mockGetCachedEtaV2.mockResolvedValue(null);
 
     // 3 pairs for 1 driver + 1 order.
     //   (1) deadhead: driver→pickup     → success (10 min)
     //   (2) deadhead: delivery→pickup   → fail (AMAP_NO_ROUTE_FOUND)
-    //   (3) service:  pickup→delivery   → fail (AMAP_TIMEOUT)
+    //   (3) service:  pickup→delivery   → success (12 min)
     mockDrivingRoute
       .mockResolvedValueOnce({ distance: 5000, duration: 600 }) // pair 1
       .mockRejectedValueOnce(new Error("AMAP_NO_ROUTE_FOUND")) // pair 2
-      .mockRejectedValueOnce(new Error("AMAP_TIMEOUT")); // pair 3
+      .mockResolvedValueOnce({ distance: 6000, duration: 720 }); // pair 3
 
     const input: DispatchInputV2 = {
       event: BASE_EVENT,
@@ -290,17 +298,30 @@ describe("Amap failure", () => {
       drivers: [makeDriver()]
     };
 
-    const resolver = await buildEtaMatrix(input);
+    const resolver = await buildEtaMatrix(input, "trace-eta-permanent");
 
     // Pair 1: successful → 10
     expect(resolver(gp(30.28, 120.16), gp(30.2741, 120.1551))).toBe(10);
     // Pair 2: failed → null
     expect(resolver(gp(30.32, 120.143), gp(30.2741, 120.1551))).toBeNull();
-    // Pair 3: failed → null
-    expect(resolver(gp(30.2741, 120.1551), gp(30.32, 120.143))).toBeNull();
+    // Pair 3: successful → 12
+    expect(resolver(gp(30.2741, 120.1551), gp(30.32, 120.143))).toBe(12);
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      "eta_matrix_pair_unavailable",
+      expect.objectContaining({
+        traceId: "trace-eta-permanent",
+        failureCode: "AMAP_NO_ROUTE_FOUND",
+        retryable: false,
+        pairFingerprint: expect.stringMatching(/^[0-9a-f]{16}$/)
+      })
+    );
+
+    const diagnostic = JSON.stringify(mockLogWarn.mock.calls);
+    expect(diagnostic).not.toContain("30.32");
+    expect(diagnostic).not.toContain("120.143");
   });
 
-  it("all Amap calls fail → resolver returns null for all, no cache writes", async () => {
+  it("transient timeout → rejects so the outbox worker retries the event", async () => {
     mockGetCachedEtaV2.mockResolvedValue(null);
     mockDrivingRoute.mockRejectedValue(new Error("AMAP_TIMEOUT"));
 
@@ -310,11 +331,18 @@ describe("Amap failure", () => {
       drivers: [makeDriver()]
     };
 
-    const resolver = await buildEtaMatrix(input);
-
-    expect(resolver(gp(30.28, 120.16), gp(30.2741, 120.1551))).toBeNull();
-    expect(resolver(gp(30.2741, 120.1551), gp(30.32, 120.143))).toBeNull();
+    await expect(buildEtaMatrix(input, "trace-eta-timeout")).rejects.toThrow(
+      "ETA_MATRIX_RETRYABLE_FAILURE:AMAP_TIMEOUT"
+    );
     expect(mockCacheEtaV2).not.toHaveBeenCalled();
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      "eta_matrix_pair_unavailable",
+      expect.objectContaining({
+        traceId: "trace-eta-timeout",
+        failureCode: "AMAP_TIMEOUT",
+        retryable: true
+      })
+    );
   });
 });
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AcceptButton } from "./accept-button";
+import { getVisibleDisplayValue } from "./driver-task-display";
 
 // ============================================================================
 // 类型
@@ -26,18 +27,18 @@ type TaskCardInput = {
 // ============================================================================
 
 const TYPE_LABEL: Record<string, { text: string; color: string }> = {
-  STORE_PICKUP:  { text: "门店取车", color: "bg-blue-100 text-blue-700" },
-  STORE_RETURN:  { text: "门店还车", color: "bg-green-100 text-green-700" },
+  STORE_PICKUP: { text: "门店取车", color: "bg-blue-100 text-blue-700" },
+  STORE_RETURN: { text: "门店还车", color: "bg-green-100 text-green-700" },
   DOOR_DELIVERY: { text: "送车上门", color: "bg-blue-100 text-blue-700" },
-  DOOR_PICKUP:   { text: "上门取车", color: "bg-green-100 text-green-700" }
+  DOOR_PICKUP: { text: "上门取车", color: "bg-green-100 text-green-700" }
 };
 
 const STATUS_LABEL: Record<string, string> = {
-  PENDING:    "待处理",
-  ASSIGNED:   "待接单",
-  ACCEPTED:   "已接单",
-  IN_PROGRESS:"进行中",
-  COMPLETED:  "已完成"
+  PENDING: "待处理",
+  ASSIGNED: "待接单",
+  ACCEPTED: "已接单",
+  IN_PROGRESS: "进行中",
+  COMPLETED: "已完成"
 };
 
 // ============================================================================
@@ -47,49 +48,72 @@ const STATUS_LABEL: Record<string, string> = {
 export function TaskCard({
   task,
   driverId,
-  highlight = false,
+  highlight = false
 }: {
   task: TaskCardInput;
   driverId: string;
   highlight?: boolean;
 }) {
-  const typeInfo = TYPE_LABEL[task.type] ?? { text: task.type, color: "bg-slate-100 text-slate-600" };
+  const typeInfo = TYPE_LABEL[task.type] ?? {
+    text: task.type,
+    color: "bg-slate-100 text-slate-600"
+  };
   const showAccept = task.status === "ASSIGNED";
+  const visibleTypeText = getVisibleDisplayValue(typeInfo.text);
+  const visibleLicensePlate = getVisibleDisplayValue(task.vehicle.licensePlate);
+  const visibleVehicleType = getVisibleDisplayValue(task.vehicle.vehicleType);
+  const visiblePickupAddress = getVisibleDisplayValue(task.pickupAddress);
+  const visibleReturnAddress = getVisibleDisplayValue(task.returnAddress);
+  const visibleStatusText = getVisibleDisplayValue(
+    STATUS_LABEL[task.status] ?? task.status
+  );
+  const vehicleSummary = [visibleLicensePlate, visibleVehicleType]
+    .filter((value): value is string => value != null)
+    .join(" · ");
 
   return (
     <Link
       href={`/driver/tasks/${task.taskId}`}
       className={`block rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition active:scale-[0.98] ${
-        highlight
-          ? "ring-2 ring-blue-400 ring-offset-2 animate-new-task"
-          : ""
+        highlight ? "ring-2 ring-blue-400 ring-offset-2 animate-new-task" : ""
       }`}
     >
       {/* 第一行：类型标签 + 车辆信息 */}
       <div className="flex items-center justify-between">
-        <span className={`inline-block rounded-lg px-2 py-0.5 text-xs font-medium ${typeInfo.color}`}>
-          {typeInfo.text}
-        </span>
-        <span className="text-xs text-slate-500">
-          {task.vehicle.licensePlate ?? "-"} · {task.vehicle.vehicleType ?? "-"}
-        </span>
+        {visibleTypeText ? (
+          <span
+            className={`inline-block rounded-lg px-2 py-0.5 text-xs font-medium ${typeInfo.color}`}
+          >
+            {visibleTypeText}
+          </span>
+        ) : null}
+        {vehicleSummary ? (
+          <span className="text-xs text-slate-500">{vehicleSummary}</span>
+        ) : null}
       </div>
 
       {/* 第二行：取还车地址 */}
-      <div className="mt-3 space-y-0.5">
-        <p className="flex items-start gap-1 text-sm text-slate-700">
-          <span className="mt-0.5 shrink-0 text-xs">📍取</span>
-          <span className="line-clamp-1">{task.pickupAddress}</span>
-        </p>
-        <p className="flex items-start gap-1 text-sm text-slate-700">
-          <span className="mt-0.5 shrink-0 text-xs">📍还</span>
-          <span className="line-clamp-1">{task.returnAddress}</span>
-        </p>
-      </div>
+      {visiblePickupAddress || visibleReturnAddress ? (
+        <div className="mt-3 space-y-0.5">
+          {visiblePickupAddress ? (
+            <p className="flex items-start gap-1 text-sm text-slate-700">
+              <span className="mt-0.5 shrink-0 text-xs">📍取</span>
+              <span className="line-clamp-1">{visiblePickupAddress}</span>
+            </p>
+          ) : null}
+          {visibleReturnAddress ? (
+            <p className="flex items-start gap-1 text-sm text-slate-700">
+              <span className="mt-0.5 shrink-0 text-xs">📍还</span>
+              <span className="line-clamp-1">{visibleReturnAddress}</span>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* 第三行：时间 */}
       <p className="mt-2 text-xs text-slate-500">
-        🕐 {new Date(task.scheduledAt).toLocaleString("zh-CN", {
+        🕐{" "}
+        {new Date(task.scheduledAt).toLocaleString("zh-CN", {
           month: "numeric",
           day: "numeric",
           hour: "2-digit",
@@ -99,14 +123,11 @@ export function TaskCard({
 
       {/* 第四行：操作区 */}
       <div className="mt-3 flex items-center justify-between">
-        <span className="text-xs text-slate-400">
-          {STATUS_LABEL[task.status] ?? task.status}
-        </span>
+        {visibleStatusText ? (
+          <span className="text-xs text-slate-400">{visibleStatusText}</span>
+        ) : null}
         {showAccept ? (
-          <AcceptButton
-            orderId={task.taskId}
-            driverId={driverId}
-          />
+          <AcceptButton orderId={task.taskId} driverId={driverId} />
         ) : null}
       </div>
     </Link>

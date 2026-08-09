@@ -1,8 +1,11 @@
+import { createHash } from "crypto";
+
 import type { GeoPointV2 } from "@/types/v2";
 import type { DispatchInputV2 } from "@/types/v2/dispatch";
 import type { EtaResolver } from "../core/types";
 
 import { drivingRoute, durationToMinutes } from "@/lib/amap";
+import { createLogger } from "@/lib/logger";
 import {
   normalizePointHash,
   getCachedEtaV2,
@@ -21,6 +24,8 @@ const MODE = "driving";
 /** Separator between origin and destination hashes in the lookup map key. */
 const KEY_SEP = "|";
 
+const log = createLogger("dispatch-v2-eta-matrix");
+
 // ---------------------------------------------------------------------------
 // Internal types
 // ---------------------------------------------------------------------------
@@ -30,6 +35,37 @@ interface EtaPair {
   to: GeoPointV2;
   fromHash: string;
   toHash: string;
+}
+
+interface EtaFailure {
+  code: string;
+  retryable: boolean;
+}
+
+function classifyEtaFailure(reason: unknown): EtaFailure {
+  if (reason instanceof TypeError) {
+    return { code: "AMAP_NETWORK_ERROR", retryable: true };
+  }
+
+  const message = reason instanceof Error ? reason.message : "";
+  const knownCode = message.match(
+    /^(AMAP_(?:TIMEOUT|REQUEST_FAILED|NO_ROUTE_FOUND|INVALID_ROUTE_DATA|HTTP_\d{3}|API_ERROR_[A-Z0-9]+))/
+  )?.[1];
+  const code = knownCode ?? "AMAP_UNKNOWN_ERROR";
+  const retryable =
+    code === "AMAP_TIMEOUT" ||
+    code === "AMAP_REQUEST_FAILED" ||
+    /^AMAP_HTTP_5\d{2}$/.test(code) ||
+    code === "AMAP_API_ERROR_30000";
+
+  return { code, retryable };
+}
+
+function fingerprintPair(pair: EtaPair): string {
+  return createHash("sha256")
+    .update(`${pair.fromHash}${KEY_SEP}${pair.toHash}`)
+    .digest("hex")
+    .slice(0, 16);
 }
 
 // ---------------------------------------------------------------------------
@@ -151,14 +187,17 @@ function collectPairs(input: DispatchInputV2): EtaPair[] {
  * - Calls `drivingRoute()` directly — NEVER calls `getEtaMinutes()` (which
  *   would generate fallback/9999 sentinel values).
  * - Only caches REAL successful Amap results. Failures are not cached.
- * - Redis unavailable / Amap failure / missing key / timeout / no-route /
- *   invalid response → that specific pair returns `null` from the resolver.
+ * - Permanent Amap failures (for example no-route) leave that pair as `null`.
+ * - Transient Amap failures throw a stable aggregate error so the outbox
+ *   processor retains the event and retries with its existing backoff.
+ * - Failure logs contain only a one-way pair fingerprint, never coordinates.
  * - All Amap and Redis calls happen outside any database transaction.
  * - Cache TTL defaults to 60 s; Gate 3 does not use custom TTLs.
  * - Does NOT modify the pure computation core.
  */
 export async function buildEtaMatrix(
-  input: DispatchInputV2
+  input: DispatchInputV2,
+  traceId?: string
 ): Promise<EtaResolver> {
   // 1. Collect unique (from, to) pairs the core may query.
   const pairs = collectPairs(input);
@@ -199,8 +238,9 @@ export async function buildEtaMatrix(
 
     // 4. Populate lookup map + fire-and-forget Redis writes.
     const cacheWrites: Promise<void>[] = [];
+    const retryableFailureCodes = new Set<string>();
 
-    for (const result of amapResults) {
+    for (const [index, result] of amapResults.entries()) {
       if (result.status === "fulfilled") {
         const { pair, etaMinutes, route } = result.value;
         lookup.set(`${pair.fromHash}${KEY_SEP}${pair.toHash}`, etaMinutes);
@@ -221,14 +261,38 @@ export async function buildEtaMatrix(
             DEFAULT_ETA_TTL_SECONDS
           )
         );
+      } else {
+        const pair = misses[index];
+        const failure = classifyEtaFailure(result.reason);
+        if (failure.retryable) {
+          retryableFailureCodes.add(failure.code);
+        }
+        log.warn("eta_matrix_pair_unavailable", {
+          traceId,
+          eventType: input.event.type,
+          pairFingerprint: fingerprintPair(pair),
+          failureCode: failure.code,
+          retryable: failure.retryable
+        });
       }
-      // status === "rejected" → Amap unavailable for this pair.
-      // Don't write to lookup; don't cache to Redis. Resolver returns null.
     }
 
     // Best-effort: Redis write failures must not prevent the resolver
     // from working (the in-memory lookup is already populated).
     await Promise.allSettled(cacheWrites);
+
+    if (retryableFailureCodes.size > 0) {
+      const failureCodes = [...retryableFailureCodes].sort();
+      log.warn("eta_matrix_retry_requested", {
+        traceId,
+        eventType: input.event.type,
+        failureCodes,
+        failedPairCount: amapResults.filter(
+          (result) => result.status === "rejected"
+        ).length
+      });
+      throw new Error(`ETA_MATRIX_RETRYABLE_FAILURE:${failureCodes.join(",")}`);
+    }
   }
 
   // 5. Return synchronous EtaResolver closure.

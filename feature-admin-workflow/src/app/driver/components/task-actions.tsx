@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { getTaskNavigationTarget } from "./driver-task-display";
+
 // ============================================================================
 // 类型
 // ============================================================================
@@ -10,6 +12,7 @@ import { useState } from "react";
 type TaskActionsProps = {
   orderId: string;
   orderStatus: string;
+  businessType: string;
   driverId: string;
   pickupLat: number | null;
   pickupLng: number | null;
@@ -24,6 +27,7 @@ type TaskActionsProps = {
 export function TaskActions({
   orderId,
   orderStatus,
+  businessType,
   driverId,
   pickupLat,
   pickupLng,
@@ -89,6 +93,7 @@ export function TaskActions({
 
   const pickupNav = buildNavUri(pickupLat, pickupLng);
   const returnNav = buildNavUri(returnLat, returnLng);
+  const navigationTarget = getTaskNavigationTarget(businessType);
 
   // ---- 按钮渲染 ----
   const showAccept = orderStatus === "ASSIGNED";
@@ -118,26 +123,27 @@ export function TaskActions({
       ) : null}
 
       {/* 导航按钮 */}
-      {showNav ? (
+      {showNav && navigationTarget ? (
         <div className="flex gap-3">
-          {pickupNav ? (
-            <a
-              href={pickupNav}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-xl bg-blue-600 text-sm font-medium text-white transition active:bg-blue-500"
-            >
-              🧭 导航前往取车
-            </a>
-          ) : (
-            <button
-              disabled
-              className="flex h-12 flex-1 items-center justify-center rounded-xl bg-slate-200 text-sm text-slate-400"
-            >
-              取车坐标缺失
-            </button>
-          )}
-          {returnNav ? (
+          {navigationTarget === "PICKUP" ? (
+            pickupNav ? (
+              <a
+                href={pickupNav}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-xl bg-blue-600 text-sm font-medium text-white transition active:bg-blue-500"
+              >
+                🧭 导航前往取车
+              </a>
+            ) : (
+              <button
+                disabled
+                className="flex h-12 flex-1 items-center justify-center rounded-xl bg-slate-200 text-sm text-slate-400"
+              >
+                取车坐标缺失
+              </button>
+            )
+          ) : returnNav ? (
             <a
               href={returnNav}
               target="_blank"

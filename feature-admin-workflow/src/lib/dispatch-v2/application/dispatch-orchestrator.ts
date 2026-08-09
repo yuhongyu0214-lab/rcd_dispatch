@@ -23,7 +23,7 @@ export async function runDispatchApplication(
 ): Promise<DispatchCommitResult> {
   for (let attempt = 1; attempt <= MAX_SNAPSHOT_ATTEMPTS; attempt++) {
     const snapshot = await buildDispatchSnapshot(event);
-    const etaResolver = await buildEtaMatrix(snapshot);
+    const etaResolver = await buildEtaMatrix(snapshot, traceId);
     const output = runDispatchV2(snapshot, etaResolver);
 
     const resources = [

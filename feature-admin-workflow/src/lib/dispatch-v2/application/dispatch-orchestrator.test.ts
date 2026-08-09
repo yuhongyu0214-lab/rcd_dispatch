@@ -124,9 +124,9 @@ describe("runDispatchApplication", () => {
   it("commits under acquired driver and order locks then releases them", async () => {
     mockAcquireResourceLocks.mockResolvedValue(lockResult("acquired"));
 
-    await expect(
-      runDispatchApplication(event, "trace-1")
-    ).resolves.toEqual(committed);
+    await expect(runDispatchApplication(event, "trace-1")).resolves.toEqual(
+      committed
+    );
 
     expect(mockAcquireResourceLocks).toHaveBeenCalledWith([
       expect.objectContaining({
@@ -138,6 +138,7 @@ describe("runDispatchApplication", () => {
         ttlSeconds: 15
       })
     ]);
+    expect(mockBuildEtaMatrix).toHaveBeenCalledWith(snapshot, "trace-1");
     expect(mockCommitDispatchPlan).toHaveBeenCalledWith(
       snapshot,
       output,
@@ -146,12 +147,29 @@ describe("runDispatchApplication", () => {
     expect(mockReleaseResourceLock).toHaveBeenCalledTimes(2);
   });
 
+  it("propagates a retryable ETA failure before acquiring locks or committing", async () => {
+    mockBuildEtaMatrix.mockRejectedValue(
+      new Error("ETA_MATRIX_RETRYABLE_FAILURE:AMAP_TIMEOUT")
+    );
+
+    await expect(
+      runDispatchApplication(event, "trace-eta-retry")
+    ).rejects.toThrow("ETA_MATRIX_RETRYABLE_FAILURE:AMAP_TIMEOUT");
+
+    expect(mockBuildEtaMatrix).toHaveBeenCalledWith(
+      snapshot,
+      "trace-eta-retry"
+    );
+    expect(mockAcquireResourceLocks).not.toHaveBeenCalled();
+    expect(mockCommitDispatchPlan).not.toHaveBeenCalled();
+  });
+
   it("falls back to database row and version locks when Redis is unavailable", async () => {
     mockAcquireResourceLocks.mockResolvedValue(lockResult("unavailable"));
 
-    await expect(
-      runDispatchApplication(event, "trace-1")
-    ).resolves.toEqual(committed);
+    await expect(runDispatchApplication(event, "trace-1")).resolves.toEqual(
+      committed
+    );
 
     expect(mockCommitDispatchPlan).toHaveBeenCalledTimes(1);
     expect(mockReleaseResourceLock).not.toHaveBeenCalled();
@@ -160,9 +178,9 @@ describe("runDispatchApplication", () => {
   it("does not enter the commit transaction when a resource is busy", async () => {
     mockAcquireResourceLocks.mockResolvedValue(lockResult("busy"));
 
-    await expect(
-      runDispatchApplication(event, "trace-1")
-    ).rejects.toThrow("DISPATCH_RESOURCE_BUSY");
+    await expect(runDispatchApplication(event, "trace-1")).rejects.toThrow(
+      "DISPATCH_RESOURCE_BUSY"
+    );
 
     expect(mockCommitDispatchPlan).not.toHaveBeenCalled();
   });
@@ -173,9 +191,9 @@ describe("runDispatchApplication", () => {
       .mockRejectedValueOnce(new Error("STALE_DISPATCH_SNAPSHOT"))
       .mockResolvedValueOnce(committed);
 
-    await expect(
-      runDispatchApplication(event, "trace-1")
-    ).resolves.toEqual(committed);
+    await expect(runDispatchApplication(event, "trace-1")).resolves.toEqual(
+      committed
+    );
 
     expect(mockBuildDispatchSnapshot).toHaveBeenCalledTimes(2);
     expect(mockBuildEtaMatrix).toHaveBeenCalledTimes(2);

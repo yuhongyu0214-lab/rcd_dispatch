@@ -226,6 +226,52 @@ describe("GET /api/v2/driver/map", () => {
       capturedAt: capturedAt.toISOString()
     });
   });
+
+  it("uses the newer complete DB snapshot when Redis still contains an older location", async () => {
+    const redisCapturedAt = "2026-07-18T08:00:00.000Z";
+    const dbCapturedAt = new Date("2026-07-18T08:01:00.000Z");
+    vi.mocked(prisma.driver.findMany).mockResolvedValue([
+      {
+        id: "d-1",
+        name: "司机一",
+        onShift: true,
+        availability: "AVAILABLE",
+        planVersion: 1,
+        lastLat: 31.2304,
+        lastLng: 121.4737,
+        lastAccuracyMeters: 8,
+        lastLocationCapturedAt: dbCapturedAt,
+        store: { code: "STORE_SH_01" }
+      }
+    ] as unknown as Awaited<ReturnType<typeof prisma.driver.findMany>>);
+    vi.mocked(getDriverLocationsWithStatus).mockResolvedValue({
+      redisAvailable: true,
+      locations: new Map([
+        [
+          "d-1",
+          {
+            lat: "30.5000",
+            lng: "104.0000",
+            accuracy: "20",
+            ts: redisCapturedAt,
+            server_ts: redisCapturedAt,
+            status: "ONLINE"
+          }
+        ]
+      ])
+    });
+
+    const response = await getMap(asNextRequest(new Request(AUTHED_MAP_URL)));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data[0].lastLocation).toEqual({
+      lat: 31.2304,
+      lng: 121.4737,
+      accuracyMeters: 8,
+      capturedAt: dbCapturedAt.toISOString()
+    });
+  });
 });
 
 // ============================================================================
@@ -259,7 +305,9 @@ describe("POST /api/v2/driver/location", () => {
   });
 
   it("returns 400 VALIDATION_FAILED for malformed JSON (P1-5)", async () => {
-    const response = await postLocation(postJson(AUTHED_LOCATION_URL, "{not json"));
+    const response = await postLocation(
+      postJson(AUTHED_LOCATION_URL, "{not json")
+    );
 
     expect(response.status).toBe(400);
     const body = await response.json();
