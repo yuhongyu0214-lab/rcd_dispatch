@@ -1,7 +1,7 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1 已通过验收，Gate 0 已通过（候选验收 SHA `0a83243`）
+> 状态：总体架构已批准；Gate -1～Gate 2 与第一轮并行已完成；Gate 3 当前最小 E2E 返修基线为 `codex/v2-gate3-app-candidate @ 4eb3b4857caae9730eb70dd9f2fb152bd8972ca0`。Gate 3 尚未 PASS，第二轮并行继续冻结
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
@@ -261,6 +261,58 @@ Gate 2 本身不是并行阶段。只有 Gate 2 已合入 `develop` 且验证通
 - `feature-admin-workflow/src/lib/dispatch-v2/application/**`
 - `feature-admin-workflow/src/lib/dispatch-v2/repositories/**`
 - 经契约冻结的调度 API 和事件触发器
+
+**Gate 3 最小 E2E 入口例外（2026-08-09，当前有效）**：为完成已经获批的上海
+`G3E2E` 真实业务验收，允许在唯一候选
+`codex/v2-gate3-app-candidate @ 4eb3b4857caae9730eb70dd9f2fb152bd8972ca0` 上
+串行补齐 API 契约 V2 已冻结、但候选代码尚缺的最小入口：绑定司机账号登录后进入
+司机 H5；司机 H5 打开后复用当前司机会话幂等调用
+`POST /api/v2/driver/shift/start` 并按 V2 批量位置契约上报，不新增 H5 上下班按钮；
+补齐司机本人 `depart / arrive / complete` 与调度员 `reassign` 路由，以及同事务业务
+事实/outbox、`planVersion`、Redis/数据库锁、鉴权、幂等、非法流转和并发反例。该例外
+不得新增页面、Schema、migration、枚举、DTO、依赖或观测功能，不得实现契约外功能，
+也不得据此启动第二轮并行。
+
+本例外的文件白名单如下；未列出的文件默认只读：
+
+- 本文档。
+- `feature-admin-workflow/src/app/admin/login/components/login-form.tsx` 及同目录新增的
+  `login-destination.ts`、`login-destination.test.ts`，以及新增的
+  `feature-admin-workflow/src/app/api/auth/login/route.test.ts`。
+- `feature-admin-workflow/src/app/driver/components/driver-gps-tracker.tsx` 及同目录新增的
+  `driver-h5-entry.ts`、`driver-h5-entry.test.ts`。
+- `feature-admin-workflow/src/app/api/v2/driver/tasks/[assignmentId]/**` 和新增的
+  `feature-admin-workflow/src/app/api/v2/driver/driver-task-actions.test.ts`。
+- `feature-admin-workflow/src/app/api/v2/assignments/[assignmentId]/reassign/route.ts` 和新增的
+  `feature-admin-workflow/src/app/api/v2/assignments/v2-assignment-routes.test.ts`。
+- 新增的 `feature-admin-workflow/src/lib/assignments-v2/assignment-command-service.ts` 与
+  `assignment-command-service.test.ts`。
+
+指定测试与 Mock 条件：
+
+- 登录/H5：Mock 登录响应和 `fetch`，验证 `role=driver + driverId` 固定进入
+  `/driver/tasks`；H5 只自动调用一次幂等上班入口，位置请求只发送 V2 `samples`，页面中
+  不出现上下班按钮。
+- 司机执行：Mock 司机会话、Prisma 事务、Redis 短锁和 outbox；分别覆盖
+  `PLANNED → EN_ROUTE → IN_SERVICE → COMPLETED`、非本人工单 403、矩阵外流转 400、
+  同一流转重放 200 且 `replayed=true`、短锁竞争 409、Redis 不可用时数据库行锁兜底。
+- 调度员改派：Mock 调度员/司机会话、原/目标司机版本、目标司机当班可用状态、Prisma
+  事务、双司机/订单短锁和 outbox；覆盖成功双版本递增、任一版本过期 409、同司机
+  400、到达后 400、非调度员 403、锁竞争 409。
+- 所有单元测试不得连接真实 RDS、Tair、SLS 或高德；真实依赖只留给新候选部署后的
+  预生产验收。
+
+回归范围：先运行上述新增定向用例，再在 `feature-admin-workflow/` 执行
+`pnpm test`、`pnpm lint`、`pnpm build`。同时检查 `git diff --check`，并确认
+`prisma/schema.prisma`、`prisma/migrations/**`、`package.json`、`pnpm-lock.yaml` 和
+`src/types/v2/**` 零变化。
+
+失败判定：出现任一未登录/越权写成功、重复请求产生第二次业务副作用、业务事实与
+outbox 不在同一事务、旧 `planVersion` 覆盖新计划、到达后仍可改派、Redis 降级时跳过
+数据库一致性保护、位置请求仍走 V1 或伪造时间/坐标、H5 新增上下班按钮、白名单外
+修改、定向测试或全量 `test/lint/build` 任一失败，本轮均判定 `FAIL`。本地通过只表示
+返修候选可发布，不代表真实 E2E 或 Gate 3 已 PASS；完成新 SHA/镜像/ECS 更新后，方可
+投递冻结的 10 单并执行真实高德 ETA、A/B/C、预警、并发和手工改排验收。
 
 交付内容：
 

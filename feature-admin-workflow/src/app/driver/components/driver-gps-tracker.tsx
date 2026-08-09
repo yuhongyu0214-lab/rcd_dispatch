@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import {
+  ensureDriverShiftStarted,
+  reportDriverLocation
+} from "./driver-h5-entry";
+
 // ============================================================================
 // 类型定义
 // ============================================================================
@@ -13,7 +18,7 @@ type GpsStatus = "active" | "degraded" | "error" | "idle";
 // ============================================================================
 
 /** 前台上报最小间隔（毫秒） */
-const FOREGROUND_MIN_INTERVAL = 5_000;
+const FOREGROUND_MIN_INTERVAL = 30_000;
 
 /** 后台兜底上报间隔（毫秒） */
 const BACKGROUND_FALLBACK_INTERVAL = 120_000;
@@ -41,34 +46,37 @@ export function DriverGpsTracker({ driverId }: { driverId: string }) {
   const consecutiveErrors = useRef(0);
   const recoveryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  useEffect(() => {
+    void ensureDriverShiftStarted().catch(() => {
+      setStatus("error");
+    });
+  }, [driverId]);
+
   // ---- 上报函数 ----
   const reportLocation = useCallback(
-    async (lat: number, lng: number, accuracy?: number) => {
+    async (lat: number, lng: number, accuracy: number) => {
       try {
-        const response = await fetch("/api/driver/location", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ lat, lng, accuracy, driverId })
+        await reportDriverLocation({
+          lat,
+          lng,
+          accuracyMeters: accuracy,
+          capturedAt: new Date().toISOString()
         });
 
-        if (response.ok) {
-          consecutiveErrors.current = 0;
-          setErrorCount(0);
-          lastReportTime.current = Date.now();
-          setLastReportedAt(new Date());
+        consecutiveErrors.current = 0;
+        setErrorCount(0);
+        lastReportTime.current = Date.now();
+        setLastReportedAt(new Date());
 
-          // 根据连续失败次数恢复状态
-          if (errorCount >= ERROR_THRESHOLD) {
-            setStatus("degraded"); // 从 error 降为 degraded，探测中
-            if (recoveryTimer.current) clearTimeout(recoveryTimer.current);
-            recoveryTimer.current = setTimeout(() => {
-              setStatus("active");
-            }, RECOVERY_CHECK_MS);
-          } else if (errorCount >= DEGRADED_THRESHOLD) {
+        // 根据连续失败次数恢复状态
+        if (errorCount >= ERROR_THRESHOLD) {
+          setStatus("degraded"); // 从 error 降为 degraded，探测中
+          if (recoveryTimer.current) clearTimeout(recoveryTimer.current);
+          recoveryTimer.current = setTimeout(() => {
             setStatus("active");
-          }
-        } else {
-          throw new Error(`HTTP ${response.status}`);
+          }, RECOVERY_CHECK_MS);
+        } else if (errorCount >= DEGRADED_THRESHOLD) {
+          setStatus("active");
         }
       } catch {
         consecutiveErrors.current += 1;
@@ -81,7 +89,7 @@ export function DriverGpsTracker({ driverId }: { driverId: string }) {
         }
       }
     },
-    [driverId, errorCount]
+    [errorCount]
   );
 
   // ---- 兜底定时器 ----

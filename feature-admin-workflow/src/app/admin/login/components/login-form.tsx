@@ -3,6 +3,8 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { resolveLoginDestination } from "./login-destination";
+
 type LoginResponse =
   | {
       success: true;
@@ -11,6 +13,7 @@ type LoginResponse =
         email: string;
         name: string;
         role: string;
+        driverId?: string;
       };
       error: null;
       traceId: string;
@@ -57,7 +60,7 @@ export function LoginForm({
         return;
       }
 
-      router.replace(nextPath);
+      router.replace(resolveLoginDestination(payload.data, nextPath));
       router.refresh();
     } catch {
       setError("登录失败，请稍后重试");
