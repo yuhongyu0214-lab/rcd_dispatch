@@ -6,7 +6,11 @@ import type {
 
 import { createLogger } from "@/lib/logger";
 
-import { processIngestRecord } from "./idempotency";
+import {
+  processCommittedIngestDispatchEvent,
+  processIngestRecord
+} from "./idempotency";
+import type { CommittedIngestDispatchEvent } from "./idempotency";
 import { mapToCanonical } from "./mapper";
 import { normalizeRecord } from "./normalize";
 import type { IngestContext } from "./types";
@@ -32,6 +36,7 @@ export async function processIngestEnvelope(
   let successCount = 0;
   let skippedCount = 0;
   let failedCount = 0;
+  const committedDispatchEvents: CommittedIngestDispatchEvent[] = [];
 
   // 批次内去重
   const seenKeys = new Set<string>();
@@ -99,7 +104,9 @@ export async function processIngestEnvelope(
     );
 
     // 5. 处理幂等性
-    const recordResult = await processIngestRecord(canonical, recordTraceId);
+    const recordResult = await processIngestRecord(canonical, recordTraceId, {
+      committedDispatchEvents
+    });
     recordResult.index = i;
 
     results.push(recordResult);
@@ -116,6 +123,14 @@ export async function processIngestEnvelope(
         break;
     }
   }
+
+  // All accepted order facts are visible before dispatch starts. Events from
+  // the same envelope then run together, allowing identical ETA pairs to share
+  // one in-flight Amap request while each durable outbox row is still claimed
+  // and completed independently.
+  await Promise.all(
+    committedDispatchEvents.map(processCommittedIngestDispatchEvent)
+  );
 
   return {
     results,

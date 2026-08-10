@@ -907,9 +907,35 @@ async function handleCancel(
   };
 }
 
+export interface CommittedIngestDispatchEvent {
+  eventId: string;
+  traceId: string;
+}
+
+interface ProcessIngestRecordOptions {
+  committedDispatchEvents?: CommittedIngestDispatchEvent[];
+}
+
+export async function processCommittedIngestDispatchEvent(
+  event: CommittedIngestDispatchEvent
+): Promise<void> {
+  try {
+    await processInternalEvent(event.eventId);
+  } catch (error) {
+    // The business fact and outbox row are already committed. Leave the row
+    // pending for retry instead of misreporting the accepted source event.
+    log.error("入单重排即时处理失败，已保留 outbox 等待重试", {
+      traceId: event.traceId,
+      dispatchEventId: event.eventId,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+}
+
 export async function processIngestRecord(
   canonical: CanonicalOrderV2,
-  traceId: string
+  traceId: string,
+  options: ProcessIngestRecordOptions = {}
 ): Promise<IngestRecordResultV2> {
   // 写入竞争统一走"回滚整个事务 → 重读 → 重试"（最多 MAX_WRITE_RACE_ATTEMPTS 次）：
   // - P0-3: 乐观锁 WHERE 命中 0 行（并发版本更新）
@@ -922,17 +948,14 @@ export async function processIngestRecord(
     try {
       const result = await executeIngestTransaction(canonical, traceId);
       if (result.dispatchEventId) {
-        try {
-          await processInternalEvent(result.dispatchEventId);
-        } catch (error) {
-          // The business fact and outbox row are already committed. Leave the
-          // row pending for retry instead of misreporting the accepted source
-          // event as failed.
-          log.error("取消重排即时处理失败，已保留 outbox 等待重试", {
-            traceId,
-            dispatchEventId: result.dispatchEventId,
-            error: error instanceof Error ? error.message : String(error)
-          });
+        const committedEvent = {
+          eventId: result.dispatchEventId,
+          traceId
+        };
+        if (options.committedDispatchEvents) {
+          options.committedDispatchEvents.push(committedEvent);
+        } else {
+          await processCommittedIngestDispatchEvent(committedEvent);
         }
       }
       return {

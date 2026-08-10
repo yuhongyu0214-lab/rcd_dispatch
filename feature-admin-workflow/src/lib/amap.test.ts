@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { amapHealthCheck, drivingRoute } from "./amap";
+import {
+  __resetAmapRateLimiterForTests,
+  amapHealthCheck,
+  drivingRoute
+} from "./amap";
+import { geocodeAddress } from "./import/services/geocode";
 
 function amapResponse(payload: unknown): Response {
   return {
@@ -12,10 +17,12 @@ function amapResponse(payload: unknown): Response {
 
 describe("Amap driving route failures", () => {
   beforeEach(() => {
+    __resetAmapRateLimiterForTests();
     vi.stubEnv("AMAP_SERVER_KEY", "gate3-test-key");
   });
 
   afterEach(() => {
+    __resetAmapRateLimiterForTests();
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
@@ -89,6 +96,118 @@ describe("Amap driving route failures", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("retries transient QPS errors through the same bounded request path", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        amapResponse({
+          status: "0",
+          infocode: "10021",
+          info: "USER_QPS_OVER_LIMIT"
+        })
+      )
+      .mockResolvedValueOnce(
+        amapResponse({
+          status: "1",
+          infocode: "10000",
+          route: {
+            paths: [{ distance: "1234", duration: "321", steps: [] }]
+          }
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = drivingRoute(
+      { lat: 31.2304, lng: 121.4737 },
+      { lat: 31.2202, lng: 121.4557 }
+    );
+
+    await vi.runAllTimersAsync();
+    await expect(result).resolves.toMatchObject({ duration: 321 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("starts no more than three real HTTP attempts in any second", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-10T03:00:00.000Z"));
+    const startedAt: number[] = [];
+    const fetchMock = vi.fn().mockImplementation(async () => {
+      startedAt.push(Date.now());
+      return amapResponse({
+        status: "1",
+        infocode: "10000",
+        route: {
+          paths: [{ distance: "1234", duration: "321", steps: [] }]
+        }
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const routes = Promise.all(
+      Array.from({ length: 4 }, (_, index) =>
+        drivingRoute(
+          { lat: 31.2304 + index * 0.001, lng: 121.4737 },
+          { lat: 31.2202, lng: 121.4557 + index * 0.001 }
+        )
+      )
+    );
+
+    await vi.advanceTimersByTimeAsync(1_002);
+    await routes;
+
+    expect(startedAt).toHaveLength(4);
+    expect(startedAt[1] - startedAt[0]).toBeGreaterThanOrEqual(334);
+    expect(startedAt[2] - startedAt[1]).toBeGreaterThanOrEqual(334);
+    expect(startedAt[3] - startedAt[2]).toBeGreaterThanOrEqual(334);
+  });
+
+  it("shares the same request budget with order-ingest geocoding", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-10T03:00:00.000Z"));
+    const startedAt: number[] = [];
+    const fetchMock = vi.fn().mockImplementation(async (requestUrl: URL) => {
+      startedAt.push(Date.now());
+      const url = new URL(String(requestUrl));
+      if (url.pathname === "/v3/geocode/geo") {
+        return amapResponse({
+          status: "1",
+          infocode: "10000",
+          geocodes: [{ location: "121.4737,31.2304", city: "上海市" }]
+        });
+      }
+      return amapResponse({
+        status: "1",
+        infocode: "10000",
+        route: {
+          paths: [{ distance: "1234", duration: "321", steps: [] }]
+        }
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const requests = Promise.all([
+      drivingRoute(
+        { lat: 31.2304, lng: 121.4737 },
+        { lat: 31.2202, lng: 121.4557 }
+      ),
+      geocodeAddress("上海市黄浦区人民大道200号", "取车地址", "上海市"),
+      drivingRoute(
+        { lat: 31.2202, lng: 121.4557 },
+        { lat: 31.2304, lng: 121.4737 }
+      ),
+      geocodeAddress("上海市静安区南京西路", "还车地址", "上海市")
+    ]);
+
+    await vi.advanceTimersByTimeAsync(1_002);
+    await requests;
+
+    expect(startedAt).toHaveLength(4);
+    expect(startedAt[1] - startedAt[0]).toBeGreaterThanOrEqual(334);
+    expect(startedAt[2] - startedAt[1]).toBeGreaterThanOrEqual(334);
+    expect(startedAt[3] - startedAt[2]).toBeGreaterThanOrEqual(334);
+  });
+
   it("reports a timeout after bounded retries", async () => {
     vi.useFakeTimers();
     const fetchMock = vi
@@ -110,10 +229,12 @@ describe("Amap driving route failures", () => {
 
 describe("Amap readiness probe", () => {
   beforeEach(() => {
+    __resetAmapRateLimiterForTests();
     vi.stubEnv("AMAP_SERVER_KEY", "gate3-test-key");
   });
 
   afterEach(() => {
+    __resetAmapRateLimiterForTests();
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   });

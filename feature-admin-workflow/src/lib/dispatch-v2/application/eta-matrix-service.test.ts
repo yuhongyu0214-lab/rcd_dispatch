@@ -13,11 +13,17 @@ import type { EtaCacheValueV2 } from "@/lib/redis";
 // Hoisted mocks — must be defined before the module-level vi.mock calls.
 // ---------------------------------------------------------------------------
 
-const { mockDrivingRoute, mockGetCachedEtaV2, mockCacheEtaV2, mockLogWarn } =
-  vi.hoisted(() => ({
+const {
+  mockDrivingRoute,
+  mockGetCachedEtaV2,
+  mockCacheEtaV2,
+  mockLogInfo,
+  mockLogWarn
+} = vi.hoisted(() => ({
     mockDrivingRoute: vi.fn(),
     mockGetCachedEtaV2: vi.fn(),
     mockCacheEtaV2: vi.fn(),
+    mockLogInfo: vi.fn(),
     mockLogWarn: vi.fn()
   }));
 
@@ -46,7 +52,7 @@ vi.mock("@/lib/redis", async () => {
 
 vi.mock("@/lib/logger", () => ({
   createLogger: () => ({
-    info: vi.fn(),
+    info: mockLogInfo,
     warn: mockLogWarn,
     error: vi.fn()
   })
@@ -235,6 +241,33 @@ describe("cache misses", () => {
     expect(eta).toBe(20); // 1200s / 60 = 20 min
 
     expect(mockDrivingRoute).toHaveBeenCalled();
+  });
+
+  it("shares identical in-flight Amap pairs across concurrent matrices", async () => {
+    let releaseRoute!: (value: { distance: number; duration: number }) => void;
+    const pendingRoute = new Promise<{ distance: number; duration: number }>(
+      (resolve) => {
+        releaseRoute = resolve;
+      }
+    );
+    mockDrivingRoute.mockImplementation(() => pendingRoute);
+
+    const input: DispatchInputV2 = {
+      event: BASE_EVENT,
+      orders: [makeOrder()],
+      drivers: [makeDriver()]
+    };
+
+    const first = buildEtaMatrix(input, "trace-concurrent-1");
+    const second = buildEtaMatrix(input, "trace-concurrent-2");
+
+    await vi.waitFor(() => {
+      expect(mockDrivingRoute).toHaveBeenCalledTimes(3);
+    });
+    releaseRoute({ distance: 5000, duration: 600 });
+
+    await Promise.all([first, second]);
+    expect(mockDrivingRoute).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -584,6 +617,46 @@ describe("cross-order deadhead coverage", () => {
     );
   });
 
+  it("excludes non-candidate driver positions from a three-order ETA matrix", async () => {
+    const orders = Array.from({ length: 3 }, (_, index) =>
+      makeOrder({
+        orderId: `candidate-order-${index}`,
+        pickupLocation: gp(30 + index * 0.01, 120 + index * 0.01),
+        deliveryLocation: gp(31 + index * 0.01, 121 + index * 0.01)
+      })
+    );
+    const availableDriver = makeDriver({ driverId: "available-driver" });
+    const unavailableDriver = makeDriver({
+      driverId: "unavailable-driver",
+      availability: "UNAVAILABLE",
+      lastLocation: {
+        lat: 29,
+        lng: 119,
+        accuracyMeters: 10,
+        capturedAt: new Date(NOW).toISOString()
+      }
+    });
+
+    await buildEtaMatrix({
+      event: BASE_EVENT,
+      orders,
+      drivers: [availableDriver, unavailableDriver]
+    });
+
+    // 3 pickups × (1 candidate origin + 3 delivery cursors) + 3 service legs.
+    expect(mockDrivingRoute).toHaveBeenCalledTimes(15);
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      "eta_matrix_resolved",
+      expect.objectContaining({
+        pairCount: 15,
+        cacheHitCount: 0,
+        cacheMissCount: 15,
+        providerRequestCount: 15,
+        sharedRequestCount: 0
+      })
+    );
+  });
+
   it("keeps the driver origin and existing timeline cursor when more than eight deliveries are nearer", async () => {
     const targetPickup = gp(30, 120);
     const driverOrigin = gp(35, 125);
@@ -690,6 +763,8 @@ describe("cross-order deadhead coverage", () => {
     };
 
     const resolver = await buildEtaMatrix(input);
+    // 2 pickups × (1 candidate origin + 2 delivery cursors) + 2 service legs.
+    expect(mockDrivingRoute).toHaveBeenCalledTimes(8);
     const result = runDispatchV2(input, resolver);
 
     expect(result.evaluations).toEqual([

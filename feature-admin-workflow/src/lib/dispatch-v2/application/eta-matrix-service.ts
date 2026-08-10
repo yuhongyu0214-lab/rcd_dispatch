@@ -5,6 +5,7 @@ import type { DispatchInputV2 } from "@/types/v2/dispatch";
 import type { EtaResolver } from "../core/types";
 
 import { drivingRoute, durationToMinutes } from "@/lib/amap";
+import type { DrivingRouteResult } from "@/lib/amap";
 import { createLogger } from "@/lib/logger";
 import {
   normalizePointHash,
@@ -42,6 +43,13 @@ interface EtaFailure {
   retryable: boolean;
 }
 
+interface ResolvedEtaPair {
+  etaMinutes: number;
+  route: DrivingRouteResult;
+}
+
+const inFlightEtaRequests = new Map<string, Promise<ResolvedEtaPair>>();
+
 function classifyEtaFailure(reason: unknown): EtaFailure {
   if (reason instanceof TypeError) {
     return { code: "AMAP_NETWORK_ERROR", retryable: true };
@@ -56,6 +64,7 @@ function classifyEtaFailure(reason: unknown): EtaFailure {
     code === "AMAP_TIMEOUT" ||
     code === "AMAP_REQUEST_FAILED" ||
     /^AMAP_HTTP_5\d{2}$/.test(code) ||
+    code === "AMAP_API_ERROR_10021" ||
     code === "AMAP_API_ERROR_30000";
 
   return { code, retryable };
@@ -66,6 +75,29 @@ function fingerprintPair(pair: EtaPair): string {
     .update(`${pair.fromHash}${KEY_SEP}${pair.toHash}`)
     .digest("hex")
     .slice(0, 16);
+}
+
+function requestEtaPair(pair: EtaPair): {
+  promise: Promise<ResolvedEtaPair>;
+  started: boolean;
+} {
+  const key = `${pair.fromHash}${KEY_SEP}${pair.toHash}${KEY_SEP}${MODE}`;
+  const existing = inFlightEtaRequests.get(key);
+  if (existing) return { promise: existing, started: false };
+
+  const promise = (async () => {
+    try {
+      const route = await drivingRoute(pair.from, pair.to);
+      return {
+        etaMinutes: durationToMinutes(route.duration),
+        route
+      };
+    } finally {
+      inFlightEtaRequests.delete(key);
+    }
+  })();
+  inFlightEtaRequests.set(key, promise);
+  return { promise, started: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -112,7 +144,11 @@ function collectPairs(input: DispatchInputV2): EtaPair[] {
 
   // Driver lastLocation → deadhead origin
   for (const d of input.drivers) {
-    if (d.lastLocation) deadheadOrigins.push(d.lastLocation);
+    const isCandidate =
+      d.onShift &&
+      d.availability === "AVAILABLE" &&
+      d.locationFreshness === "FRESH";
+    if (isCandidate && d.lastLocation) deadheadOrigins.push(d.lastLocation);
     for (const assignment of d.assignments) {
       if (assignment.deliveryLocation) {
         deadheadOrigins.push(assignment.deliveryLocation);
@@ -226,20 +262,26 @@ export async function buildEtaMatrix(
     }
   }
 
-  // 3. Call Amap for cache misses (parallel, outside any DB transaction).
+  let providerRequestCount = 0;
+  let sharedRequestCount = 0;
+  let unavailablePairCount = 0;
+  const retryableFailureCodes = new Set<string>();
+
+  // 3. Resolve cache misses outside any DB transaction. Concurrent matrices
+  // share the same in-flight pair instead of multiplying identical Amap calls.
   if (misses.length > 0) {
     const amapResults = await Promise.allSettled(
       misses.map(async (p) => {
-        const route = await drivingRoute(p.from, p.to);
-        const etaMinutes = durationToMinutes(route.duration);
+        const request = requestEtaPair(p);
+        if (request.started) providerRequestCount += 1;
+        else sharedRequestCount += 1;
+        const { etaMinutes, route } = await request.promise;
         return { pair: p, etaMinutes, route };
       })
     );
 
     // 4. Populate lookup map + fire-and-forget Redis writes.
     const cacheWrites: Promise<void>[] = [];
-    const retryableFailureCodes = new Set<string>();
-
     for (const [index, result] of amapResults.entries()) {
       if (result.status === "fulfilled") {
         const { pair, etaMinutes, route } = result.value;
@@ -262,6 +304,7 @@ export async function buildEtaMatrix(
           )
         );
       } else {
+        unavailablePairCount += 1;
         const pair = misses[index];
         const failure = classifyEtaFailure(result.reason);
         if (failure.retryable) {
@@ -281,18 +324,28 @@ export async function buildEtaMatrix(
     // from working (the in-memory lookup is already populated).
     await Promise.allSettled(cacheWrites);
 
-    if (retryableFailureCodes.size > 0) {
-      const failureCodes = [...retryableFailureCodes].sort();
-      log.warn("eta_matrix_retry_requested", {
-        traceId,
-        eventType: input.event.type,
-        failureCodes,
-        failedPairCount: amapResults.filter(
-          (result) => result.status === "rejected"
-        ).length
-      });
-      throw new Error(`ETA_MATRIX_RETRYABLE_FAILURE:${failureCodes.join(",")}`);
-    }
+  }
+
+  log.info("eta_matrix_resolved", {
+    traceId,
+    eventType: input.event.type,
+    pairCount: pairs.length,
+    cacheHitCount: pairs.length - misses.length,
+    cacheMissCount: misses.length,
+    providerRequestCount,
+    sharedRequestCount,
+    unavailablePairCount
+  });
+
+  if (retryableFailureCodes.size > 0) {
+    const failureCodes = [...retryableFailureCodes].sort();
+    log.warn("eta_matrix_retry_requested", {
+      traceId,
+      eventType: input.event.type,
+      failureCodes,
+      failedPairCount: unavailablePairCount
+    });
+    throw new Error(`ETA_MATRIX_RETRYABLE_FAILURE:${failureCodes.join(",")}`);
   }
 
   // 5. Return synchronous EtaResolver closure.
