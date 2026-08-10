@@ -1,9 +1,9 @@
 # 人车单数据架构说明 V2
 
-> 架构版本：`RCD-DATA-V2.0-R14-20260803`
+> 架构版本：`RCD-DATA-V2.0-R16-20260810`
 > 状态：架构口径冻结；Gate 3 应用候选包含 9 个内容固定的 migration
 > 目标：当前 RDS 可运行，未来替换外部 API 时迁移代价最小
-> 代码事实：`codex/v2-gate3-app-candidate @ 492c86ea51b40da9426b8ad5b6aef861aa429ab5`
+> 代码事实：`codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`
 
 ## 1. 白话结论
 
@@ -321,3 +321,5 @@ Gate 0：V2 文档冻结（含 CanonicalOrder 与 API 契约的文档级冻结�
 | V2.0-r12 | 2026-08-02 | 对齐部署可用性返修后的唯一候选 `169f2ad8b27f9f0be2d4630144315694656b6a67`：Schema/migration tree 与旧冻结候选完全相同，原空库演练和指纹继续有效 |
 | V2.0-r13 | 2026-08-02 | 对齐部署入口加固候选 `7378303f513d92e781a7930cfff7e14269ec3126`：Schema blob 与 migration tree 继续完全相同，无数据架构变更 |
 | V2.0-r14 | 2026-08-03 | 对齐 Compose 命令修正候选 `492c86ea51b40da9426b8ad5b6aef861aa429ab5`：Schema blob `196a87c7...`、migration tree `c9b46aa4...` 与 9 个 migration 原始字节继续完全相同，无数据架构变更 |
+| V2.0-r15 | 2026-08-08 | 对齐可观测性候选 `4eb3b4857caae9730eb70dd9f2fb152bd8972ca0`：未修改 Prisma Schema、Prisma 枚举、9 个 migration 或 rollback，既有 migration 指纹与预生产实施结论继续有效 |
+| V2.0-r16 | 2026-08-10 | 对齐当前候选 `958afca537b412fb972b6e180561a9b37022834d`：Gate 3 最小 E2E、ETA 重试、H5 显示和全实例高德 3 QPS 限流返修均未修改 Prisma Schema、枚举、9 个 migration 或 rollback；预生产指纹与最小权限结论继续有效 |

@@ -1,7 +1,7 @@
 # 人车单 V2 Agent 公共上下文（Layer 0）
 
 > 文档类型：`DERIVED / LAYER_0`
-> 上下文版本：`RCD-AGENT-CONTEXT-20260805-R8`
+> 上下文版本：`RCD-AGENT-CONTEXT-20260810-R19`
 > 适用范围：所有新建或重新启动的 Agent
 > 权威范围：仅提供项目目标、当前阶段、公共纪律、模块边界和命令入口
 > 非权威范围：产品行为、Schema、HTTP DTO、枚举、基础设施细节和任务验收标准
@@ -19,19 +19,19 @@
 | 项目 | 当前事实 |
 |---|---|
 | 唯一代码候选 | `codex/v2-gate3-app-candidate` |
-| 本地代码 SHA | `492c86ea51b40da9426b8ad5b6aef861aa429ab5` |
-| 远程代码 SHA | `492c86ea51b40da9426b8ad5b6aef861aa429ab5`，已完成普通快进推送与远端核验 |
-| 数据库实施 | 空 PostgreSQL 演练已验证 9 个 migration、最终 Schema、8 个 rollback 和 5 类护栏；真实预生产 `rcd_v2_preprod` 已完成 0805 全量备份、9 个 migration 与迁移后最小权限验收 |
-| 候选状态 | `REQUEST_CHANGES`：Git/ACR/ECS 镜像追溯和 RDS 子闸门已通过；app、worker、Nginx、SLS 与运行时验收尚未完成 |
-| 镜像 | 当前 `492c86e…` → `sha256:fb1237…d27d`、上一候选 `7378303…` → `sha256:1292f8…af57` 与回退 `169f2ad…` → `sha256:6e3799…2674` 均已在 ACR/ECS 保留 |
-| 基础设施 | 阿里云生产主线；ECS Docker、`rcdops`、受控配置、RDS/Tair 白名单与连通、当前镜像拉取、0805 备份、一次性 migration 和数据库权限已验收；app/worker/Nginx/SLS 未启动或实施 |
-| Gate 3 | `NOT_PASS` |
+| 本地代码 SHA | `958afca537b412fb972b6e180561a9b37022834d` |
+| 远程代码 SHA | `958afca537b412fb972b6e180561a9b37022834d`，已完成普通快进推送与远端核验 |
+| 数据库实施 | 空 PostgreSQL 演练已验证 9 个 migration、最终 Schema、8 个 rollback 和 5 类护栏；真实预生产已完成备份、9 个 migration、最小权限和 G3E2E R2.2 基础资料 `3/6/5/8` 核验，owner 已关闭；首轮失败样本与本轮通过/失败事实均保留，禁止重复 bootstrap 或清理 |
+| 候选状态 | `DEPLOYED / REAL_E2E_PASS / FAULT_ROLLBACK_PASS / FINAL_CONSISTENCY_RUNTIME_PASS`：代码、镜像、运行资源、真实 10 单和故障/回退证据一致 |
+| 镜像 | app/worker 运行 `958afca…` → `sha256:13e0…5bff`；Nginx 原镜像/配置/证书/端口不变且 release revision 对齐；更早运行/回退候选继续保留，不得混用 |
+| 基础设施 | 阿里云主线；ECS 上 app/worker/Nginx、自签名 HTTPS、结构化日志、`json-file` 轮转与 LoongCollector `3.2.6` 已验收；SLS 运行/安全日志、查询、脱敏、30/180 天留存、告警、通知和预算通过；正式域名/备案/可信证书延后 |
+| Gate 3 | `WARN / NOT_PASS / DOCUMENT_BASELINE_PENDING` |
 | 第二轮并行 | `FROZEN` |
 | Railway | 仅历史 Demo 证据，不是生产基线 |
 
 状态变化只认 [项目状态总览](../status/README.md)；文档入口只认 [文档版本总入口](../versions/README.md)。
 
-当前候选 HEAD、Git 远程、ACR 和 ECS 当前镜像均对应 `492c86e…`；Compose 命令修正和真实预生产 9 个 migration/最小权限已形成可追溯证据。app、worker、Nginx 仍未启动。下一步必须先关闭 migration owner 长期入口，再按 app → worker → edge 分阶段授权与验收；服务端高德 Key 只能交给 app。
+当前候选 HEAD、Git 远程、ACR 和最终预生产 app/worker 均对应 `958afca…@sha256:13e0…5bff`；Nginx 原镜像/配置/证书/端口不变且 revision 对齐。冻结真实 10 单已通过；worker 基线积压 14 秒恢复，应用回退 `084649f4…` 30 秒、恢复当前候选 31 秒，两阶段真实依赖、HTTPS、单 worker、outbox 和 10 单执行状态通过。一次错误 helper 留下 1 个独立 `G3FAULT` 订单，未分配、outbox 已处理，未清理且不计入冻结 10 单。最终一致性审查运行侧为 `PASS`，文档口径已返修但可追溯文档基线 SHA 尚未形成，因此 Gate 3 为 `WARN / NOT_PASS`，测试 Agent 不自行宣布通过；不得再次变更预生产、执行 migration、重复基础资料、清理证据或启动第二轮。产品阈值、原始 ZIP/manifest、API、Schema 和枚举均不变；服务端高德 Key 只能交给 app。
 
 ## 3. 公共模块边界
 

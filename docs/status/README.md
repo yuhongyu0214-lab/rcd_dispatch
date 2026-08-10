@@ -1,52 +1,85 @@
 # 人车单项目状态总览
 
-> 状态快照：2026-08-05
+> 状态快照：2026-08-10
 > 用途：说明项目做到哪一步、还差什么
 > 非权威范围：产品行为、状态机、Schema、枚举、HTTP 契约、技术栈和生产架构
 
 ## 一句话结论
 
-Gate 3 当前可追溯应用候选为 `492c86ea51b40da9426b8ad5b6aef861aa429ab5`。Git 远程、ACR 与 ECS 当前镜像均已按 digest 对齐该 SHA；上一候选 `7378303…` 与回退候选 `169f2ad…` 继续保留。`rcd_v2_preprod` 已完成 0805 全量备份、冻结的 9 个 migration、迁移后逐表最小权限和失败关闭验收；app、worker、Nginx 尚未启动。Gate 3 未 `PASS`，第二轮并行继续冻结。
+Gate 3 当前唯一代码/镜像/预生产运行候选为 `958afca537b412fb972b6e180561a9b37022834d@sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。2026-08-10 最终一致性审查确认本地/远程代码、ACR digest、ECS 运行身份、真实依赖、冻结 10 单、worker 故障恢复和应用回退证据一致；运行侧为 `PASS`。文档口径已返修，但尚未形成可追溯的 Git 文档基线 SHA，因此 Gate 3 结论为 `WARN / NOT_PASS / DOCUMENT_BASELINE_PENDING`，第二轮继续冻结。
 
 ## 当前工作流状态
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
-| 文档治理 | `UPDATED_AWAITING_BASELINE_COMMIT` | [文档版本总入口](../versions/README.md) | 审查 Layer 0、角色入口、Canvas 与 Stop Hook 后形成文档基线 SHA |
-| 应用候选 | `GIT_ACR_ECS_DIGEST_PASS_AWAITING_APP_START` | [部署入口加固证据](2026-08-02-gate3-deployment-entry-hardening.md) | 当前 digest、revision 与 `linux/amd64` 已在 ECS 核验；待 app-only 启动闸门 |
+| 文档治理 | `FINAL_REVIEW_WARN_AWAITING_BASELINE_COMMIT` | [最终一致性终审](2026-08-10-gate3-final-consistency-review.md) | 当前口径、Layer 0、角色入口和 Canvas 已同步；另行获批 Git 提交/推送后形成文档基线 SHA |
+| 应用候选 | `958AFCA_RESTORED_FAULT_ROLLBACK_PASS` | [故障与回退验收](2026-08-10-gate3r-fault-rollback-acceptance.md) | 保持当前运行身份不变，等待文档基线与最终闸门裁决 |
 | 依赖安全 | `COMPLETED` | [依赖安全返修](2026-08-01-gate3-dependency-security-remediation.md) | 依赖变化时重跑全套审计 |
 | migration 指纹 | `PREPROD_APPLIED_PASS` | [migration 清单](2026-08-01-gate3-migration-manifest.md) | 保持冻结，后续候选变化必须重新生成与迁移 |
-| 数据库迁移 | `PREPROD_9_MIGRATIONS_POSTGRANT_PASS` | [RDS 迁移与权限证据](2026-08-05-gate3r-rds-preprod-migration-permissions.md) | 关闭 owner 长期连接入口后进入 app-only 启动闸门 |
-| 基础设施文档 | `RDS_SUBGATE_PASS_RUNTIME_PENDING` | [基础设施状态](2026-08-01-infrastructure-baseline-status.md) | 完成 app/worker/edge、SLS、健康与回退证据 |
-| ACR 镜像发布 | `CURRENT_PREVIOUS_ROLLBACK_ECS_DIGESTS_PASS` | [ACR/ECS 镜像追溯证据](2026-08-02-gate3r-acr-image-publication.md) | 三份镜像继续保留；运行只认当前完整 digest |
-| 阿里云预生产准备 | `RDS_SUBGATE_PASS_AWAITING_APP_START` | [预生产准备包](2026-08-01-gate3r-aliyun-preproduction-preparation.md) | 关闭 migration owner 长期入口，再单独批准 app-only 启动与 readiness |
+| 数据库迁移 | `PREPROD_9_MIGRATIONS_OWNER_RETIRED_PASS` | [RDS 迁移与权限证据](2026-08-05-gate3r-rds-preprod-migration-permissions.md) | 保持冻结，不得重复 migration |
+| 隔离业务基础资料 | `BASE_DATA_PASS_TEST_FACTS_RETAINED` | [真实 E2E 重验进度](2026-08-10-gate3r-real-e2e-retest-progress.md) | 不重复基础资料写入；所有通过与失败样本均保留 |
+| 基础设施文档 | `FINAL_CONSISTENCY_RUNTIME_PASS_DOC_BASELINE_PENDING` | [最终一致性终审](2026-08-10-gate3-final-consistency-review.md) | 保持运行资源不变，形成可追溯文档基线 |
+| ACR 镜像发布 | `958AFCA_DIGEST_RUNTIME_PASS` | [真实 E2E 重验进度](2026-08-10-gate3r-real-e2e-retest-progress.md) | 保持 `958afca…@sha256:13e0…5bff`，不得混用或再次重建 |
+| 阿里云预生产准备 | `FINAL_CONSISTENCY_RUNTIME_PASS` | [故障与回退验收](2026-08-10-gate3r-fault-rollback-acceptance.md) | 不再变更服务；正式可信 HTTPS 与整机/RDS 灾备另行验收 |
 | 本地 Docker Desktop | `DATA_MOVED_TO_D_NTFS_BACKUP_RETAINED` | `D:\DockerDesktop\data\DockerDesktopWSL` | 镜像、版本、容器与卷核验通过；完整 VHDX 备份保留，不影响生产架构 |
-| 既有预生产成果审查 | `RDS_PERMISSION_REMEDIATED_RUNTIME_PENDING` | [RDS 迁移与权限证据](2026-08-05-gate3r-rds-preprod-migration-permissions.md) | 数据权限返修已实施；继续运行时验收 |
-| Gate 3 总闸门 | `NOT_PASS` | [V2 并行开发主计划](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md) | Gate 3-R 阿里云实施 + 终审 |
+| 既有预生产成果审查 | `RUNTIME_FINAL_CONSISTENCY_PASS` | [RDS 迁移与权限证据](2026-08-05-gate3r-rds-preprod-migration-permissions.md) | 保持备份、9 个 migration、最小权限、单 worker 和运行身份不变 |
+| 真实 10 单 | `REAL10_PASS_9_COMPLETED_1_INFEASIBLE_ALERT` | [真实 E2E 重验进度](2026-08-10-gate3r-real-e2e-retest-progress.md) | 保留全部成功与失败现场，不清理 |
+| Gate 3 总闸门 | `WARN_NOT_PASS_DOCUMENT_BASELINE_PENDING` | [最终一致性终审](2026-08-10-gate3-final-consistency-review.md) | 形成并复核文档基线 SHA 后再作最终闸门裁决 |
 | 第二轮并行 | `FROZEN` | 同上 | 仅 Gate 3 `PASS` 后放行 |
 
 ## 唯一代码与迁移基线
 
 ```text
 branch: codex/v2-gate3-app-candidate
-local commit: 492c86ea51b40da9426b8ad5b6aef861aa429ab5
-remote commit: 492c86ea51b40da9426b8ad5b6aef861aa429ab5
+local commit: 958afca537b412fb972b6e180561a9b37022834d
+remote commit: 958afca537b412fb972b6e180561a9b37022834d
 migration count: 9
 forward-manifest sha256: a5f70be102f46a026e7d482155364bb2a513ce6714b2871148a0e9031261d47d
 all-sql aggregate sha256: b35b7322cd6961249c006dca0d4e18e3a84dc52af8a5bd72a99d5e0b5b89ef5f
-rollback image tag: 169f2ad8b27f9f0be2d4630144315694656b6a67
-rollback image digest: sha256:6e37995289a05a7462bd02b873498ae5cc87fda70ebe73e0d29b53d258cb2674
-previous candidate image tag: 7378303f513d92e781a7930cfff7e14269ec3126
-previous candidate image digest: sha256:1292f8f552c5528c20f48737fe6d2b47bd0aa14813e89eaf4a8f4381f77aaf57
-current candidate image tag: 492c86ea51b40da9426b8ad5b6aef861aa429ab5
-current candidate image digest: sha256:fb12371fefa3bdd6cba318b8fd25cb8031c0211f2e81a43c85e614174633d27d
+previous runtime image tag: 7595a649e166e78bc4936d16e84e478bbc659309
+previous runtime image digest: sha256:2734a7fe5d96744523f71ab73a3d5efc74643099501489ccf0845808dd6f5844
+earlier runtime image tag: 4eb3b4857caae9730eb70dd9f2fb152bd8972ca0
+earlier runtime image digest: sha256:9ec8265b971453edd73bc4e0ea882c3d8665ed46beabf78756d03409e80c962f
+rollback image tag: 084649f498c7bce3c1418c2a5d9273282b085efc
+rollback image digest: sha256:4664fc50cbd1a6bf08e24e99447d2f03097e3d21a74fcdaa80d2c2c432b05947
+migration-era candidate image tag: 492c86ea51b40da9426b8ad5b6aef861aa429ab5
+migration-era candidate image digest: sha256:fb12371fefa3bdd6cba318b8fd25cb8031c0211f2e81a43c85e614174633d27d
+superseded non-runtime candidate tag: 08d84cfc6624dc1e29f24b75f715550718067fb1
+superseded non-runtime candidate digest: sha256:04ea40c46cfa7eb6f6bd6a08b3bc2d74d547efcf0ab296bd641f3bd3f2ac1376
+current candidate/runtime image tag: 958afca537b412fb972b6e180561a9b37022834d
+current candidate/runtime image index digest: sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff
+current amd64 manifest digest: sha256:04798acbaa142e97b5bc2cdba85d3852e5c0261da9a3368c9c6ba73e24127f87
 ```
 
-中间提交、来源分支和主工作区未提交代码不属于 Gate 3 当前验收对象。当前 HEAD、Git 远程、ACR 和 ECS 当前镜像均为 `492c86e…` 对应的完整 digest；Compose 命令修正已经形成可追溯发布基线。预生产 9 个 migration 与对象权限验收已通过，上一候选与回退候选继续保留，app/worker/Nginx 尚未启动。
+中间提交、来源分支和主工作区未提交代码不属于 Gate 3 当前验收对象。当前 HEAD、Git 远程、ACR 与预生产 app/worker 均为 `958afca…@sha256:13e0…5bff`；Nginx 沿用原镜像、配置、证书和端口，只把运行 revision 刷新为 `958afca…`。`7595a649…`、`4eb3b485…`、`084649f4…` 与迁移期候选继续保留，运行不得混用；`08d84cfc…` 是被后续限流返修取代、未进入预生产运行的候选。app、worker、Nginx、本机结构化日志、轮转和 SLS 集中观测仍健康；G3E2E R2.2 基础资料禁止重复整批写入，所有失败证据继续保留。
+
+## 真实 E2E 与 H5 新登记
+
+- 首轮正式三单 ingest `3/3` 成功但未形成 A/B/C 的失败事实继续保留，详见
+  [真实 E2E 首轮失败记录](2026-08-09-gate3r-real-e2e-first-round-failure.md)。
+- Gate 3 最小返修、全实例高德 `3 QPS` 限流及其回归最终形成 `958afca…` 运行候选；服务端
+  发布身份已对齐，外部 HTTP 契约、Schema、migration 和基础资料不变。
+- 冻结真实 10 单已通过：订单 1～6、8～10 共 9 单完成；订单 7 按预期不可行且生成 1 条开放
+  预警。订单 4～6 的第 6 单只在独立运行证据中使用 `-25` 目标，产品 `-30` 阈值和原始
+  ZIP/manifest 均未改变。旧映射、边界抖动和预检失败现场继续保留。
+- 到达前手动改排只有一次成功；旧版本、并发败方和到达后改排分别按冻结错误码拒绝。订单 10
+  重放没有重复来源事件、订单、Assignment 或 outbox。详见[真实 E2E 重验进度](2026-08-10-gate3r-real-e2e-retest-progress.md)。
+- 实时高德地图、获准的司机/订单标记和整体排版重做已登记到 Gate 3 通过后的司机端专项，
+  当前不放行开发。
+
+## 故障注入与应用回退
+
+- worker 停止期间 app HTTPS 保持 `200`；10 分钟基线 outbox 形成
+  `DISPATCH_RESOURCE_BUSY` 积压，恢复单副本 worker 后 14 秒排空且错误清零。
+- 应用按 app → worker → Nginx 回退到 `084649f4…@sha256:4664…5947` 用时 30 秒，按同序恢复
+  `958afca…@sha256:13e0…5bff` 用时 31 秒；两阶段真实依赖 readiness、HTTPS、运行身份、
+  outbox 和冻结 10 单执行状态通过。
+- 早期错误脚本生成的 1 个独立 `G3FAULT` 订单保持 `UNASSIGNED / UNKNOWN`，outbox 已处理；
+  它不属于冻结 10 单且未清理。完整失败现场与通过证据见[故障与回退验收](2026-08-10-gate3r-fault-rollback-acceptance.md)。
 
 ## Agent 上下文治理增量
 
-本轮已建立以下项目级上下文分发能力，但当前仍在工作区中等待统一审查和文档基线提交：
+本轮已建立并完成统一审查的项目级上下文分发能力，当前仍在工作区中等待文档基线提交：
 
 - `docs/context/agent-common-context.md`：所有 Agent 必读的 Layer 0，当前 126 行；
 - `docs/versions/README.md`：为主控、前端、后端、数据库、地图调度、代码审计和测试提供可直接定位的角色入口；

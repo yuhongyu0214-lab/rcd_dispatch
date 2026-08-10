@@ -58,8 +58,8 @@ Gate -1 基线整理（已通过，develop @ 37ee8a3）
 ```
 
 - 每个 Gate 通过验收后才能创建下一阶段分支；不得提前建分支。
-- Gate 3 当前可追溯应用候选为 `codex/v2-gate3-app-candidate @ 492c86ea51b40da9426b8ad5b6aef861aa429ab5`；Git 远程同名分支与 ACR 镜像已核验到该 SHA，对应 digest 为 `sha256:fb12371fefa3bdd6cba318b8fd25cb8031c0211f2e81a43c85e614174633d27d`。上一候选 `7378303f513d92e781a7930cfff7e14269ec3126@sha256:1292f8f552c5528c20f48737fe6d2b47bd0aa14813e89eaf4a8f4381f77aaf57` 与回退候选 `169f2ad8b27f9f0be2d4630144315694656b6a67@sha256:6e37995289a05a7462bd02b873498ae5cc87fda70ebe73e0d29b53d258cb2674` 继续保留，不得混用。
-- Gate 3-R 生产主线为阿里云；Railway 只保留历史 Demo 证据。Compose 命令修正已完成完整回归、提交、普通推送和 ACR 新镜像追溯；ECS 已安装 Docker、建立 `rcdops` 管理账号，并按 digest 保留当前、上一与回退镜像。`rcd_v2_preprod` 已完成 0805 全量备份、冻结的 9 个 migration、对象 owner 与迁移后最小权限验收；app、worker、Nginx 和 SLS 尚未启动或实施。Gate 3 未 `PASS`，第二轮并行继续冻结。
+- Gate 3 当前唯一代码/ACR/预生产运行候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`；app、worker 与 Nginx release revision 已对齐，Nginx 原镜像、配置、证书和端口未变。更早运行/回退候选继续保留，不得使用 `latest` 或混用候选。
+- Gate 3-R 生产主线为阿里云；Railway 只保留历史 Demo 证据。预生产备份、9 个 migration、最小权限、app/worker/Nginx/HTTPS/SLS、冻结真实 10 单、worker 积压恢复和应用回退均通过；`084649f4…` 回退 30 秒、`958afca…` 恢复 31 秒，最终三容器 revision 对齐、HTTPS 200、outbox 无积压或错误。最终一致性审查确认代码、镜像、运行资源和证据一致；文档口径已返修但可追溯文档基线 SHA 尚未形成。一次错误 helper 留下 1 个独立未分配 `G3FAULT` 订单，未清理且不计入冻结 10 单。Gate 3 为 `WARN / NOT_PASS / DOCUMENT_BASELINE_PENDING`，禁止再次变更预生产、执行 migration、重复基础资料、清理证据或启动第二轮。
 - V2 分支命名 `feature/v2-*`；合并路径仍为 `feature/* → develop → main`。
 - 每个分支只能修改自己的独占文件范围；Schema、公共 DTO、共享样式、logger、调度事务各有唯一所有者线。
 

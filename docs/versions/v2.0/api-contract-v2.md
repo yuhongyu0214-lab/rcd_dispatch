@@ -1,10 +1,10 @@
 # 人车单 V2 API 契约
 
-> 契约版本：`RCD-API-V2.0-R11-20260803`
+> 契约版本：`RCD-API-V2.0-R13-20260810`
 > 状态：Gate 3 应用候选复核通过；外部 HTTP 契约未因框架升级改变
 > 实施约束：本文件只冻结契约，不含任何代码；TypeScript DTO、错误类型和契约测试在 Gate 2 落地
 > 上游依据：[PRD V2](prd-v2.md) · [数据架构 V2](data-architecture-v2.md) · [项目规则 V2](project-rules-v2.md)
-> 代码事实：`codex/v2-gate3-app-candidate @ 492c86ea51b40da9426b8ad5b6aef861aa429ab5`
+> 代码事实：`codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`
 
 ## 1. 通用约定
 
@@ -287,3 +287,5 @@ lat, lng, accuracyMeters, capturedAt
 | V2.0-r9 | 2026-08-02 | 对齐部署可用性返修后的唯一候选 `169f2ad8b27f9f0be2d4630144315694656b6a67`：V2 health/readiness 按既有契约实现，外部业务 HTTP 契约零变化 |
 | V2.0-r10 | 2026-08-02 | 对齐部署入口加固候选 `7378303f513d92e781a7930cfff7e14269ec3126`：受保护 readiness 与入口 trace 过滤沿用既有契约，外部业务 HTTP 契约零变化 |
 | V2.0-r11 | 2026-08-03 | 对齐 Compose 命令修正候选 `492c86ea51b40da9426b8ad5b6aef861aa429ab5`：只修改部署 README 与部署测试，HTTP 方法、路径、鉴权、DTO、状态码、错误码与 traceId 语义零变化 |
+| V2.0-r12 | 2026-08-08 | 对齐可观测性候选 `4eb3b4857caae9730eb70dd9f2fb152bd8972ca0`：发布 revision、日志字段、Nginx 访问日志与轮转返修不改变 HTTP 方法、路径、鉴权、DTO、状态码、错误码或 traceId 语义 |
+| V2.0-r13 | 2026-08-10 | 对齐当前候选 `958afca537b412fb972b6e180561a9b37022834d`：Gate 3 最小 E2E、ETA 重试、司机地图读取、H5 显示和全实例高德 3 QPS 限流返修均保持既有 HTTP 方法、路径、鉴权、DTO、状态码、错误码与 traceId 语义 |

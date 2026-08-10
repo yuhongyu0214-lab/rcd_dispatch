@@ -1,8 +1,8 @@
 # 人车单项目文档版本总入口
 
-> 版本戳：`RCD-DOC-REGISTRY-20260805-R9`
+> 版本戳：`RCD-DOC-REGISTRY-20260810-R20`
 > 建立日期：2026-07-13
-> 治理更新时间：2026-08-05
+> 治理更新时间：2026-08-10
 > 归档方式：现行权威集中到 `v2.0/`；已融合或冲突的旧方案从工作树清场，历史由 Git 追溯
 > 可视化导航：[Obsidian 项目全景白板](../rcd-v2-project-map.canvas)（仅作导航，不替代下方权威文档）
 
@@ -19,19 +19,19 @@
 
 | 范围 | 当前版本 | 状态 | 入口 |
 |---|---|---|---|
-| 产品需求 | V2.0 | Gate 0 已冻结 | [PRD V2](v2.0/prd-v2.md) |
-| 数据架构 | V2.0-r14 | 当前候选 Schema/migration tree 与空库演练基线完全相同 | [数据架构 V2](v2.0/data-architecture-v2.md) |
-| 代码与设计约束 | V2.0-r14 | Compose 命令修正已形成新 SHA/ACR 镜像；业务规则零变化 | [项目规则 V2](v2.0/project-rules-v2.md) |
-| API 契约 | V2.0-r11 | 当前候选对外部 HTTP 契约零变化 | [API 契约 V2](v2.0/api-contract-v2.md) |
-| 领域词汇 | V2.0-r11 | 当前候选领域术语与枚举零变化已登记 | [领域词汇 V2](v2.0/domain-glossary-v2.md) |
-| 应用框架与依赖决策 | V2.0-r3 | 当前候选部署命令修正未改变既有应用决策 | [应用决策日志](v2.0/application-decision-log.md) |
+| 产品需求 | V2.0-r4 | Gate 3 H5 最小显示返修与 Gate 3 后司机端地图/排版专项已分开登记 | [PRD V2](v2.0/prd-v2.md) |
+| 数据架构 | V2.0-r16 | 当前候选 Schema/migration tree 与冻结基线完全相同 | [数据架构 V2](v2.0/data-architecture-v2.md) |
+| 代码与设计约束 | V2.0-r17 | 当前候选、真实 10 单和故障/回退事实已校正；业务规则和设计变量零变化 | [项目规则 V2](v2.0/project-rules-v2.md) |
+| API 契约 | V2.0-r13 | 当前候选对外部 HTTP 契约零变化 | [API 契约 V2](v2.0/api-contract-v2.md) |
+| 领域词汇 | V2.0-r13 | 当前候选领域术语与枚举零变化已登记 | [领域词汇 V2](v2.0/domain-glossary-v2.md) |
+| 应用框架与依赖决策 | V2.0-r5 | 当前候选未改变框架、依赖来源或兼容边界 | [应用决策日志](v2.0/application-decision-log.md) |
 | V1→V2 兼容映射 | V2.0 | Gate 0 已冻结 | [兼容矩阵](v2.0/v1-v2-compatibility-matrix.md) |
-| 生产基础设施架构 | V2.0-r2 | Gate 3-R R7 已冻结；ECS 与 RDS 子闸门已实施，运行时仍待验收 | [基础设施架构 V2](v2.0/infrastructure-v2.md) |
-| 构建、部署与回退 | V2.0-r2 | 当前 digest、一次性 migration 和数据库权限已验收；app/worker/edge 未启动 | [部署指南 V2](v2.0/deployment-guide-v2.md) |
-| 生产运行与恢复 | V2.0-r1 | Docker 管理基线已实施；SLS、运行健康、故障和恢复仍待验收 | [运维指南 V2](v2.0/operations-guide-v2.md) |
-| 基础设施决策与替代历史 | V2.0-r2 | INFRA-001～022 已登记 | [基础设施决策日志](v2.0/infrastructure-decision-log.md) |
-| 项目当前状态 | 2026-08-05 | `492c86e…` Git/ACR/ECS 与 RDS 迁移/权限通过；待 app/worker/edge 运行验收，Gate 3 未 PASS | [状态总览](../status/README.md) |
-| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260805-R8 | Layer 0；所有 Agent 必读；不超过 150 行；已接入 Codex 回合结束确认 Hook | [Agent 公共上下文](../context/agent-common-context.md) |
+| 生产基础设施架构 | V2.0-r3 | 架构裁决不变；ECS、RDS/Tair、运行时与 SLS 子闸门已实施 | [基础设施架构 V2](v2.0/infrastructure-v2.md) |
+| 构建、部署与回退 | V2.0-r10 | Git/ACR digest/ECS 运行身份一致性审查通过；分阶段和禁止 migration 规则不变 | [部署指南 V2](v2.0/deployment-guide-v2.md) |
+| 生产运行与恢复 | V2.0-r6 | 最终运行资源、健康、10 单、outbox 和证据一致性通过；整机/RDS 灾备仍为独立演练 | [运维指南 V2](v2.0/operations-guide-v2.md) |
+| 基础设施决策与替代历史 | V2.0-r3 | INFRA-001～023 已登记；公网 IP 预生产演示获准，正式上线条件不变 | [基础设施决策日志](v2.0/infrastructure-decision-log.md) |
+| 项目当前状态 | 2026-08-10 | 最终一致性审查运行侧通过；文档口径已返修但基线 SHA 待形成，Gate 3 为 WARN/NOT PASS | [状态总览](../status/README.md) |
+| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260810-R19 | Layer 0；所有 Agent 必读；不超过 150 行；已接入 Codex 回合结束确认 Hook | [Agent 公共上下文](../context/agent-common-context.md) |
 | V1 产品与开发主线 | V1.x | 历史只读 | [V1 历史索引](v1/README.md) |
 
 ## 文档权威顺序（按领域拆分，唯一权威口径）
@@ -137,8 +137,8 @@ HTTP 契约               → v2.0/api-contract-v2.md
 | 层级 | 当前唯一结论 | 当前实施状态 |
 |---|---|---|
 | 正式生产云 | 中国大陆正式生产主线使用阿里云；Railway 仅保留历史 Demo 证据，CloudBase 仅限隔离预览/验证 | 架构已批准，阿里云生产尚未验收 |
-| 运行与入口 | 单 ECS 试运行；Docker + Nginx；同一不可变镜像分别运行 Next.js app、HTTP-only 单副本 worker、一次性 migration | ECS Docker、非 root 管理和一次性 migration 已验收；app/worker/Nginx 尚未启动 |
-| 镜像与日志 | ACR 保存按 commit SHA 追溯的镜像；SLS 集中采集结构化日志 | 当前、上一与回退候选均已在 ACR/ECS 按 digest 保留；SLS/运行验收待实施 |
+| 运行与入口 | 单 ECS 试运行；Docker + Nginx；同一不可变镜像分别运行 Next.js app、HTTP-only 单副本 worker、一次性 migration | app、worker、Nginx、自签名 HTTPS 与外部健康/登录路由已验收；正式可信 HTTPS 延后 |
+| 镜像与日志 | ACR 保存按 commit SHA 追溯的镜像；SLS 集中采集结构化日志 | ECS app/worker 当前按 `958afca…@sha256:13e0…5bff` 运行，Nginx 原镜像不变且 release revision 已对齐；本机轮转与 SLS 验收结论继续有效 |
 | 事实数据库 | 阿里云 RDS PostgreSQL 是唯一业务事实库；Prisma 负责 ORM 与 migration | 上海独立预生产库已完成 0805 全量备份、9 个 migration 和最小权限验收；正式生产另建物理实例 |
 | 实时数据 | 阿里云 Tair/Redis 保存最新位置、在线状态、ETA 短缓存和短锁，不得成为业务事实源 | 上海预生产 Tair 白名单与内网登录通过；app 运行后的前缀、锁竞争和降级验收仍待完成 |
 | 地图与路径 | 高德 JS API 负责前端地图；高德服务端 API 负责地理编码、路径与真实 ETA | Key 分离，服务端 Key 不得进入浏览器 |
@@ -151,23 +151,25 @@ HTTP 契约               → v2.0/api-contract-v2.md
 
 ```text
 branch: codex/v2-gate3-app-candidate
-local commit: 492c86ea51b40da9426b8ad5b6aef861aa429ab5
-remote commit: 492c86ea51b40da9426b8ad5b6aef861aa429ab5
+local commit: 958afca537b412fb972b6e180561a9b37022834d
+remote commit: 958afca537b412fb972b6e180561a9b37022834d
 ```
 
-- 当前已发布代码事实、依赖版本、外部 HTTP 不变性、枚举不变性、Schema 不变性和 migration 指纹只认完整 SHA `492c86ea51b40da9426b8ad5b6aef861aa429ab5`。该候选只在部署 README 与部署测试中补齐 Compose 完整命令前缀；业务代码、Schema、migration、契约和依赖均未变化。
+- 当前唯一代码/ACR/预生产运行候选只认完整 SHA `958afca537b412fb972b6e180561a9b37022834d`。该候选包含 Gate 3 最小 E2E 入口、ETA 诊断/受控重试、司机地图读取一致性、H5 导航/测试标记过滤与全实例高德 `3 QPS` 限流，并保持外部 HTTP 契约、领域枚举、Schema、9 个 migration、依赖和设计变量不变。
 - 最终 migration 清单与风险见 [2026-08-01 Gate 3 migration manifest](../status/2026-08-01-gate3-migration-manifest.md)，正向清单自身 SHA-256 为 `a5f70be102f46a026e7d482155364bb2a513ce6714b2871148a0e9031261d47d`，全部 17 个 SQL 聚合 SHA-256 为 `b35b7322cd6961249c006dca0d4e18e3a84dc52af8a5bd72a99d5e0b5b89ef5f`。
-- 部署入口加固见 [2026-08-02 部署入口加固候选](../status/2026-08-02-gate3-deployment-entry-hardening.md)。当前候选镜像为 `492c86ea51b40da9426b8ad5b6aef861aa429ab5@sha256:fb12371fefa3bdd6cba318b8fd25cb8031c0211f2e81a43c85e614174633d27d`；上一候选 `7378303f513d92e781a7930cfff7e14269ec3126@sha256:1292f8f552c5528c20f48737fe6d2b47bd0aa14813e89eaf4a8f4381f77aaf57` 与回退候选 `169f2ad8b27f9f0be2d4630144315694656b6a67@sha256:6e37995289a05a7462bd02b873498ae5cc87fda70ebe73e0d29b53d258cb2674` 均已在 ECS 保留。三者均为 `linux/amd64`，不得使用 `latest`。
-- 真实预生产数据库实施见 [2026-08-05 RDS 迁移与最小权限验收](../status/2026-08-05-gate3r-rds-preprod-migration-permissions.md)：0805 全量备份、冻结的 9 个 migration、对象 owner、逐表 app 白名单和 worker 零数据库权限均已失败关闭验收通过；app/worker/Nginx 尚未启动。
+- 最小显示与 ETA 返修构建证据见 [2026-08-09 最小 E2E 返修候选](../status/2026-08-09-gate3r-minimal-e2e-remediation-candidate.md)；随后加入全实例高德 `3 QPS` 限流形成 `958afca…@sha256:13e0…5bff`，本地、远程、ACR、预生产 app/worker 与 Nginx release revision 已对齐。冻结真实 10 单已通过：9 单完成，订单 7 按预期不可行并保留开放预警；第 6 单仅在独立证据中使用获准的 `-25` 目标，产品 `-30` 阈值、外部契约和数据结构零变化。详见[2026-08-10 真实 E2E 重验进度](../status/2026-08-10-gate3r-real-e2e-retest-progress.md)。既有运行/回退候选继续保留，运行不得使用 `latest` 或混用候选。
+- 真实预生产数据库实施见 [2026-08-05 RDS 迁移与最小权限验收](../status/2026-08-05-gate3r-rds-preprod-migration-permissions.md)：0805 全量备份、冻结的 9 个 migration、对象 owner、逐表 app 白名单、worker 零数据库权限和 owner 长期入口关闭均通过。公网入口、app、worker、Nginx、本机日志护栏与 SLS 集中观测均已通过。
+- 隔离基础资料实施见 [2026-08-09 G3E2E R2.2 基础资料写入与核验](../status/2026-08-09-gate3r-g3e2e-base-data-bootstrap.md)：bootstrap 时 `3` 个门店、`6` 个用户、`5` 名司机和 `8` 台车辆已由 app 身份精确核验且订单、班次、位置为 `0`。其后首轮正式 E2E 已写入并保留三单失败样本；不得重复整批写入或未经授权清理。
 - 中间提交、来源分支和主工作区未提交文件仅用于历史追溯，不得作为 Gate 3 当前验收对象。
 - Railway 既有部署只保留历史 Demo 证据；现行生产平台边界以 Gate 3-R 基建裁决为准，旧 README、CLAUDE 或 runbook 不得继续定义 Railway 生产步骤。
 
 ## 当前闸门与下一步
 
-1. 权威文档审查、工程回归、9 个 migration 指纹和当前/上一/回退镜像追溯已经完成；当前 digest 已进入 ECS，预生产 9 个 migration 与数据库最小权限子闸门已通过。
+1. 权威文档内容审查、工程回归、9 个 migration 指纹和当前/上一/回退镜像追溯已经完成；`958afca…@sha256:13e0…5bff` 已进入 ACR 并在 ECS app/worker 运行，Nginx 仅刷新同一 release revision，预生产 9 个 migration 与数据库最小权限子闸门继续有效。
 2. 新候选的 Schema/migration tree 与完成一次性空 PostgreSQL 演练的旧冻结候选完全相同；原有 9 个正向 migration、最终 Schema、8 个 rollback 和五类安全护栏结论继续有效。
-3. 下一步先关闭 migration owner 长期连接入口，再单独申请 app-only 启动与 liveness/readiness 验收；不得重复 migration，也不得同时启动 worker 或 edge。
-4. Gate 3 终审 `PASS` 前，不得创建或启动第二轮 Web、司机接口和观测分支。
+3. 冻结真实 10 单已完成：订单 1～6、8～10 共 9 单完成，订单 7 按预期为 `INFEASIBLE` 且保留 1 条开放预警；并发、旧版本、到达后改排拒绝与订单 10 幂等重放均通过。首轮失败、旧映射、边界抖动和错误 helper 现场继续保留，不得清理。
+4. 最终一致性审查确认本地/远程代码、ACR digest、ECS 运行身份、真实依赖、10 单结果和故障/回退证据一致；文档口径已返修，但尚无可追溯的文档基线 SHA。另行获得 Git 提交/推送授权并复核基线后，才能作 Gate 3 最终裁决。
+5. Gate 3 终审 `PASS` 前，不得创建或启动第二轮 Web、司机接口和观测分支；不得再次部署、执行 migration、重复基础资料整批写入、擅自清理失败样本或直接写业务数据库。
 
 状态事实和阻断项统一在[状态总览](../status/README.md)维护；状态文档不得修改领域契约。
 

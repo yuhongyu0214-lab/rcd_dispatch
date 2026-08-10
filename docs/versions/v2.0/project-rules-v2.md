@@ -1,9 +1,9 @@
 # 人车单项目代码与设计规则 V2
 
-> 规则版本：`RCD-RULES-V2.0-R14-20260803`
+> 规则版本：`RCD-RULES-V2.0-R17-20260810`
 > 状态：当前有效
 > 作用：统一代码一致性、开发边界、设计变量和 V1/V2 冲突处理
-> 当前应用事实：`codex/v2-gate3-app-candidate @ 492c86ea51b40da9426b8ad5b6aef861aa429ab5`
+> 当前应用事实：`codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`
 
 ## 1. 规则来源与融合结论
 
@@ -62,7 +62,7 @@
 - V2 新功能使用 `feature/v2-*` 分支或独立 worktree，不把 V2 schema 与 V1 页面修改混进同一提交。
 - 合并路径仍为 `feature/* → develop → main`。
 - V2 顺序：文档 → schema → 内部 DTO/API → Adapter → 调度引擎 → 页面 → 观测与稳定性。
-- Gate 3-R 当前已发布 Git/ACR 候选为 `492c86ea51b40da9426b8ad5b6aef861aa429ab5@sha256:fb12371fefa3bdd6cba318b8fd25cb8031c0211f2e81a43c85e614174633d27d`；上一候选 `7378303f513d92e781a7930cfff7e14269ec3126@sha256:1292f8f552c5528c20f48737fe6d2b47bd0aa14813e89eaf4a8f4381f77aaf57` 与回退候选 `169f2ad8b27f9f0be2d4630144315694656b6a67@sha256:6e37995289a05a7462bd02b873498ae5cc87fda70ebe73e0d29b53d258cb2674` 继续保留。Compose 命令修正已经形成可追溯发布基线，但 ECS 尚未拉取当前镜像；未经后续授权不得执行 migration、秘密注入、容器启动或第二轮并行功能。
+- Gate 3-R 当前已发布并运行的 Git/ACR/ECS 候选为 `958afca537b412fb972b6e180561a9b37022834d@sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`；首选应用回退为 `084649f498c7bce3c1418c2a5d9273282b085efc@sha256:4664fc50cbd1a6bf08e24e99447d2f03097e3d21a74fcdaa80d2c2c432b05947`。app、worker、Nginx、SLS、真实 10 单、worker 积压恢复和应用回退均已验收，当前候选已恢复；只允许 Gate 3 最终一致性审查，禁止再次变更预生产、重复 migration/基础资料、清理证据或启动第二轮。
 - Schema 变更先生成迁移 SQL 和 rollback SQL，再等待审查。
 - 每阶段退出前通过测试、构建和业务验收，不以“页面能打开”替代闭环验收。
 
@@ -200,3 +200,6 @@
 | V2.0-r12 | 2026-08-02 | 本地候选更新为 `7378303f513d92e781a7930cfff7e14269ec3126`；部署入口加固复验通过，远程与新镜像待完成，Schema/migration 与业务规则零变化 |
 | V2.0-r13 | 2026-08-02 | `7378303f...` 远程与 `sha256:1292f8...af57` 镜像追溯通过，`169f2ad8...@sha256:6e3799...2674` 保留回退；Compose 显式配置文件修正未提交，未执行 migration、秘密注入或容器启动 |
 | V2.0-r14 | 2026-08-03 | Compose 完整命令前缀修正形成 `492c86ea...`，Git/ACR digest `sha256:fb1237...d27d` 追溯通过；未修改业务代码、Schema、migration、HTTP 契约、领域枚举或设计变量，ECS 拉取和预生产实施待完成 |
+| V2.0-r15 | 2026-08-08 | 可观测性返修形成 `4eb3b485...@sha256:9ec826...962f` 并在 ECS 运行：发布 revision、app/worker/Nginx 结构化日志与 Docker 轮转通过；HTTP 契约、Schema、migration、枚举和设计变量零变化，SLS 集中采集仍待实施 |
+| V2.0-r16 | 2026-08-10 | 校正当前应用事实为 `958afca…@sha256:13e0…5bff` 并登记真实 10 单通过；仅运行状态与下一验收边界变化，业务规则、设计变量、HTTP 契约、Schema、migration 和枚举零变化 |
+| V2.0-r17 | 2026-08-10 | 登记 worker 积压恢复、应用回退和当前候选恢复通过，将当前边界收紧为只允许 Gate 3 终审；业务规则、设计变量、HTTP 契约、Schema、migration 和枚举零变化 |
