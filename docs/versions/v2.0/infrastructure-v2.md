@@ -1,6 +1,6 @@
 # 人车单生产基础设施架构 V2
 
-> 文档版本：`RCD-INFRA-V2.0-R3-20260810`
+> 文档版本：`RCD-INFRA-V2.0-R4-20260810`
 >
 > 状态：Gate 3-R 预生产基础设施已实施，并通过真实 10 单、故障恢复与应用回退验收；正式域名、备案、可信证书和整机/RDS 灾备仍未验收
 >
@@ -89,7 +89,7 @@ Railway 仅保留为历史 Demo 证据；CloudBase 只能承载假数据或脱�
 | 入口与日志 | 自签名 HTTPS、Nginx、本机 `json-file 20m × 5`、LoongCollector 与 SLS 子闸门通过；正式可信 HTTPS 延后 |
 | 业务与恢复 | 冻结真实 10 单、worker 积压恢复、应用回退与当前候选恢复通过；整机与 RDS 灾备仍是独立演练 |
 
-完整状态与证据分别见[项目状态总览](../../status/README.md)、[真实 E2E 重验进度](../../status/2026-08-10-gate3r-real-e2e-retest-progress.md)和[故障与回退验收](../../status/2026-08-10-gate3r-fault-rollback-acceptance.md)。Gate 3 仍须先形成可追溯的文档基线 SHA，不能由本架构文档自行宣布通过。
+完整状态与证据分别见[项目状态总览](../../status/README.md)、[真实 E2E 重验进度](../../status/2026-08-10-gate3r-real-e2e-retest-progress.md)和[故障与回退验收](../../status/2026-08-10-gate3r-fault-rollback-acceptance.md)。可追溯文档基线已形成：`feature/v2-gate3-review-remediation @ 57ef86c43bf220f48774e130575c40b8c94a83d5`；本架构文档仍不能自行宣布 Gate 3 通过，最终裁决只由主控作出。
 
 ## 4. 组件职责
 
@@ -229,3 +229,4 @@ Redis/Tair 故障时允许实时能力降级，但不得产生第二套业务事
 | V2.0-r1 | 2026-07-30 | 冻结阿里云生产主线、单 ECS、app/worker/migration、RDS/Tair、ACR/SLS 和安全边界 |
 | V2.0-r2 | 2026-08-01 | 登记 HTTP-only worker 边界，并将 7 月 31 日至 8 月 1 日资源事实转交状态报告维护；架构裁决不变 |
 | V2.0-r3 | 2026-08-10 | 登记阿里云预生产 app/worker/Nginx、RDS/Tair、ACR/SLS、真实 10 单、故障恢复和应用回退已实施；正式生产可信入口与整机/RDS 灾备边界不变 |
+| V2.0-r4 | 2026-08-10 | 登记最终运行一致性审查与文档基线 `57ef86c…` 追溯完成；架构组件、正式生产可信入口和整机/RDS 灾备边界不变 |

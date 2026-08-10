@@ -10,13 +10,14 @@
 >
 > 镜像：`sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`（ACR index digest）
 >
-> 结论：`WARN / NOT_PASS / DOCUMENT_BASELINE_PENDING`
+> 结论：`DOCUMENT_BASELINE_PASS / FINAL_GATE_DECISION_PENDING`
 
 ## 1. 白话结论
 
 代码仓库、镜像仓库和预生产服务器使用的是同一版程序，系统健康、冻结 10 单、故障恢复和
-应用回退结果也没有漂移。文档中的旧候选和旧进度已经返修，但这些文档尚未获得单独的 Git
-提交/推送授权，因此还没有可追溯的文档基线 SHA。Gate 3 暂不放行，且不需要重新构建或部署。
+应用回退结果也没有漂移。文档中的旧候选和旧进度已经返修，并已形成可追溯文档基线
+`feature/v2-gate3-review-remediation @ 57ef86c43bf220f48774e130575c40b8c94a83d5`；本地、upstream
+与 GitHub 远程 SHA 完全一致。Gate 3 仍等待主控最终裁决，不需要重新构建或部署。
 
 ## 2. 代码与镜像一致性
 
@@ -76,18 +77,19 @@ Schema、migration、枚举、依赖和设计变量没有变化。
 ## 5. 失败判定与当前闸门
 
 根据并行开发主计划：无 P0 但存在当前阶段必须关闭的 P1 时，结论为 `WARN`，不得放行下一阶段。
-本轮运行侧和文档内容复核已通过，但当前文档仍位于未提交工作树，根仓库 HEAD
-`69053cce0956ea76f32aca0449783eca38f3966e` 不能代表本轮文档内容。
+本轮运行侧和文档内容复核已通过；此前阻断 Gate 3 的文档基线 P1 已由提交
+`57ef86c43bf220f48774e130575c40b8c94a83d5` 关闭，分支为
+`feature/v2-gate3-review-remediation`，本地、upstream 和 GitHub 远程核验一致。
 
 因此当前结论为：
 
 ```text
 runtime consistency: PASS
 document content after remediation: PASS
-traceable document baseline SHA: PENDING
-Gate 3: WARN / NOT_PASS
+traceable document baseline SHA: PASS (57ef86c43bf220f48774e130575c40b8c94a83d5)
+Gate 3: NOT_PASS / FINAL_GATE_DECISION_PENDING
 second round: FROZEN
 ```
 
-下一步必须另行获得 Git 提交/推送授权，形成并复核文档基线 SHA，再由主控作 Gate 3 最终裁决。
-该步骤不需要重新构建镜像、部署、migration、基础资料写入或业务数据清理。
+下一步只允许由主控对已通过的退出条件作 Gate 3 最终裁决。该步骤不需要重新构建镜像、
+部署、migration、基础资料写入或业务数据清理。

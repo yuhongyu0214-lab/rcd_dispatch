@@ -1,8 +1,8 @@
 # 人车单生产部署、迁移与回退指南 V2
 
-> 文档版本：`RCD-DEPLOY-V2.0-R10-20260810`
+> 文档版本：`RCD-DEPLOY-V2.0-R11-20260810`
 >
-> 状态：Gate 3-R R10 已冻结；代码、ACR digest 与预生产运行身份一致性审查通过，最终运行 `958afca…`；文档基线 SHA 待形成
+> 状态：Gate 3-R R11 已冻结；代码、ACR digest、预生产运行身份与文档基线 `57ef86c…` 均完成追溯；最终运行 `958afca…`，等待 Gate 3 最终裁决
 >
 > 权威范围：构建、镜像、发布、迁移、启动、验证和回退顺序
 >
@@ -319,3 +319,4 @@ docker compose --env-file <受控配置文件> \
 | V2.0-r8 | 2026-08-10 | 登记冻结真实 10 单通过并放行故障注入与应用回退验收；既有分阶段顺序、回退目标和禁止 migration/基础资料/清理规则不变 |
 | V2.0-r9 | 2026-08-10 | 登记 `084649f4…` 分阶段回退 30 秒和 `958afca…` 恢复 31 秒通过；Nginx 原镜像/配置/证书/端口、Schema、migration 和基础资料不变 |
 | V2.0-r10 | 2026-08-10 | 最终一致性审查确认 GitHub 远程 `958afca…`、ACR index digest `sha256:13e0…5bff`、amd64 manifest、ECS app/worker 镜像与三服务 release revision 一致；未重新构建、部署或执行 migration |
+| V2.0-r11 | 2026-08-10 | 登记文档基线 `feature/v2-gate3-review-remediation @ 57ef86c…` 已提交、推送并完成本地/upstream/GitHub 远程核验；应用发布、回退与禁止 migration 规则不变 |

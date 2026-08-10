@@ -1,8 +1,8 @@
 # Gate 3-R 工作现场保护与基建权威档案执行优化方案
 
-> 方案版本：`RCD-GATE3R-PLAN-V2-20260810`
+> 方案版本：`RCD-GATE3R-PLAN-V3-20260810`
 >
-> 状态：Gate 3-R 预生产实施与运行验收已完成；当前应用候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。Git/ACR/ECS、RDS/Tair、app、worker、Nginx、HTTPS、SLS、真实 10 单、故障恢复与应用回退均通过；最终一致性审查运行侧为 `PASS`，文档基线 SHA 尚未形成，Gate 3 仍未 PASS
+> 状态：Gate 3-R 预生产实施与运行验收已完成；当前应用候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。Git/ACR/ECS、RDS/Tair、app、worker、Nginx、HTTPS、SLS、真实 10 单、故障恢复与应用回退均通过；最终一致性审查运行侧为 `PASS`，文档基线 `57ef86c…` 已提交、推送并核验。Gate 3 为 `NOT_PASS / FINAL_GATE_DECISION_PENDING`
 >
 > 当前裁决：暂停 Gate 3 开发；第二轮并行继续冻结；不从 Gate 0 重来
 >
