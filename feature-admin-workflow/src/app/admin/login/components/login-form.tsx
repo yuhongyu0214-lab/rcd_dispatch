@@ -3,6 +3,8 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { resolveLoginDestination } from "./login-destination";
+
 type LoginResponse =
   | {
       success: true;
@@ -11,6 +13,7 @@ type LoginResponse =
         email: string;
         name: string;
         role: string;
+        driverId?: string;
       };
       error: null;
       traceId: string;
@@ -22,10 +25,18 @@ type LoginResponse =
       traceId: string;
     };
 
-export function LoginForm({ nextPath }: { nextPath: string }) {
+export function LoginForm({
+  nextPath,
+  allowPublicRegistration,
+  demoCredentials
+}: {
+  nextPath: string;
+  allowPublicRegistration: boolean;
+  demoCredentials: { account: string; password: string } | null;
+}) {
   const router = useRouter();
-  const [account, setAccount] = useState("admin@dispatch.dev");
-  const [password, setPassword] = useState("admin123");
+  const [account, setAccount] = useState(demoCredentials?.account ?? "");
+  const [password, setPassword] = useState(demoCredentials?.password ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,7 +60,7 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
         return;
       }
 
-      router.replace(nextPath);
+      router.replace(resolveLoginDestination(payload.data, nextPath));
       router.refresh();
     } catch {
       setError("登录失败，请稍后重试");
@@ -92,11 +103,13 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
         />
       </label>
 
-      <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-        <p>默认种子账号：</p>
-        <p>账号：admin@dispatch.dev</p>
-        <p>密码：admin123</p>
-      </div>
+      {demoCredentials ? (
+        <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          <p>默认种子账号：</p>
+          <p>账号：{demoCredentials.account}</p>
+          <p>密码：{demoCredentials.password}</p>
+        </div>
+      ) : null}
 
       {error ? (
         <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -112,13 +125,15 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
         {submitting ? "登录中..." : "登录"}
       </button>
 
-      <button
-        type="button"
-        className="text-sm text-slate-600 underline underline-offset-4"
-        onClick={() => router.push("/admin/register")}
-      >
-        没有账号，去注册
-      </button>
+      {allowPublicRegistration ? (
+        <button
+          type="button"
+          className="text-sm text-slate-600 underline underline-offset-4"
+          onClick={() => router.push("/admin/register")}
+        >
+          没有账号，去注册
+        </button>
+      ) : null}
     </form>
   );
 }

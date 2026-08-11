@@ -307,6 +307,8 @@ describe("runDispatchV2", () => {
     expect(asg.slot).toBe("A");
     expect(asg.etaAvailable).toBe(true);
     expect(asg.deadheadEtaMinutes).toBe(15);
+    // G3-0 contract: new plans must emit null, never a pseud Id.
+    expect(asg.assignmentId).toBeNull();
   });
 
   it("multiple drivers, single order → best ETA wins", () => {
@@ -437,6 +439,7 @@ describe("runDispatchV2", () => {
 
     // First assignment is the frozen one (seqNo 1, slot A)
     const slotA = d1.assignments.find((a) => a.sequenceNo === 1)!;
+    // G3-0 contract: existing assignments retain their real ID.
     expect(slotA.assignmentId).toBe("frozen-1");
     expect(slotA.orderId).toBe("frozen-order");
 
@@ -445,6 +448,8 @@ describe("runDispatchV2", () => {
     expect(slotB).toBeDefined();
     expect(slotB.orderId).toBe("o1");
     expect(slotB.slot).toBe("B");
+    // G3-0 contract: new plans emit null.
+    expect(slotB.assignmentId).toBeNull();
   });
 
   // -----------------------------------------------------------------------

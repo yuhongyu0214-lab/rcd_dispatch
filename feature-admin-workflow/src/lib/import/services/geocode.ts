@@ -1,5 +1,6 @@
 import { AMAP_GEOCODE_TIMEOUT_MS } from "@/lib/import/constants";
 import type { GeocodeIngestStatus } from "@/lib/ingest/normalize";
+import { scheduleAmapServerRequest } from "@/lib/amap";
 
 export type GeocodeResult =
   | {
@@ -47,8 +48,6 @@ export async function geocodeAddress(
     };
   }
 
-  const { signal, cleanup } = withTimeoutSignal(AMAP_GEOCODE_TIMEOUT_MS);
-
   try {
     const url = new URL("https://restapi.amap.com/v3/geocode/geo");
     url.searchParams.set("key", amapKey);
@@ -57,10 +56,17 @@ export async function geocodeAddress(
       url.searchParams.set("city", city);
     }
 
-    const response = await fetch(url, {
-      method: "GET",
-      signal,
-      cache: "no-store"
+    const response = await scheduleAmapServerRequest(async () => {
+      const { signal, cleanup } = withTimeoutSignal(AMAP_GEOCODE_TIMEOUT_MS);
+      try {
+        return await fetch(url, {
+          method: "GET",
+          signal,
+          cache: "no-store"
+        });
+      } finally {
+        cleanup();
+      }
     });
 
     if (!response.ok) {
@@ -129,7 +135,5 @@ export async function geocodeAddress(
       message: `${addressLabel}地理编码超时或失败，已按待补全继续导入`,
       geocodeStatus: "FAILED"
     };
-  } finally {
-    cleanup();
   }
 }

@@ -131,7 +131,8 @@ export type IngestResultReasonV2 =
   | "STALE_VERSION"
   | "DUPLICATE"
   | "FOLLOW_UP_REQUIRED"
-  | "VALIDATION_FAILED";
+  | "VALIDATION_FAILED"
+  | "STORE_NOT_FOUND";
 
 export type IngestRecordResultV2 = {
   index: number;

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireDriverPage } from "@/lib/auth/current-user";
 
 import { DriverGpsTracker } from "./components/driver-gps-tracker";
+import { getVisibleDisplayValue } from "./components/driver-task-display";
 
 export default async function DriverLayout({
   children
@@ -10,6 +11,7 @@ export default async function DriverLayout({
   children: React.ReactNode;
 }) {
   const user = await requireDriverPage();
+  const visibleUserName = getVisibleDisplayValue(user.name);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -20,7 +22,9 @@ export default async function DriverLayout({
             <h1 className="text-base font-semibold text-slate-900">
               🚗 司机工作台
             </h1>
-            <p className="text-xs text-slate-500">{user.name}</p>
+            {visibleUserName ? (
+              <p className="text-xs text-slate-500">{visibleUserName}</p>
+            ) : null}
           </div>
           <DriverGpsTracker driverId={user.driverId!} />
         </div>

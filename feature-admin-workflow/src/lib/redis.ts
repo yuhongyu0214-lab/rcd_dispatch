@@ -3,6 +3,7 @@
  *
  * 依赖：ioredis（需安装：pnpm add ioredis）
  * 环境变量：REDIS_URL (redis://user:pass@host:port)
+ *           REDIS_KEY_PREFIX (例如 rcd:v2:preprod:)
  *
  * 基于 docs/production-tair-key-design.md v1.0 的 Key 设计规范。
  * 降级模式：Redis 不可用时所有读操作返回 null，写操作静默失败但 log warn。
@@ -21,6 +22,35 @@ const log = createLogger("redis");
  * ETA / 地图快照 / 派单锁的 TTL 不属于实时键，各自维持原值。
  */
 const REALTIME_TTL_SECONDS = 180;
+
+const REDIS_KEY_PREFIX_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9:_-]*:$/;
+
+/**
+ * 读取并校验环境隔离前缀。
+ *
+ * 前缀必须显式配置、以冒号结尾，且不能包含通配符或空白字符。
+ * 这样 SCAN 表达式不会越过当前环境边界。
+ */
+function getRedisKeyPrefix(): string | null {
+  const prefix = process.env.REDIS_KEY_PREFIX;
+  if (
+    !prefix ||
+    prefix !== prefix.trim() ||
+    !REDIS_KEY_PREFIX_PATTERN.test(prefix)
+  ) {
+    return null;
+  }
+  return prefix;
+}
+
+/** 所有实际 Redis Key 与 SCAN 模式的唯一构造入口。 */
+function redisKey(logicalKey: string): string {
+  const prefix = getRedisKeyPrefix();
+  if (!prefix) {
+    throw new Error("REDIS_KEY_PREFIX is missing or invalid");
+  }
+  return `${prefix}${logicalKey}`;
+}
 
 // ============================================================================
 // 类型定义
@@ -123,6 +153,8 @@ export interface PipelineLike {
 }
 
 export interface RedisClientLike {
+  connect?(): Promise<void>;
+  disconnect?(): void;
   hset(key: string, ...args: string[]): Promise<number>;
   expire(key: string, seconds: number): Promise<number>;
   hgetall(key: string): Promise<Record<string, string>>;
@@ -141,6 +173,7 @@ export interface RedisClientLike {
 }
 
 let redisClient: RedisClientLike | null = null;
+let redisConnectPromise: Promise<void> | null = null;
 
 // ============================================================================
 // 熔断器（Circuit Breaker）
@@ -180,6 +213,7 @@ class RedisCircuitBreaker {
     if (!client) return;
 
     try {
+      if (!(await ensureRedisClientReady(client))) return;
       await client.ping();
       this.degraded = false;
       this.failureCount = 0;
@@ -209,7 +243,15 @@ const circuitBreaker = new RedisCircuitBreaker();
  * 未配置 REDIS_URL 时返回 null，系统降级运行。
  */
 function getRedisClientInternal(): RedisClientLike | null {
-  if (redisClient) return redisClient;
+  if (redisClient) {
+    if (!getRedisKeyPrefix()) {
+      log.error(
+        "REDIS_KEY_PREFIX missing or invalid — Redis features will be degraded"
+      );
+      return null;
+    }
+    return redisClient;
+  }
 
   const redisUrl = process.env.REDIS_URL;
   if (!redisUrl) {
@@ -217,10 +259,16 @@ function getRedisClientInternal(): RedisClientLike | null {
     return null;
   }
 
+  if (!getRedisKeyPrefix()) {
+    log.error(
+      "REDIS_KEY_PREFIX missing or invalid — refusing unprefixed Redis access"
+    );
+    return null;
+  }
+
   // ioredis 需通过 pnpm add ioredis 安装
   // 使用 try-catch 包裹动态 require，避免未安装时启动崩溃
   try {
-    // eslint-disable-next-line
     const Redis = require("ioredis") as { default?: new (...args: unknown[]) => RedisClientLike } & (new (...args: unknown[]) => RedisClientLike);
     const RedisCtor =
       typeof Redis === "function"
@@ -255,15 +303,6 @@ function getRedisClientInternal(): RedisClientLike | null {
       log.info("Redis connected");
     });
 
-    // 异步连接
-    setImmediate(() => {
-      if (redisClient) {
-        redisClient.ping().catch(() => {
-          /* 连接失败由熔断器处理 */
-        });
-      }
-    });
-
     return redisClient;
   } catch {
     log.warn("ioredis not installed — run: pnpm add ioredis. Redis features degraded.");
@@ -286,12 +325,44 @@ function getRedisClient(): RedisClientLike | null {
   return getRedisClientInternal();
 }
 
+async function ensureRedisClientReady(
+  client: RedisClientLike
+): Promise<boolean> {
+  if (client.status === "ready") return true;
+  if (typeof client.connect !== "function") return true;
+
+  if (!redisConnectPromise) {
+    redisConnectPromise = client.connect().finally(() => {
+      redisConnectPromise = null;
+    });
+  }
+
+  try {
+    await redisConnectPromise;
+    return client.status === "ready";
+  } catch (error) {
+    log.warn("Redis connection failed", {
+      message: error instanceof Error ? error.message : String(error)
+    });
+    return false;
+  }
+}
+
+async function getReadyRedisClient(): Promise<RedisClientLike | null> {
+  const client = getRedisClient();
+  if (!client) return null;
+  if (await ensureRedisClientReady(client)) return client;
+
+  circuitBreaker.recordFailure();
+  return null;
+}
+
 /**
- * 检查 Redis 是否可用（轻量级，不做 ping）。
- * 返回 false 表示 Redis 不可用，调用方应降级处理。
+ * 检查 Redis 是否可用。
+ * lazyConnect 客户端处于 wait 时会先尝试建立连接，不发送 ping。
  */
-export function isRedisAvailable(): boolean {
-  return !circuitBreaker.isDegraded && getRedisClientInternal() !== null;
+export async function isRedisAvailable(): Promise<boolean> {
+  return (await getReadyRedisClient()) !== null;
 }
 
 /**
@@ -299,7 +370,7 @@ export function isRedisAvailable(): boolean {
  * 返回 true 表示 Redis 可用。
  */
 export async function redisHealthCheck(): Promise<boolean> {
-  const client = getRedisClientInternal();
+  const client = await getReadyRedisClient();
   if (!client) return false;
 
   try {
@@ -323,8 +394,10 @@ export async function closeRedis(): Promise<void> {
     log.info("Redis connection closed");
   } catch (err) {
     log.warn("Redis close error", { message: String(err) });
+    redisClient.disconnect?.();
   } finally {
     redisClient = null;
+    redisConnectPromise = null;
   }
 }
 
@@ -334,6 +407,7 @@ export async function closeRedis(): Promise<void> {
  */
 export function __setRedisClientForTests(client: RedisClientLike | null): void {
   redisClient = client;
+  redisConnectPromise = null;
   circuitBreaker.resetForTests();
 }
 
@@ -350,7 +424,7 @@ async function safeWrite(
   keyPattern: string,
   fn: (client: RedisClientLike) => Promise<unknown>
 ): Promise<void> {
-  const client = getRedisClient();
+  const client = await getReadyRedisClient();
   if (!client) {
     log.warn(`Redis write degraded: ${operation}`, { keyPattern });
     return;
@@ -368,6 +442,36 @@ async function safeWrite(
   }
 }
 
+interface RedisReadResult<T> {
+  redisAvailable: boolean;
+  value: T | null;
+}
+
+/**
+ * 执行 Redis 读操作，并区分「Redis 不可用」与「键不存在」。
+ */
+async function safeReadWithStatus<T>(
+  operation: string,
+  keyPattern: string,
+  fn: (client: RedisClientLike) => Promise<T | null>
+): Promise<RedisReadResult<T>> {
+  const client = await getReadyRedisClient();
+  if (!client) return { redisAvailable: false, value: null };
+
+  try {
+    const result = await fn(client);
+    circuitBreaker.recordSuccess();
+    return { redisAvailable: true, value: result };
+  } catch (err) {
+    circuitBreaker.recordFailure();
+    log.warn(`Redis read failed: ${operation}`, {
+      keyPattern,
+      error: String(err)
+    });
+    return { redisAvailable: false, value: null };
+  }
+}
+
 /**
  * 执行 Redis 读操作。
  * 降级模式或读取失败时返回 null。
@@ -377,21 +481,8 @@ async function safeRead<T>(
   keyPattern: string,
   fn: (client: RedisClientLike) => Promise<T | null>
 ): Promise<T | null> {
-  const client = getRedisClient();
-  if (!client) return null;
-
-  try {
-    const result = await fn(client);
-    circuitBreaker.recordSuccess();
-    return result;
-  } catch (err) {
-    circuitBreaker.recordFailure();
-    log.warn(`Redis read failed: ${operation}`, {
-      keyPattern,
-      error: String(err)
-    });
-    return null;
-  }
+  const { value } = await safeReadWithStatus(operation, keyPattern, fn);
+  return value;
 }
 
 // ============================================================================
@@ -432,10 +523,11 @@ export async function setDriverLocation(
 ): Promise<void> {
   await safeWrite("setDriverLocation", `driver:last_location:{${driverId}}`, async (client) => {
     const fields = buildLocationFields(data);
+    const key = redisKey(`driver:last_location:${driverId}`);
 
     // 先 HMSET（新版 ioredis 也支持 hset 多参数）
-    await client.hset(`driver:last_location:${driverId}`, ...fields);
-    await client.expire(`driver:last_location:${driverId}`, REALTIME_TTL_SECONDS);
+    await client.hset(key, ...fields);
+    await client.expire(key, REALTIME_TTL_SECONDS);
   });
 }
 
@@ -471,13 +563,13 @@ export async function setDriverLocationIfNewer(
   data: DriverLocation,
   tsMs: number
 ): Promise<SetDriverLocationOutcome> {
-  const client = getRedisClient();
+  const client = await getReadyRedisClient();
   if (!client || typeof client.eval !== "function") {
     // 无 eval 能力时不做非原子退化写入——那会静默重引入倒退窗口
     return "unavailable";
   }
 
-  const key = `driver:last_location:${driverId}`;
+  const key = redisKey(`driver:last_location:${driverId}`);
   const fields = buildLocationFields({ ...data, ts_ms: String(tsMs) });
 
   try {
@@ -510,18 +602,44 @@ export async function setDriverLocationIfNewer(
   }
 }
 
+export interface DriverLocationRead {
+  redisAvailable: boolean;
+  location: DriverLocation | null;
+}
+
 /**
- * 读取司机位置（HGETALL）。
+ * 读取司机位置（HGETALL），并返回 Redis 整体可用性。
  * 文档参考：tair-key-design 4.1.4 读取命令
+ */
+export async function getDriverLocationWithStatus(
+  driverId: string
+): Promise<DriverLocationRead> {
+  const result = await safeReadWithStatus(
+    "getDriverLocation",
+    `driver:last_location:{${driverId}}`,
+    async (client) => {
+      const data = await client.hgetall(
+        redisKey(`driver:last_location:${driverId}`)
+      );
+      if (!data || Object.keys(data).length === 0) return null;
+      return data as unknown as DriverLocation;
+    }
+  );
+  return {
+    redisAvailable: result.redisAvailable,
+    location: result.value
+  };
+}
+
+/**
+ * 读取司机位置（兼容入口）。
+ * 需要区分 Redis 不可用与键不存在时，请使用 getDriverLocationWithStatus。
  */
 export async function getDriverLocation(
   driverId: string
 ): Promise<DriverLocation | null> {
-  return safeRead("getDriverLocation", `driver:last_location:{${driverId}}`, async (client) => {
-    const data = await client.hgetall(`driver:last_location:${driverId}`);
-    if (!data || Object.keys(data).length === 0) return null;
-    return data as unknown as DriverLocation;
-  });
+  const { location } = await getDriverLocationWithStatus(driverId);
+  return location;
 }
 
 /** getDriverLocationsWithStatus 的返回结构：整体可用性 + 逐司机位置 */
@@ -546,10 +664,10 @@ export async function getDriverLocationsWithStatus(
   const locations = new Map<string, DriverLocation | null>();
 
   if (driverIds.length === 0) {
-    return { redisAvailable: isRedisAvailable(), locations };
+    return { redisAvailable: await isRedisAvailable(), locations };
   }
 
-  const client = getRedisClient();
+  const client = await getReadyRedisClient();
   if (!client) {
     // 降级：整体不可用
     driverIds.forEach((id) => locations.set(id, null));
@@ -564,7 +682,7 @@ export async function getDriverLocationsWithStatus(
       const pipeline = client.pipeline();
 
       for (const driverId of batch) {
-        pipeline.hgetall(`driver:last_location:${driverId}`);
+        pipeline.hgetall(redisKey(`driver:last_location:${driverId}`));
       }
 
       const results = await pipeline.exec();
@@ -618,20 +736,48 @@ export async function getDriverLocations(
 export async function setDriverOnline(driverId: string): Promise<void> {
   const ts = String(Date.now());
   await safeWrite("setDriverOnline", `driver:online:{${driverId}}`, async (client) => {
-    await client.set(`driver:online:${driverId}`, ts, "EX", REALTIME_TTL_SECONDS);
+    await client.set(
+      redisKey(`driver:online:${driverId}`),
+      ts,
+      "EX",
+      REALTIME_TTL_SECONDS
+    );
   });
 }
 
+export interface DriverOnlineRead {
+  redisAvailable: boolean;
+  online: boolean;
+}
+
 /**
- * 检查司机是否在线（EXISTS）。
+ * 检查司机是否在线（EXISTS），并返回 Redis 整体可用性。
  * 文档参考：tair-key-design 4.2.4 读取命令
  */
+export async function getDriverOnlineStatus(
+  driverId: string
+): Promise<DriverOnlineRead> {
+  const result = await safeReadWithStatus(
+    "isDriverOnline",
+    `driver:online:{${driverId}}`,
+    async (client) => {
+      const count = await client.exists(redisKey(`driver:online:${driverId}`));
+      return count === 1;
+    }
+  );
+  return {
+    redisAvailable: result.redisAvailable,
+    online: result.value ?? false
+  };
+}
+
+/**
+ * 检查司机是否在线（兼容入口）。
+ * Redis 不可用与司机不在线均返回 false；需要区分时请使用 getDriverOnlineStatus。
+ */
 export async function isDriverOnline(driverId: string): Promise<boolean> {
-  const result = await safeRead("isDriverOnline", `driver:online:{${driverId}}`, async (client) => {
-    const count = await client.exists(`driver:online:${driverId}`);
-    return count === 1;
-  });
-  return result ?? false;
+  const { online } = await getDriverOnlineStatus(driverId);
+  return online;
 }
 
 /**
@@ -639,23 +785,24 @@ export async function isDriverOnline(driverId: string): Promise<boolean> {
  * 文档参考：tair-key-design 4.2.4 批量检查
  */
 export async function getOnlineDriverIds(): Promise<string[]> {
-  const client = getRedisClient();
+  const client = await getReadyRedisClient();
   if (!client) return [];
 
   const driverIds: string[] = [];
   let cursor = "0";
+  const onlineKeyPrefix = redisKey("driver:online:");
 
   try {
     do {
       const [nextCursor, keys] = await client.scan(cursor, {
-        match: "driver:online:*",
+        match: `${onlineKeyPrefix}*`,
         count: 200
       });
       cursor = nextCursor;
 
       for (const key of keys) {
-        const prefix = "driver:online:";
-        const driverId = (key as string).replace(prefix, "");
+        if (!key.startsWith(onlineKeyPrefix)) continue;
+        const driverId = key.slice(onlineKeyPrefix.length);
         if (driverId) {
           driverIds.push(driverId);
         }
@@ -687,7 +834,12 @@ export async function cacheEta(
 ): Promise<void> {
   await safeWrite("cacheEta", `eta:{${orderId}}:{${driverId}}:driving`, async (client) => {
     const json = JSON.stringify(etaData);
-    await client.set(`eta:${orderId}:${driverId}:driving`, json, "EX", 60);
+    await client.set(
+      redisKey(`eta:${orderId}:${driverId}:driving`),
+      json,
+      "EX",
+      60
+    );
   });
 }
 
@@ -700,7 +852,9 @@ export async function getCachedEta(
   driverId: string
 ): Promise<EtaData | null> {
   return safeRead("getCachedEta", `eta:{${orderId}}:{${driverId}}:driving`, async (client) => {
-    const raw = await client.get(`eta:${orderId}:${driverId}:driving`);
+    const raw = await client.get(
+      redisKey(`eta:${orderId}:${driverId}:driving`)
+    );
     if (!raw) return null;
 
     try {
@@ -748,10 +902,10 @@ export async function cacheEtaV2(
   value: EtaCacheValueV2,
   ttlSeconds: number = DEFAULT_ETA_TTL_SECONDS
 ): Promise<void> {
-  const key = `eta:${originHash}:${destinationHash}:${mode}`;
-  await safeWrite("cacheEtaV2", key, async (client) => {
+  const logicalKey = `eta:${originHash}:${destinationHash}:${mode}`;
+  await safeWrite("cacheEtaV2", logicalKey, async (client) => {
     const json = JSON.stringify(value);
-    await client.set(key, json, "EX", ttlSeconds);
+    await client.set(redisKey(logicalKey), json, "EX", ttlSeconds);
   });
 }
 
@@ -767,9 +921,9 @@ export async function getCachedEtaV2(
   destinationHash: string,
   mode: string
 ): Promise<EtaCacheValueV2 | null> {
-  const key = `eta:${originHash}:${destinationHash}:${mode}`;
-  return safeRead("getCachedEtaV2", key, async (client) => {
-    const raw = await client.get(key);
+  const logicalKey = `eta:${originHash}:${destinationHash}:${mode}`;
+  return safeRead("getCachedEtaV2", logicalKey, async (client) => {
+    const raw = await client.get(redisKey(logicalKey));
     if (!raw) return null;
     try {
       const parsed = JSON.parse(raw) as EtaCacheValueV2;
@@ -814,7 +968,7 @@ export async function acquireDispatchLock(
   orderId: string,
   ttlSec = 10
 ): Promise<boolean> {
-  const client = getRedisClient();
+  const client = await getReadyRedisClient();
   if (!client) {
     // 降级：跳过 Redis 锁，依赖 Prisma 乐观锁
     return true;
@@ -824,7 +978,7 @@ export async function acquireDispatchLock(
 
   try {
     const result = await client.set(
-      `dispatch:lock:${orderId}`,
+      redisKey(`dispatch:lock:${orderId}`),
       traceId,
       "NX",
       "EX",
@@ -853,7 +1007,7 @@ export async function acquireDispatchLock(
  * 文档参考：tair-key-design 4.4.4 释放命令
  */
 export async function releaseDispatchLock(orderId: string): Promise<void> {
-  const client = getRedisClient();
+  const client = await getReadyRedisClient();
   if (!client) return;
 
   const traceId = (globalThis as { __traceId?: string }).__traceId ?? "unknown";
@@ -866,7 +1020,12 @@ export async function releaseDispatchLock(orderId: string): Promise<void> {
   }
 
   try {
-    await client.eval(RELEASE_LOCK_SCRIPT, 1, `dispatch:lock:${orderId}`, traceId);
+    await client.eval(
+      RELEASE_LOCK_SCRIPT,
+      1,
+      redisKey(`dispatch:lock:${orderId}`),
+      traceId
+    );
     circuitBreaker.recordSuccess();
   } catch (err) {
     // 释放失败可接受，TTL 10s 后自动过期
@@ -907,11 +1066,17 @@ export async function acquireResourceLock(
   token: string,
   ttlSeconds = 10
 ): Promise<LockAcquireResult> {
-  const client = getRedisClient();
+  const client = await getReadyRedisClient();
   if (!client) return "unavailable";
 
   try {
-    const result = await client.set(resourceKey, token, "NX", "EX", ttlSeconds);
+    const result = await client.set(
+      redisKey(resourceKey),
+      token,
+      "NX",
+      "EX",
+      ttlSeconds
+    );
     circuitBreaker.recordSuccess();
     return result === "OK" ? "acquired" : "busy";
   } catch (err) {
@@ -935,7 +1100,7 @@ export async function releaseResourceLock(
   resourceKey: string,
   token: string
 ): Promise<void> {
-  const client = getRedisClient();
+  const client = await getReadyRedisClient();
   if (!client) return;
 
   if (typeof client.eval !== "function") {
@@ -946,7 +1111,12 @@ export async function releaseResourceLock(
   }
 
   try {
-    await client.eval(RESOURCE_LOCK_RELEASE_SCRIPT, 1, resourceKey, token);
+    await client.eval(
+      RESOURCE_LOCK_RELEASE_SCRIPT,
+      1,
+      redisKey(resourceKey),
+      token
+    );
     circuitBreaker.recordSuccess();
   } catch (err) {
     // Release failure is acceptable — TTL will expire the lock.
@@ -1004,7 +1174,7 @@ export async function cacheMapSnapshot(
 ): Promise<void> {
   await safeWrite("cacheMapSnapshot", `map:snapshot:{${storeId}}`, async (client) => {
     const json = JSON.stringify(data);
-    await client.set(`map:snapshot:${storeId}`, json, "EX", 10);
+    await client.set(redisKey(`map:snapshot:${storeId}`), json, "EX", 10);
   });
 }
 
@@ -1016,7 +1186,7 @@ export async function getCachedMapSnapshot(
   storeId: string
 ): Promise<MapSnapshot | null> {
   return safeRead("getCachedMapSnapshot", `map:snapshot:{${storeId}}`, async (client) => {
-    const raw = await client.get(`map:snapshot:${storeId}`);
+    const raw = await client.get(redisKey(`map:snapshot:${storeId}`));
     if (!raw) return null;
 
     try {

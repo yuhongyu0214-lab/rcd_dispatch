@@ -28,6 +28,12 @@ vi.mock("@/lib/import/services/geocode", () => ({
 
 const INGEST_KEY = "test-ingest-key";
 const ALLOWED_ORIGIN = "chrome-extension://allowed-extension-id";
+const orderCreateMock = prisma.order.create as unknown as ReturnType<
+  typeof vi.fn
+>;
+const orderFindFirstMock = prisma.order.findFirst as unknown as ReturnType<
+  typeof vi.fn
+>;
 
 function buildRecord(orderNo: string) {
   return {
@@ -69,7 +75,7 @@ function mockStoreResolution() {
 }
 
 function mockOrderCreate() {
-  vi.mocked(prisma.order.create).mockImplementation(async (args: { data: { orderNo: string } }) =>
+  orderCreateMock.mockImplementation(async (args: { data: { orderNo: string } }) =>
     ({
       id: `id-${args.data.orderNo}`,
       orderNo: args.data.orderNo,
@@ -82,7 +88,7 @@ describe("browser-extension ingest route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.INGEST_API_KEY = INGEST_KEY;
-    process.env.INGEST_ALLOWED_ORIGINS = ALLOWED_ORIGIN;
+    process.env.CORS_ORIGINS = ALLOWED_ORIGIN;
     mockStoreResolution();
     mockOrderCreate();
     vi.mocked(prisma.order.findFirst).mockResolvedValue(null);
@@ -90,7 +96,7 @@ describe("browser-extension ingest route", () => {
 
   afterEach(() => {
     delete process.env.INGEST_API_KEY;
-    delete process.env.INGEST_ALLOWED_ORIGINS;
+    delete process.env.CORS_ORIGINS;
   });
 
   describe("batch limits", () => {
@@ -209,7 +215,7 @@ describe("browser-extension ingest route", () => {
     });
 
     it("rejects requests carrying an Origin when no whitelist is configured", async () => {
-      delete process.env.INGEST_ALLOWED_ORIGINS;
+      delete process.env.CORS_ORIGINS;
 
       const response = await POST(
         buildRequest([buildRecord("RC-CORS-4")], { Origin: ALLOWED_ORIGIN })
@@ -288,7 +294,7 @@ describe("browser-extension ingest route", () => {
   describe("mixed batch", () => {
     it("classifies success / skipped / failed independently", async () => {
       // RC-MIX-DUP 已存在于数据库 → skipped
-      vi.mocked(prisma.order.findFirst).mockImplementation(async (args: { where: { orderNo: string } }) =>
+      orderFindFirstMock.mockImplementation(async (args: { where: { orderNo: string } }) =>
         (args.where.orderNo === "RC-MIX-DUP"
           ? ({ id: "existing", orderNo: "RC-MIX-DUP" } as never)
           : null)

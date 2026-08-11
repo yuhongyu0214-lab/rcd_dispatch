@@ -6,9 +6,10 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(
   _request: Request,
-  { params }: { params: { orderId: string } }
+  { params }: { params: Promise<{ orderId: string }> }
 ) {
   const traceId = _request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
+  const resolvedParams = await params;
   const currentUser = await getCurrentUser();
 
   if (!currentUser) {
@@ -21,7 +22,7 @@ export async function GET(
 
   try {
     const order = await prisma.order.findUnique({
-      where: { id: params.orderId },
+      where: { id: resolvedParams.orderId },
       include: {
         store: { select: { id: true, code: true, name: true } },
         vehicle: { select: { id: true, licensePlate: true, vehicleType: true } },

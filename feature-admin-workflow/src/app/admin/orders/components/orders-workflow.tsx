@@ -796,20 +796,17 @@ export function OrdersWorkflow() {
     if (workspaceMode === "drivers" || workspaceMode === "vehicles" || workspaceMode === "alerts") {
       void loadMapPayload();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceMode]);
 
   useEffect(() => {
     void loadDetail(selectedOrderId);
     setDispatchResult(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedOrderId]);
 
   useEffect(() => {
     if (workspaceMode === "logs") {
       void loadLogs(logsScopedOrderId);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceMode, logsScopedOrderId]);
 
   const activeCopy = modeCopy[workspaceMode];

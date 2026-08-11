@@ -1,0 +1,128 @@
+name: rcd-v2-preprod
+
+services:
+  app:
+    image: ${RCD_IMAGE_REF:?RCD_IMAGE_REF is required}
+    command: ["node", "server.js"]
+    restart: unless-stopped
+    profiles: ["app", "worker", "edge"]
+    environment:
+      DATABASE_URL: ${APP_DATABASE_URL:?APP_DATABASE_URL is required}
+      REDIS_URL: ${APP_REDIS_URL:?APP_REDIS_URL is required}
+      REDIS_KEY_PREFIX: "rcd:v2:preprod:"
+      AUTH_SESSION_SECRET: ${AUTH_SESSION_SECRET:?AUTH_SESSION_SECRET is required}
+      DRIVER_JWT_SECRET: ${DRIVER_JWT_SECRET:?DRIVER_JWT_SECRET is required}
+      INGEST_API_KEY: ${INGEST_API_KEY:?INGEST_API_KEY is required}
+      INGEST_API_KEY_SOURCE: ${INGEST_API_KEY_SOURCE:?INGEST_API_KEY_SOURCE is required}
+      INTERNAL_CRON_SECRET: ${INTERNAL_CRON_SECRET:?INTERNAL_CRON_SECRET is required}
+      AMAP_SERVER_KEY: ${AMAP_SERVER_KEY:?AMAP_SERVER_KEY is required}
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required}
+      ALLOW_PUBLIC_ADMIN_REGISTRATION: "false"
+      RCD_DEPLOYMENT_ENV: "preprod"
+      RCD_RELEASE_REVISION: ${RCD_RELEASE_REVISION:?RCD_RELEASE_REVISION is required}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/v2/health/readiness',
+          {headers:{'X-Internal-Key':process.env.INTERNAL_CRON_SECRET}})
+          .then(response=>{if(!response.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+    networks:
+      - rcd-internal
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  worker:
+    image: ${RCD_IMAGE_REF:?RCD_IMAGE_REF is required}
+    command: ["node", "scripts/dispatch-event-worker.mjs"]
+    restart: unless-stopped
+    profiles: ["worker"]
+    environment:
+      DISPATCH_EVENT_WORKER_ORIGIN: "http://app:3000"
+      DISPATCH_EVENT_WORKER_HEARTBEAT_PATH: "/tmp/dispatch-event-worker-heartbeat"
+      INTERNAL_CRON_SECRET: ${INTERNAL_CRON_SECRET:?INTERNAL_CRON_SECRET is required}
+      RCD_DEPLOYMENT_ENV: "preprod"
+      RCD_RELEASE_REVISION: ${RCD_RELEASE_REVISION:?RCD_RELEASE_REVISION is required}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          import('./scripts/dispatch-event-worker.mjs')
+          .then(({isDispatchWorkerHeartbeatFresh})=>isDispatchWorkerHeartbeatFresh())
+          .then(fresh=>{if(!fresh)process.exit(1)})
+          .catch(()=>process.exit(1))
+      interval: 30s
+      timeout: 5s
+      start_period: 90s
+      retries: 3
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - rcd-internal
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  migration:
+    image: ${RCD_IMAGE_REF:?RCD_IMAGE_REF is required}
+    command:
+      - ./node_modules/.bin/prisma
+      - migrate
+      - deploy
+      - --schema
+      - prisma/schema.prisma
+    restart: "no"
+    profiles:
+      - migration
+    environment:
+      DATABASE_URL: ${MIGRATION_DATABASE_URL:?MIGRATION_DATABASE_URL is required}
+    networks:
+      - rcd-internal
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    profiles: ["edge"]
+    environment:
+      RCD_SERVER_NAME: ${RCD_SERVER_NAME:?RCD_SERVER_NAME is required}
+      RCD_DEPLOYMENT_ENV: "preprod"
+      RCD_RELEASE_REVISION: ${RCD_RELEASE_REVISION:?RCD_RELEASE_REVISION is required}
+    ports:
+      - "${RCD_HTTP_PORT:-80}:80"
+      - "${RCD_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./nginx/rcd.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ${NGINX_TLS_CERT_PATH:?NGINX_TLS_CERT_PATH is required}:/etc/nginx/tls/tls.crt:ro
+      - ${NGINX_TLS_KEY_PATH:?NGINX_TLS_KEY_PATH is required}:/etc/nginx/tls/tls.key:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - rcd-internal
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+networks:
+  rcd-internal:
+    driver: bridge

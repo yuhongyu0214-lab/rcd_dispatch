@@ -1,22 +1,22 @@
-import type { InternalEvent } from "@/lib/events/types";
-import { commitInternalEvent } from "@/lib/events/store";
-import { createLogger } from "@/lib/logger";
+import type { Prisma } from "@prisma/client";
 
-const triggerLog = createLogger("gate3-triggers");
+import type { InternalEvent } from "@/lib/events/types";
+import { enqueueInternalEvent } from "@/lib/events/store";
 
 // ---------------------------------------------------------------------------
 // Thin trigger functions — Gate 3 frozen assignment lifecycle
 //
 // Frozen constraints (2026-07-19 ruling):
 //   - No dispatch queries, plan calculations, or transaction commit logic
-//   - Called AFTER business transaction commit succeeds
-//   - Trigger failure does NOT rollback committed business facts
+//   - Called INSIDE the same transaction as the business fact
+//   - Outbox failure rolls the transaction back; processing failure does not
 //   - eventId must be a stable identifier derived from the business operation
 //     (e.g., `assign-{assignmentId}`), NOT a random UUID. The caller is
 //     responsible for producing the same eventId on retry of the same fact.
 // ---------------------------------------------------------------------------
 
 export async function triggerAssignmentAssigned(params: {
+  tx: Prisma.TransactionClient;
   eventId: string;
   assignmentId: string;
   orderId: string;
@@ -31,19 +31,13 @@ export async function triggerAssignmentAssigned(params: {
     orderId: params.orderId,
     driverId: params.driverId,
     occurredAt: params.occurredAt,
-    traceId: params.traceId,
+    traceId: params.traceId
   };
-  await commitInternalEvent(event).catch((err) => {
-    triggerLog.error("trigger ASSIGNMENT_ASSIGNED failed", {
-      eventId: params.eventId,
-      orderId: params.orderId,
-      traceId: params.traceId,
-      error: String(err),
-    });
-  });
+  await enqueueInternalEvent(params.tx, event);
 }
 
 export async function triggerAssignmentReassigned(params: {
+  tx: Prisma.TransactionClient;
   eventId: string;
   assignmentId: string;
   orderId: string;
@@ -58,19 +52,13 @@ export async function triggerAssignmentReassigned(params: {
     orderId: params.orderId,
     driverId: params.toDriverId,
     occurredAt: params.occurredAt,
-    traceId: params.traceId,
+    traceId: params.traceId
   };
-  await commitInternalEvent(event).catch((err) => {
-    triggerLog.error("trigger ASSIGNMENT_REASSIGNED failed", {
-      eventId: params.eventId,
-      orderId: params.orderId,
-      traceId: params.traceId,
-      error: String(err),
-    });
-  });
+  await enqueueInternalEvent(params.tx, event);
 }
 
 export async function triggerAssignmentWithdrawn(params: {
+  tx: Prisma.TransactionClient;
   eventId: string;
   assignmentId: string;
   orderId: string;
@@ -85,19 +73,13 @@ export async function triggerAssignmentWithdrawn(params: {
     orderId: params.orderId,
     driverId: params.driverId,
     occurredAt: params.occurredAt,
-    traceId: params.traceId,
+    traceId: params.traceId
   };
-  await commitInternalEvent(event).catch((err) => {
-    triggerLog.error("trigger ASSIGNMENT_WITHDRAWN failed", {
-      eventId: params.eventId,
-      orderId: params.orderId,
-      traceId: params.traceId,
-      error: String(err),
-    });
-  });
+  await enqueueInternalEvent(params.tx, event);
 }
 
 export async function triggerAssignmentCancelled(params: {
+  tx: Prisma.TransactionClient;
   eventId: string;
   assignmentId: string;
   orderId: string;
@@ -112,14 +94,7 @@ export async function triggerAssignmentCancelled(params: {
     orderId: params.orderId,
     driverId: params.driverId,
     occurredAt: params.occurredAt,
-    traceId: params.traceId,
+    traceId: params.traceId
   };
-  await commitInternalEvent(event).catch((err) => {
-    triggerLog.error("trigger ASSIGNMENT_CANCELLED failed", {
-      eventId: params.eventId,
-      orderId: params.orderId,
-      traceId: params.traceId,
-      error: String(err),
-    });
-  });
+  await enqueueInternalEvent(params.tx, event);
 }

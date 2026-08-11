@@ -10,20 +10,20 @@ import {
   MAX_BODY_BYTES
 } from "@/lib/adapters/order-source/types";
 
-import type {
-  IngestEnvelopeV2,
-  OnlineOrderSourceSystemV2
-} from "@/types/v2";
+import type { IngestEnvelopeV2, OnlineOrderSourceSystemV2 } from "@/types/v2";
 import { ORDER_SOURCE_SYSTEMS_V2 } from "@/types/v2";
 
 export const dynamic = "force-dynamic";
 
 const log = createLogger("order-source-api");
 
-const ONLINE_SOURCE_SYSTEMS: readonly string[] =
-  ORDER_SOURCE_SYSTEMS_V2.filter((s) => s !== "V1_IMPORT");
+const ONLINE_SOURCE_SYSTEMS: readonly string[] = ORDER_SOURCE_SYSTEMS_V2.filter(
+  (s) => s !== "V1_IMPORT"
+);
 
-function isOnlineSourceSystem(value: string): value is OnlineOrderSourceSystemV2 {
+function isOnlineSourceSystem(
+  value: string
+): value is OnlineOrderSourceSystemV2 {
   return (ONLINE_SOURCE_SYSTEMS as readonly string[]).includes(value);
 }
 
@@ -114,7 +114,10 @@ export async function OPTIONS(request: Request) {
   const origin = request.headers.get("Origin");
 
   if (!origin) {
-    return new NextResponse(null, { status: 204 });
+    return new NextResponse(null, {
+      status: 204,
+      headers: { "X-Trace-Id": traceId }
+    });
   }
 
   const allowedOrigins = getAllowedOrigins();
@@ -132,7 +135,8 @@ export async function OPTIONS(request: Request) {
       "Access-Control-Allow-Methods": CORS_ALLOW_METHODS,
       "Access-Control-Allow-Headers": CORS_ALLOW_HEADERS,
       "Access-Control-Max-Age": "86400",
-      Vary: "Origin"
+      Vary: "Origin",
+      "X-Trace-Id": traceId
     }
   });
 }
@@ -190,8 +194,7 @@ function parseEnvelope(body: unknown): IngestEnvelopeV2 | null {
 }
 
 export async function POST(request: Request) {
-  const traceId =
-    request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
+  const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
 
   // ── P1-3 返修: CORS 约束作用于实际请求，而非只在预检 ──
   // 带 Origin 且不在白名单 → 拒绝（与 OPTIONS 同口径，响应不带 CORS 头）
@@ -312,7 +315,9 @@ async function handleIngestPost(request: Request, traceId: string) {
   // 批次大小校验
   if (envelope.records.length === 0) {
     return failV2(
-      createApiErrorV2("VALIDATION_FAILED", "records 数组不能为空", { fields: { records: ["records 数组不能为空"] } }),
+      createApiErrorV2("VALIDATION_FAILED", "records 数组不能为空", {
+        fields: { records: ["records 数组不能为空"] }
+      }),
       { traceId }
     );
   }

@@ -79,7 +79,8 @@ describe("runOrderImport", () => {
     geocodeAddressMock.mockImplementation(async (_address, addressLabel) => ({
       success: true,
       lat: addressLabel === "取车地址" ? 31.203992 : 31.224361,
-      lng: addressLabel === "取车地址" ? 121.31698 : 121.46917
+      lng: addressLabel === "取车地址" ? 121.31698 : 121.46917,
+      geocodeStatus: "SUCCESS"
     }));
   });
 
@@ -214,14 +215,16 @@ describe("runOrderImport", () => {
         return {
           success: false,
           code: "GEOCODE_FAILED",
-          message: "取车地址地理编码失败，已按待补全继续导入"
+          message: "取车地址地理编码失败，已按待补全继续导入",
+          geocodeStatus: "FAILED"
         };
       }
 
       return {
         success: true,
         lat: 31.224361,
-        lng: 121.46917
+        lng: 121.46917,
+        geocodeStatus: "SUCCESS"
       };
     });
 
@@ -261,14 +264,16 @@ describe("runOrderImport", () => {
         return {
           success: false,
           code: "GEOCODE_FAILED",
-          message: "还车地址地理编码失败，已按待补全继续导入"
+          message: "还车地址地理编码失败，已按待补全继续导入",
+          geocodeStatus: "FAILED"
         };
       }
 
       return {
         success: true,
         lat: 31.203992,
-        lng: 121.31698
+        lng: 121.31698,
+        geocodeStatus: "SUCCESS"
       };
     });
 

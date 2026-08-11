@@ -40,7 +40,7 @@ export async function findUserForLogin(account: string) {
 
 async function readSessionPayload(): Promise<AuthSession | null> {
   try {
-    const token = cookies().get(AUTH_SESSION_COOKIE_NAME)?.value;
+    const token = (await cookies()).get(AUTH_SESSION_COOKIE_NAME)?.value;
 
     if (!token) {
       return null;

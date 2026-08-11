@@ -1,10 +1,17 @@
-import type { LocationSampleV2, LocationBatchResultV2, LocationSampleResultV2, LocationFreshnessV2 } from "@/types/v2";
+import type {
+  LocationSampleV2,
+  LocationBatchResultV2,
+  LocationSampleResultV2,
+  LocationFreshnessV2
+} from "@/types/v2";
 
+import { processInternalEvent } from "@/lib/events/processor";
+import { enqueueInternalEvent } from "@/lib/events/store";
 import { createLogger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import {
-  getDriverLocation,
-  isRedisAvailable,
+  DEFAULT_ETA_TTL_SECONDS,
+  getDriverLocationWithStatus,
   setDriverLocationIfNewer,
   setDriverOnline
 } from "@/lib/redis";
@@ -31,10 +38,11 @@ export class DbClaimFailedError extends Error {
  *
  * Unified per-sample pipeline:
  *   1) validate
- *   2) DB high-water claim (driver.updateMany conditional on
- *      lastLocationCapturedAt < capturedAt) — DB is the idempotency authority
- *   3) on claim success → Redis CAS (cache monotonicity layer)
- *   4) sampling decision → persist to DriverLocationSample if warranted
+ *   2) lock Driver and enforce the DB high-water mark
+ *   3) atomically persist 200m/120s history samples; when 200m movement or
+ *      ETA-cache expiry triggers dispatch, increment planVersion and enqueue
+ *      DRIVER_LOCATION_UPDATED in that same transaction
+ *   4) after commit, update Redis CAS and immediately process a durable event
  *
  * If the DB claim itself throws (infrastructure outage), the first failure
  * aborts the batch by throwing DbClaimFailedError — the route wraps it in
@@ -48,19 +56,6 @@ export async function processLocationBatch(
 ): Promise<LocationBatchResultV2> {
   const results: LocationSampleResultV2[] = [];
   const serverTimeMs = Date.now();
-  let dbSampleWriteFailures = 0;
-  let driverUpdateFailures = 0;
-
-  // ---- Pre-batch: last DB sample (for sampling, rule 7) ----
-  let lastSample = null;
-  try {
-    lastSample = await prisma.driverLocationSample.findFirst({
-      where: { driverId },
-      orderBy: { capturedAt: "desc" }
-    });
-  } catch {
-    // Non-fatal — sampling decisions degrade to "always save"
-  }
 
   // ---- Pre-batch: bulk DB dedup (fast path for already-sampled records) ----
   const capturedAts = samples
@@ -112,29 +107,118 @@ export async function processLocationBatch(
     existingCaptureTimes.add(capturedAtMs);
 
     // 3) DB high-water claim — idempotency authority
-    let claimCount: number;
+    let claimOutcome:
+      | { accepted: true; dispatchEventId: string | null }
+      | { accepted: false; currentMark: Date | null };
     try {
-      const claimResult = await prisma.driver.updateMany({
-        where: {
-          id: driverId,
-          OR: [
-            { lastLocationCapturedAt: null },
-            { lastLocationCapturedAt: { lt: new Date(capturedAtMs) } }
-          ]
-        },
-        data: {
-          lastLat: sample.lat,
-          lastLng: sample.lng,
-          lastAccuracyMeters: sample.accuracyMeters,
-          lastLocationCapturedAt: new Date(capturedAtMs)
+      claimOutcome = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`
+          SELECT "id"
+          FROM "Driver"
+          WHERE "id" = ${driverId}
+          FOR UPDATE
+        `;
+
+        const driver = await tx.driver.findUnique({
+          where: { id: driverId },
+          select: {
+            id: true,
+            lastLocationCapturedAt: true
+          }
+        });
+        if (
+          !driver ||
+          (driver.lastLocationCapturedAt &&
+            driver.lastLocationCapturedAt.getTime() >= capturedAtMs)
+        ) {
+          return {
+            accepted: false as const,
+            currentMark: driver?.lastLocationCapturedAt ?? null
+          };
         }
+
+        const [lastSample, lastDispatchEvent] = await Promise.all([
+          tx.driverLocationSample.findFirst({
+            where: { driverId },
+            orderBy: { capturedAt: "desc" }
+          }),
+          tx.dispatchEventOutbox.findFirst({
+            where: {
+              driverId,
+              type: "DRIVER_LOCATION_UPDATED"
+            },
+            orderBy: { occurredAt: "desc" },
+            select: { occurredAt: true }
+          })
+        ]);
+        const samplingDecision = shouldSaveSample(sample, lastSample, false);
+        const lastDispatchAtMs =
+          lastDispatchEvent?.occurredAt.getTime() ?? Number.NEGATIVE_INFINITY;
+        const etaCacheExpired =
+          capturedAtMs - lastDispatchAtMs >=
+          DEFAULT_ETA_TTL_SECONDS * 1000;
+        const shouldDispatch =
+          samplingDecision.reason === "first_sample" ||
+          samplingDecision.reason === "distance_moved" ||
+          etaCacheExpired;
+        const dispatchEventId = shouldDispatch
+          ? `driver-location-updated:${driverId}:${capturedAtMs}`
+          : null;
+
+        await tx.driver.update({
+          where: { id: driverId },
+          data: {
+            lastLat: sample.lat,
+            lastLng: sample.lng,
+            lastAccuracyMeters: sample.accuracyMeters,
+            lastLocationCapturedAt: new Date(capturedAtMs),
+            ...(dispatchEventId
+              ? { planVersion: { increment: 1 } }
+              : {})
+          }
+        });
+
+        if (samplingDecision.shouldSample) {
+          await tx.driverLocationSample.create({
+            data: {
+              driverId,
+              lat: sample.lat,
+              lng: sample.lng,
+              accuracyMeters: sample.accuracyMeters,
+              capturedAt: new Date(sample.capturedAt)
+            }
+          });
+        }
+        if (dispatchEventId) {
+          await enqueueInternalEvent(tx, {
+            eventId: dispatchEventId,
+            type: "DRIVER_LOCATION_UPDATED",
+            driverId,
+            occurredAt: sample.capturedAt,
+            traceId
+          });
+        }
+        return { accepted: true as const, dispatchEventId };
       });
-      claimCount = claimResult.count;
-    } catch {
+    } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        (error as { code: string }).code === "P2002"
+      ) {
+        results.push({ index: i, status: "skipped", reason: "DUPLICATE" });
+        log.info(
+          "Location sample skipped — concurrent history duplicate rolled back",
+          {
+            traceId,
+            driverId,
+            index: i
+          }
+        );
+        continue;
+      }
       // DB infrastructure failure — the first one aborts the batch.
-      // (If claimCount was already resolved as 0 on a prior iteration,
-      //  this catch is for the updateMany itself throwing, not for
-      //  count=0 — that is handled below via re-read.)
       log.error("DB high-water claim threw — aborting batch", {
         traceId,
         driverId,
@@ -143,65 +227,43 @@ export async function processLocationBatch(
       throw new DbClaimFailedError("DB claim failed", results);
     }
 
-    if (claimCount !== 1) {
-      // count=0 means another request already accepted this capturedAt or
-      // a newer one. Reread to distinguish exact-duplicate vs out-of-order.
-      let currentMark: Date | null = null;
-      try {
-        const d = await prisma.driver.findUnique({
-          where: { id: driverId },
-          select: { lastLocationCapturedAt: true }
-        });
-        currentMark = d?.lastLocationCapturedAt ?? null;
-      } catch {
-        // Can't determine — conservatively skip
-        results.push({ index: i, status: "skipped", reason: "DUPLICATE" });
-        log.warn("Location sample skipped — high-water re-read failed", {
-          traceId,
-          driverId,
-          index: i
-        });
-        continue;
-      }
-
+    if (!claimOutcome.accepted) {
+      const currentMark = claimOutcome.currentMark;
       if (currentMark) {
         const currentMs = currentMark.getTime();
         if (currentMs === capturedAtMs) {
           results.push({ index: i, status: "skipped", reason: "DUPLICATE" });
-          log.info("Location sample skipped — exact duplicate (cross-batch idempotent)", {
-            traceId,
-            driverId,
-            index: i,
-            capturedAtMs,
-            dedup: "EXACT"
-          });
+          log.info(
+            "Location sample skipped — exact duplicate (cross-batch idempotent)",
+            {
+              traceId,
+              driverId,
+              index: i,
+              capturedAtMs,
+              dedup: "EXACT"
+            }
+          );
           continue;
         }
         if (currentMs > capturedAtMs) {
           results.push({ index: i, status: "skipped", reason: "DUPLICATE" });
-          log.info("Location sample skipped — out-of-order (conservative skip, no regression)", {
-            traceId,
-            driverId,
-            index: i,
-            capturedAtMs,
-            currentMs,
-            dedup: "OUT_OF_ORDER"
-          });
+          log.info(
+            "Location sample skipped — out-of-order (conservative skip, no regression)",
+            {
+              traceId,
+              driverId,
+              index: i,
+              capturedAtMs,
+              currentMs,
+              dedup: "OUT_OF_ORDER"
+            }
+          );
           continue;
         }
-        // currentMs < capturedAtMs 但 count=0 — 异常竞态，保守跳过
-        results.push({ index: i, status: "skipped", reason: "DUPLICATE" });
-        log.warn("Location sample skipped — claim anomaly (mark < sample but count=0)", {
-          traceId,
-          driverId,
-          index: i,
-          capturedAtMs,
-          currentMs
-        });
-        continue;
       }
 
-      // No mark after claim → driver may not exist; conservative skip
+      // No mark means the driver disappeared between route validation and
+      // this transaction. Conservatively skip without regressing state.
       results.push({ index: i, status: "skipped", reason: "DUPLICATE" });
       continue;
     }
@@ -226,12 +288,15 @@ export async function processLocationBatch(
     if (casOutcome === "stale" || casOutcome === "duplicate") {
       // DB won the claim but Redis disagrees — the DB is authoritative.
       // Log so we can detect clock drift or cache state skew over time.
-      log.warn("Redis CAS disagreed with DB claim (not actionable — DB is authority)", {
-        traceId,
-        driverId,
-        index: i,
-        casOutcome
-      });
+      log.warn(
+        "Redis CAS disagreed with DB claim (not actionable — DB is authority)",
+        {
+          traceId,
+          driverId,
+          index: i,
+          casOutcome
+        }
+      );
     }
 
     // setDriverOnline is always called after a successful DB claim;
@@ -245,61 +310,25 @@ export async function processLocationBatch(
       }
     }
 
-    // 5) Sampling & history (rule 7)
-    const decision = shouldSaveSample(sample, lastSample, false);
-    if (decision.shouldSample) {
+    // Process only significant location changes, after the realtime cache has
+    // observed the accepted sample. Redis failure is safe because snapshot
+    // construction falls back to the transactionally-updated Driver row.
+    if (claimOutcome.dispatchEventId) {
       try {
-        const created = await prisma.driverLocationSample.create({
-          data: {
-            driverId,
-            lat: sample.lat,
-            lng: sample.lng,
-            accuracyMeters: sample.accuracyMeters,
-            capturedAt: new Date(sample.capturedAt)
-          }
-        });
-        lastSample = {
-          id: created.id,
-          driverId: created.driverId,
-          lat: created.lat,
-          lng: created.lng,
-          accuracyMeters: created.accuracyMeters,
-          capturedAt: created.capturedAt,
-          receivedAt: created.receivedAt,
-          createdAt: created.createdAt
-        };
-      } catch (err) {
-        // P2002 (unique constraint on driverId+capturedAt) is a race:
-        // another concurrent request also accepted this sample.
-        // Treat as DUPLICATE — not a write failure.
-        if (
-          err &&
-          typeof err === "object" &&
-          "code" in err &&
-          (err as { code: string }).code === "P2002"
-        ) {
-          results.push({ index: i, status: "skipped", reason: "DUPLICATE" });
-          log.info("Location sample skipped — concurrent P2002 on history write", {
-            traceId,
-            driverId,
-            index: i
-          });
-          continue;
-        }
-        // Other persistence errors are best-effort
-        dbSampleWriteFailures += 1;
-        log.warn("Failed to persist location sample", {
+        await processInternalEvent(claimOutcome.dispatchEventId);
+      } catch (error) {
+        log.error("Location dispatch event processing failed; outbox retained", {
+          dispatchEventId: claimOutcome.dispatchEventId,
           traceId,
           driverId,
-          index: i
+          error: error instanceof Error ? error.message : String(error)
         });
       }
     }
 
-    // No separate Driver.lastLat/lastLng write — the DB claim already
-    // updated them atomically (step 3). driverUpdateFailures stays at 0
-    // because a throw in step 3 aborts the batch; a re-read failure in
-    // the count=0 branch either produces a skipped reason or throws.
+    // The latest location is always updated. History follows the 200m/120s
+    // sampling rule; dispatch follows 200m/ETA-cache-expiry. Any triggered
+    // version increment and outbox write share the same transaction (step 3).
 
     results.push({ index: i, status: "success" });
   }
@@ -312,9 +341,7 @@ export async function processLocationBatch(
     driverId,
     total: samples.length,
     success,
-    skipped,
-    dbSampleWriteFailures,
-    driverUpdateFailures
+    skipped
   });
 
   return { results, success, skipped };
@@ -331,16 +358,15 @@ export async function getDriverLocationFreshness(
 ): Promise<LocationFreshnessV2> {
   const serverTimeMs = Date.now();
 
-  // Try Redis first
-  if (isRedisAvailable()) {
-    try {
-      const redisLocation = await getDriverLocation(driverId);
-      if (redisLocation?.ts) {
-        return calculateFreshness(redisLocation.ts, serverTimeMs).freshness;
-      }
-    } catch {
-      // Fall through to DB fallback
+  // Try Redis first. The read establishes a lazy connection when needed.
+  try {
+    const { location: redisLocation } =
+      await getDriverLocationWithStatus(driverId);
+    if (redisLocation?.ts) {
+      return calculateFreshness(redisLocation.ts, serverTimeMs).freshness;
     }
+  } catch {
+    // Fall through to DB fallback
   }
 
   // DB fallback (rule 11)
@@ -371,9 +397,7 @@ export async function getDriverLocationFreshness(
  * - availability === 'AVAILABLE'
  * - locationFreshness === 'FRESH'
  */
-export async function isCandidateDriver(
-  driverId: string
-): Promise<boolean> {
+export async function isCandidateDriver(driverId: string): Promise<boolean> {
   try {
     const driver = await prisma.driver.findUnique({
       where: { id: driverId },

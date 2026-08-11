@@ -3,16 +3,18 @@ import { NextRequest } from "next/server";
 import { createApiErrorV2, failV2, okV2 } from "@/lib/contracts/v2";
 import { calculateFreshness } from "@/lib/location/freshness";
 import { prisma } from "@/lib/prisma";
-import {
-  getDriverLocationsWithStatus,
-  type DriverLocation
-} from "@/lib/redis";
+import { getDriverLocationsWithStatus, type DriverLocation } from "@/lib/redis";
 
 import { extractDriverId } from "../../../driver/_utils";
 
 import type { DriverV2, DriverLocationV2 } from "@/types/v2";
 
 export const dynamic = "force-dynamic";
+
+interface ResolvedLocationSnapshot {
+  location: DriverLocationV2;
+  capturedAtMs: number;
+}
 
 /**
  * GET /api/v2/driver/map
@@ -25,8 +27,7 @@ export const dynamic = "force-dynamic";
  * locations must never be exposed anonymously.
  */
 export async function GET(request: NextRequest): Promise<Response> {
-  const traceId =
-    request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
+  const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
 
   // Auth: JWT Bearer token or web session with a linked driver
   const callerDriverId = await extractDriverId(request);
@@ -76,69 +77,37 @@ export async function GET(request: NextRequest): Promise<Response> {
 
   const serverTimeMs = Date.now();
 
-  // ---- Per-driver view: same-source snapshot rule ----
+  // ---- Per-driver view: newest complete same-source snapshot rule ----
   const driverViews: DriverV2[] = drivers.map((d) => {
     let freshness: "FRESH" | "STALE" | "NONE" = "NONE";
     let lastLocation: DriverLocationV2 | undefined;
 
-    if (redisBatch.redisAvailable) {
-      // Redis is the primary store — try to build the view entirely
-      // from the Redis snapshot for this driver (same-source rule).
-      const loc = redisBatch.locations.get(d.id) ?? null;
+    const redisSnapshot = redisBatch.redisAvailable
+      ? resolveRedisSnapshot(redisBatch.locations.get(d.id) ?? null)
+      : null;
+    const dbSnapshot = resolveDbSnapshot(
+      d.lastLat,
+      d.lastLng,
+      d.lastAccuracyMeters,
+      d.lastLocationCapturedAt
+    );
 
-      if (loc && hasCompleteFields(loc)) {
-        const lat = parseFloat(loc.lat);
-        const lng = parseFloat(loc.lng);
-        const accuracyMeters = parseFloat(loc.accuracy ?? "0");
+    // A Redis CAS outage can leave DB newer than Redis. Select one whole
+    // snapshot by capturedAt so map reads match dispatch without mixing fields.
+    const selectedSnapshot = selectNewestSnapshot(redisSnapshot, dbSnapshot);
 
-        if (
-          Number.isFinite(lat) &&
-          Number.isFinite(lng) &&
-          Number.isFinite(accuracyMeters)
-        ) {
-          lastLocation = {
-            lat,
-            lng,
-            accuracyMeters,
-            capturedAt: loc.ts
-          };
-          freshness = calculateFreshness(loc.ts, serverTimeMs).freshness;
-        }
-      }
-      // Individual miss (loc === null) or incomplete fields —
-      // fall through to DB backup below WITHOUT mixing sources.
-    }
-
-    if (!redisBatch.redisAvailable || lastLocation === undefined) {
-      // Redis unavailable or this driver had no usable Redis snapshot.
-      // Entire view comes from DB snapshot (same-source for this path).
-      if (
-        d.lastLat != null &&
-        d.lastLng != null &&
-        d.lastAccuracyMeters != null &&
-        d.lastLocationCapturedAt != null
-      ) {
-        lastLocation = {
-          lat: d.lastLat,
-          lng: d.lastLng,
-          accuracyMeters: d.lastAccuracyMeters,
-          capturedAt: d.lastLocationCapturedAt.toISOString()
-        };
-        freshness = calculateFreshness(
-          d.lastLocationCapturedAt.toISOString(),
-          serverTimeMs
-        ).freshness;
-      } else {
-        // Per frozen contract §3.3: omit the ENTIRE lastLocation
-        lastLocation = undefined;
-        if (d.lastLocationCapturedAt) {
-          freshness = calculateFreshness(
-            d.lastLocationCapturedAt.toISOString(),
-            serverTimeMs
-          ).freshness;
-        }
-        // else freshness stays "NONE"
-      }
+    if (selectedSnapshot) {
+      lastLocation = selectedSnapshot.location;
+      freshness = calculateFreshness(
+        selectedSnapshot.location.capturedAt,
+        serverTimeMs
+      ).freshness;
+    } else if (d.lastLocationCapturedAt) {
+      // Per frozen contract §3.3: omit the ENTIRE lastLocation when partial.
+      freshness = calculateFreshness(
+        d.lastLocationCapturedAt.toISOString(),
+        serverTimeMs
+      ).freshness;
     }
 
     const shiftStartedAt = shiftByDriver.get(d.id);
@@ -172,4 +141,76 @@ function hasCompleteFields(loc: DriverLocation): boolean {
     typeof loc.ts === "string" &&
     loc.ts.length > 0
   );
+}
+
+function resolveRedisSnapshot(
+  loc: DriverLocation | null
+): ResolvedLocationSnapshot | null {
+  if (!loc || !hasCompleteFields(loc)) return null;
+
+  const lat = Number.parseFloat(loc.lat);
+  const lng = Number.parseFloat(loc.lng);
+  const accuracyMeters = Number.parseFloat(loc.accuracy ?? "");
+  const capturedAtMs = Date.parse(loc.ts);
+
+  if (
+    !Number.isFinite(lat) ||
+    !Number.isFinite(lng) ||
+    !Number.isFinite(accuracyMeters) ||
+    !Number.isFinite(capturedAtMs)
+  ) {
+    return null;
+  }
+
+  return {
+    location: { lat, lng, accuracyMeters, capturedAt: loc.ts },
+    capturedAtMs
+  };
+}
+
+function resolveDbSnapshot(
+  lat: number | null,
+  lng: number | null,
+  accuracyMeters: number | null,
+  capturedAt: Date | null
+): ResolvedLocationSnapshot | null {
+  if (
+    lat == null ||
+    lng == null ||
+    accuracyMeters == null ||
+    capturedAt == null
+  ) {
+    return null;
+  }
+
+  const capturedAtMs = capturedAt.getTime();
+  if (
+    !Number.isFinite(lat) ||
+    !Number.isFinite(lng) ||
+    !Number.isFinite(accuracyMeters) ||
+    !Number.isFinite(capturedAtMs)
+  ) {
+    return null;
+  }
+
+  return {
+    location: {
+      lat,
+      lng,
+      accuracyMeters,
+      capturedAt: capturedAt.toISOString()
+    },
+    capturedAtMs
+  };
+}
+
+function selectNewestSnapshot(
+  redisSnapshot: ResolvedLocationSnapshot | null,
+  dbSnapshot: ResolvedLocationSnapshot | null
+): ResolvedLocationSnapshot | null {
+  if (!redisSnapshot) return dbSnapshot;
+  if (!dbSnapshot) return redisSnapshot;
+  return redisSnapshot.capturedAtMs >= dbSnapshot.capturedAtMs
+    ? redisSnapshot
+    : dbSnapshot;
 }

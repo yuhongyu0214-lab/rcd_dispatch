@@ -51,7 +51,13 @@ export async function POST(request: Request) {
   const startTime = Date.now();
 
   // ---- 1. 鉴权 ----
-  let driverId = await extractDriverId(request);
+  const driverId = await extractDriverId(request);
+  if (!driverId) {
+    return fail("司机身份认证失败", {
+      status: 401,
+      traceId
+    });
+  }
 
   // ---- 2. 解析请求体 ----
   let body: DriverLocationBody;
@@ -59,20 +65,6 @@ export async function POST(request: Request) {
     body = (await request.json()) as DriverLocationBody;
   } catch {
     return fail("请求体格式错误", { status: 400, traceId });
-  }
-
-  // 请求体中也可提供 driverId（与 JWT 配合或开发调试）
-  if (!driverId) {
-    // 从请求体获取 driverId（兼容旧版调用）
-    const bodyWithId = body as DriverLocationBody & { driverId?: string };
-    driverId = bodyWithId.driverId?.trim() ?? null;
-  }
-
-  if (!driverId) {
-    return fail("请提供司机 ID（Authorization header 或请求体）", {
-      status: 401,
-      traceId
-    });
   }
 
   // ---- 3. 坐标解析与校验 ----

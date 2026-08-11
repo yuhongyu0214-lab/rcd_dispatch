@@ -30,11 +30,11 @@ function getOptionalNumber(
   return undefined;
 }
 
-const ISO_8601_MSZ_PATTERN =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const ISO_8601_WITH_TIMEZONE_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
 
-function isValidIso8601MsZ(value: string): boolean {
-  if (!ISO_8601_MSZ_PATTERN.test(value)) return false;
+function isValidIso8601WithTimezone(value: string): boolean {
+  if (!ISO_8601_WITH_TIMEZONE_PATTERN.test(value)) return false;
   const parsed = new Date(value).getTime();
   return Number.isFinite(parsed);
 }
@@ -149,19 +149,19 @@ export function validateIngestRecord(
 
   // ---- promisedPickupAt 日期格式 ----
   const ppa = getStringField(raw, "promisedPickupAt");
-  if (ppa && !isValidIso8601MsZ(ppa)) {
+  if (ppa && !isValidIso8601WithTimezone(ppa)) {
     errors["promisedPickupAt"] = errors["promisedPickupAt"] ?? [];
     errors["promisedPickupAt"].push(
-      `${fieldPrefix}.promisedPickupAt 需要 ISO 8601 毫秒级 Z 格式（如 2026-07-18T09:00:00.000Z）`
+      `${fieldPrefix}.promisedPickupAt 需要带时区的 ISO 8601 格式（如 2026-07-18T09:00:00.000Z 或 2026-07-18T17:00:00+08:00）`
     );
   }
 
   // ---- cancelledAt 可选日期格式 ----
   const ca = getStringField(raw, "cancelledAt");
-  if (ca && !isValidIso8601MsZ(ca)) {
+  if (ca && !isValidIso8601WithTimezone(ca)) {
     errors["cancelledAt"] = errors["cancelledAt"] ?? [];
     errors["cancelledAt"].push(
-      `${fieldPrefix}.cancelledAt 需要 ISO 8601 毫秒级 Z 格式（如 2026-07-18T09:00:00.000Z）`
+      `${fieldPrefix}.cancelledAt 需要带时区的 ISO 8601 格式（如 2026-07-18T09:00:00.000Z 或 2026-07-18T17:00:00+08:00）`
     );
   }
 
@@ -186,12 +186,14 @@ export function validateIngestRecord(
   const dlng = getOptionalNumber(raw, "deliveryLng");
   if (isNotNullOrUndefined(dlat) || isNotNullOrUndefined(dlng)) {
     if (!isNotNullOrUndefined(dlat) || !isNotNullOrUndefined(dlng)) {
-      errors["deliveryLat/deliveryLng"] = errors["deliveryLat/deliveryLng"] ?? [];
+      errors["deliveryLat/deliveryLng"] =
+        errors["deliveryLat/deliveryLng"] ?? [];
       errors["deliveryLat/deliveryLng"].push(
         `${fieldPrefix}.deliveryLat 和 deliveryLng 必须成对提供`
       );
     } else if (!isValidFiniteLat(dlat) || !isValidFiniteLng(dlng)) {
-      errors["deliveryLat/deliveryLng"] = errors["deliveryLat/deliveryLng"] ?? [];
+      errors["deliveryLat/deliveryLng"] =
+        errors["deliveryLat/deliveryLng"] ?? [];
       errors["deliveryLat/deliveryLng"].push(
         `${fieldPrefix}.deliveryLat 或 deliveryLng 超出合法范围 (-90~90, -180~180)`
       );

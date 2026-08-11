@@ -1,6 +1,9 @@
 import Link from "next/link";
 
+import { shouldShowDemoCredentials } from "@/lib/auth/public-registration";
+
 export default function HomePage() {
+  const showDemoCredentials = shouldShowDemoCredentials();
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
       <div className="mx-auto flex max-w-md flex-col items-center gap-8 text-center">
@@ -24,9 +27,11 @@ export default function HomePage() {
             司机工作台
           </Link>
         </div>
-        <p className="text-xs text-slate-400">
-          默认账号 admin@dispatch.dev / admin123
-        </p>
+        {showDemoCredentials ? (
+          <p className="text-xs text-slate-400">
+            默认账号 admin@dispatch.dev / admin123
+          </p>
+        ) : null}
       </div>
     </main>
   );

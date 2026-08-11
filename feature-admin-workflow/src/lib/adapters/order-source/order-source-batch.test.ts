@@ -7,11 +7,14 @@ import type {
 } from "@/types/v2";
 
 // ---- Mock processIngestRecord ----
-const { mockProcessIngestRecord } = vi.hoisted(() => ({
-  mockProcessIngestRecord: vi.fn()
-}));
+const { mockProcessCommittedIngestDispatchEvent, mockProcessIngestRecord } =
+  vi.hoisted(() => ({
+    mockProcessCommittedIngestDispatchEvent: vi.fn(),
+    mockProcessIngestRecord: vi.fn()
+  }));
 
 vi.mock("./idempotency", () => ({
+  processCommittedIngestDispatchEvent: mockProcessCommittedIngestDispatchEvent,
   processIngestRecord: mockProcessIngestRecord
 }));
 
@@ -86,6 +89,7 @@ function makeFailedResult(
 describe("processIngestEnvelope (batch orchestration)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockProcessCommittedIngestDispatchEvent.mockResolvedValue(undefined);
 
     mockProcessIngestRecord.mockImplementation(async (record, traceId) =>
       makeSuccessResult(
@@ -211,5 +215,51 @@ describe("processIngestEnvelope (batch orchestration)", () => {
     // Different versions → both should be processed (not deduped)
     expect(result.skipped).toBe(0);
     expect(mockProcessIngestRecord).toHaveBeenCalledTimes(2);
+  });
+
+  it("commits every record before dispatching the batch events", async () => {
+    const callOrder: string[] = [];
+    mockProcessIngestRecord.mockImplementation(
+      async (
+        record: Record<string, string>,
+        traceId: string,
+        options?: {
+          committedDispatchEvents?: Array<{ eventId: string; traceId: string }>;
+        }
+      ) => {
+        callOrder.push(`commit:${record.externalOrderId}`);
+        options?.committedDispatchEvents?.push({
+          eventId: `order-created:${record.externalOrderId}`,
+          traceId
+        });
+        return makeSuccessResult(
+          0,
+          record.externalOrderId,
+          record.sourceVersion,
+          traceId
+        );
+      }
+    );
+    mockProcessCommittedIngestDispatchEvent.mockImplementation(
+      async (event: { eventId: string }) => {
+        callOrder.push(`dispatch:${event.eventId}`);
+      }
+    );
+
+    await processIngestEnvelope(
+      makeEnvelope([
+        makeValidRecord({ externalOrderId: "ORDER-1" }),
+        makeValidRecord({ externalOrderId: "ORDER-2" }),
+        makeValidRecord({ externalOrderId: "ORDER-3" })
+      ]),
+      "trace-coalesced-batch"
+    );
+
+    expect(callOrder.slice(0, 3)).toEqual([
+      "commit:ORDER-1",
+      "commit:ORDER-2",
+      "commit:ORDER-3"
+    ]);
+    expect(mockProcessCommittedIngestDispatchEvent).toHaveBeenCalledTimes(3);
   });
 });

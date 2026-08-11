@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/prisma";
 
 import { CopyButton } from "../../components/copy-button";
+import { getVisibleDisplayValue } from "../../components/driver-task-display";
 import { TaskActions } from "../../components/task-actions";
 
 // ============================================================================
@@ -52,18 +53,18 @@ type DetailResponse = {
 // ============================================================================
 
 const TYPE_LABEL: Record<string, { text: string; color: string }> = {
-  STORE_PICKUP:  { text: "门店取车", color: "bg-blue-100 text-blue-700" },
-  STORE_RETURN:  { text: "门店还车", color: "bg-green-100 text-green-700" },
+  STORE_PICKUP: { text: "门店取车", color: "bg-blue-100 text-blue-700" },
+  STORE_RETURN: { text: "门店还车", color: "bg-green-100 text-green-700" },
   DOOR_DELIVERY: { text: "送车上门", color: "bg-blue-100 text-blue-700" },
-  DOOR_PICKUP:   { text: "上门取车", color: "bg-green-100 text-green-700" }
+  DOOR_PICKUP: { text: "上门取车", color: "bg-green-100 text-green-700" }
 };
 
 const ACTION_LABEL: Record<string, string> = {
-  ASSIGN:  "派单",
-  REASSIGN:"改派",
-  WITHDRAW:"撤回",
-  ACCEPT:  "接单",
-  COMPLETE:"完单"
+  ASSIGN: "派单",
+  REASSIGN: "改派",
+  WITHDRAW: "撤回",
+  ACCEPT: "接单",
+  COMPLETE: "完单"
 };
 
 // ============================================================================
@@ -73,8 +74,9 @@ const ACTION_LABEL: Record<string, string> = {
 export default async function DriverTaskDetailPage({
   params
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const resolvedParams = await params;
   const user = await getCurrentUser();
 
   if (!user?.driverId) {
@@ -85,7 +87,7 @@ export default async function DriverTaskDetailPage({
     );
   }
 
-  const orderId = params.id;
+  const orderId = resolvedParams.id;
 
   let order: DetailResponse["data"]["order"] | null = null;
   let logs: DetailResponse["data"]["logs"] = [];
@@ -116,9 +118,16 @@ export default async function DriverTaskDetailPage({
         returnLng: dbOrder.returnLng,
         scheduledAt: dbOrder.scheduledAt.toISOString(),
         storeName: dbOrder.store.name,
-        plate: dbOrder.licensePlateSnapshot ?? dbOrder.vehicle?.licensePlate ?? "未绑定车牌",
+        plate:
+          dbOrder.licensePlateSnapshot ??
+          dbOrder.vehicle?.licensePlate ??
+          "未绑定车牌",
         vehicle: dbOrder.vehicle
-          ? { id: dbOrder.vehicle.id, licensePlate: dbOrder.vehicle.licensePlate, vehicleType: dbOrder.vehicle.vehicleType }
+          ? {
+              id: dbOrder.vehicle.id,
+              licensePlate: dbOrder.vehicle.licensePlate,
+              vehicleType: dbOrder.vehicle.vehicleType
+            }
           : null
       };
 
@@ -150,7 +159,20 @@ export default async function DriverTaskDetailPage({
     );
   }
 
-  const typeInfo = TYPE_LABEL[order.type] ?? { text: order.type, color: "bg-slate-100 text-slate-600" };
+  const typeInfo = TYPE_LABEL[order.type] ?? {
+    text: order.type,
+    color: "bg-slate-100 text-slate-600"
+  };
+  const visibleOrderNo = getVisibleDisplayValue(order.orderNo);
+  const visibleTypeText = getVisibleDisplayValue(typeInfo.text);
+  const visiblePickupAddress = getVisibleDisplayValue(order.pickupAddress);
+  const visibleReturnAddress = getVisibleDisplayValue(order.returnAddress);
+  const visiblePlate = getVisibleDisplayValue(order.plate);
+  const visibleVehicleType = getVisibleDisplayValue(order.vehicle?.vehicleType);
+  const visibleStoreName = getVisibleDisplayValue(order.storeName);
+  const vehicleSummary = [visiblePlate, visibleVehicleType]
+    .filter((value): value is string => value != null)
+    .join(" · ");
 
   return (
     <div className="flex flex-col gap-4 pb-20">
@@ -163,64 +185,82 @@ export default async function DriverTaskDetailPage({
       </Link>
 
       {/* 订单号 + 复制 */}
-      <div className="flex items-center gap-2">
-        <h2 className="text-lg font-semibold text-slate-900">
-          {order.orderNo}
-        </h2>
-        <CopyButton text={order.orderNo} />
-      </div>
+      {visibleOrderNo ? (
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-slate-900">
+            {visibleOrderNo}
+          </h2>
+          <CopyButton text={visibleOrderNo} />
+        </div>
+      ) : null}
 
       {/* 取还方式标签 */}
-      <span className={`inline-block w-fit rounded-lg px-2.5 py-1 text-sm font-medium ${typeInfo.color}`}>
-        {typeInfo.text}
-      </span>
+      {visibleTypeText ? (
+        <span
+          className={`inline-block w-fit rounded-lg px-2.5 py-1 text-sm font-medium ${typeInfo.color}`}
+        >
+          {visibleTypeText}
+        </span>
+      ) : null}
 
       {/* 订单信息卡片 */}
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="space-y-3">
           {/* 取车 */}
-          <div>
-            <p className="text-xs font-medium text-slate-500">取车地址</p>
-            <p className="mt-0.5 text-sm text-slate-900">{order.pickupAddress}</p>
-            <p className="mt-0.5 text-xs text-slate-500">
-              🕐 取车时间：
-              {new Date(order.scheduledAt).toLocaleString("zh-CN", {
-                month: "numeric",
-                day: "numeric",
-                hour: "2-digit",
-                minute: "2-digit"
-              })}
-            </p>
-          </div>
+          {visiblePickupAddress ? (
+            <div>
+              <p className="text-xs font-medium text-slate-500">取车地址</p>
+              <p className="mt-0.5 text-sm text-slate-900">
+                {visiblePickupAddress}
+              </p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                🕐 取车时间：
+                {new Date(order.scheduledAt).toLocaleString("zh-CN", {
+                  month: "numeric",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit"
+                })}
+              </p>
+            </div>
+          ) : null}
 
           {/* 分隔线 */}
-          <div className="border-t border-slate-100" />
+          {visiblePickupAddress && visibleReturnAddress ? (
+            <div className="border-t border-slate-100" />
+          ) : null}
 
           {/* 还车 */}
-          <div>
-            <p className="text-xs font-medium text-slate-500">还车地址</p>
-            <p className="mt-0.5 text-sm text-slate-900">{order.returnAddress}</p>
-            <p className="mt-0.5 text-xs text-slate-500">
-              🕐 还车时间：
-              {new Date(order.scheduledAt).toLocaleString("zh-CN", {
-                month: "numeric",
-                day: "numeric",
-                hour: "2-digit",
-                minute: "2-digit"
-              })}
-            </p>
-          </div>
+          {visibleReturnAddress ? (
+            <div>
+              <p className="text-xs font-medium text-slate-500">还车地址</p>
+              <p className="mt-0.5 text-sm text-slate-900">
+                {visibleReturnAddress}
+              </p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                🕐 还车时间：
+                {new Date(order.scheduledAt).toLocaleString("zh-CN", {
+                  month: "numeric",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit"
+                })}
+              </p>
+            </div>
+          ) : null}
 
           {/* 分隔线 */}
-          <div className="border-t border-slate-100" />
+          {visiblePickupAddress || visibleReturnAddress ? (
+            <div className="border-t border-slate-100" />
+          ) : null}
 
           {/* 车辆 + 门店 */}
-          <div className="flex gap-6 text-xs text-slate-500">
-            <span>
-              🚗 {order.plate ?? "-"} · {order.vehicle?.vehicleType ?? "-"}
-            </span>
-            <span>🏪 {order.storeName}</span>
-          </div>
+          {vehicleSummary || visibleStoreName ? (
+            <div className="flex gap-6 text-xs text-slate-500">
+              {vehicleSummary ? <span>🚗 {vehicleSummary}</span> : null}
+              {visibleStoreName ? <span>🏪 {visibleStoreName}</span> : null}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -228,6 +268,7 @@ export default async function DriverTaskDetailPage({
       <TaskActions
         orderId={order.id}
         orderStatus={order.status}
+        businessType={order.type}
         driverId={user.driverId!}
         pickupLat={order.pickupLat}
         pickupLng={order.pickupLng}
@@ -238,33 +279,42 @@ export default async function DriverTaskDetailPage({
       {/* 操作记录 */}
       {logs.length > 0 ? (
         <div>
-          <h3 className="mb-2 text-sm font-medium text-slate-700">
-            操作记录
-          </h3>
+          <h3 className="mb-2 text-sm font-medium text-slate-700">操作记录</h3>
           <div className="space-y-2">
-            {logs.map((log) => (
-              <div
-                key={log.id}
-                className="flex items-center justify-between rounded-lg border border-slate-100 bg-white px-3 py-2 text-xs"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-900">
-                    {ACTION_LABEL[log.action] ?? log.action}
-                  </span>
+            {logs.map((log) => {
+              const visibleAction = getVisibleDisplayValue(
+                ACTION_LABEL[log.action] ?? log.action
+              );
+              const visibleOperatorName = getVisibleDisplayValue(
+                log.operatorUser.name
+              );
+
+              return (
+                <div
+                  key={log.id}
+                  className="flex items-center justify-between rounded-lg border border-slate-100 bg-white px-3 py-2 text-xs"
+                >
+                  <div className="flex items-center gap-2">
+                    {visibleAction ? (
+                      <span className="text-slate-900">{visibleAction}</span>
+                    ) : null}
+                    {visibleOperatorName ? (
+                      <span className="text-slate-400">
+                        {visibleOperatorName}
+                      </span>
+                    ) : null}
+                  </div>
                   <span className="text-slate-400">
-                    {log.operatorUser.name}
+                    {new Date(log.createdAt).toLocaleString("zh-CN", {
+                      month: "numeric",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit"
+                    })}
                   </span>
                 </div>
-                <span className="text-slate-400">
-                  {new Date(log.createdAt).toLocaleString("zh-CN", {
-                    month: "numeric",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit"
-                  })}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ) : null}

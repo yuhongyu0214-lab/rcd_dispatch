@@ -8,10 +8,9 @@ vi.mock("@/lib/adapters/order-source", () => ({
 
 // 保留真实常量
 vi.mock("@/lib/adapters/order-source/types", async () => {
-  const actual =
-    await vi.importActual<typeof import("@/lib/adapters/order-source/types")>(
-      "@/lib/adapters/order-source/types"
-    );
+  const actual = await vi.importActual<
+    typeof import("@/lib/adapters/order-source/types")
+  >("@/lib/adapters/order-source/types");
   return actual;
 });
 
@@ -267,7 +266,9 @@ describe("POST /api/v2/ingest/orders", () => {
 
   // ---- P1-3: CORS 预检 ----
   describe("OPTIONS preflight (P1-3)", () => {
-    function buildOptionsRequest(headers: Record<string, string> = {}): Request {
+    function buildOptionsRequest(
+      headers: Record<string, string> = {}
+    ): Request {
       return new Request("http://localhost/api/v2/ingest/orders", {
         method: "OPTIONS",
         headers
@@ -279,7 +280,10 @@ describe("POST /api/v2/ingest/orders", () => {
         "https://haluo.example.com, https://plugin.example.com";
 
       const response = await OPTIONS(
-        buildOptionsRequest({ Origin: "https://haluo.example.com" })
+        buildOptionsRequest({
+          Origin: "https://haluo.example.com",
+          "X-Trace-Id": "trace-options-allowed"
+        })
       );
 
       expect(response.status).toBe(204);
@@ -292,6 +296,7 @@ describe("POST /api/v2/ingest/orders", () => {
       expect(response.headers.get("Access-Control-Allow-Headers")).toContain(
         "X-Ingest-Key"
       );
+      expect(response.headers.get("X-Trace-Id")).toBe("trace-options-allowed");
     });
 
     it("returns 403 for Origin not in whitelist", async () => {
@@ -321,10 +326,15 @@ describe("POST /api/v2/ingest/orders", () => {
     it("returns 204 without CORS headers when Origin is absent", async () => {
       process.env.CORS_ORIGINS = "https://haluo.example.com";
 
-      const response = await OPTIONS(buildOptionsRequest());
+      const response = await OPTIONS(
+        buildOptionsRequest({ "X-Trace-Id": "trace-options-no-origin" })
+      );
 
       expect(response.status).toBe(204);
       expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
+      expect(response.headers.get("X-Trace-Id")).toBe(
+        "trace-options-no-origin"
+      );
     });
   });
 
@@ -419,9 +429,7 @@ describe("POST /api/v2/ingest/orders", () => {
   // ---- Envelope validation ----
   describe("envelope validation", () => {
     it("rejects non-object body with 400", async () => {
-      const response = await POST(
-        buildRequest("not-an-object")
-      );
+      const response = await POST(buildRequest("not-an-object"));
       const body = await response.json();
 
       expect(response.status).toBe(400);
@@ -430,9 +438,7 @@ describe("POST /api/v2/ingest/orders", () => {
 
     it("rejects V1_IMPORT sourceSystem with 400", async () => {
       const response = await POST(
-        buildRequest(
-          buildEnvelope([{}], "V1_IMPORT")
-        )
+        buildRequest(buildEnvelope([{}], "V1_IMPORT"))
       );
       const body = await response.json();
 
@@ -442,9 +448,7 @@ describe("POST /api/v2/ingest/orders", () => {
 
     it("rejects unknown sourceSystem with 400", async () => {
       const response = await POST(
-        buildRequest(
-          buildEnvelope([{}], "UNKNOWN_SOURCE" as string)
-        )
+        buildRequest(buildEnvelope([{}], "UNKNOWN_SOURCE" as string))
       );
       const body = await response.json();
 
@@ -463,9 +467,7 @@ describe("POST /api/v2/ingest/orders", () => {
     });
 
     it("rejects empty records array with 400", async () => {
-      const response = await POST(
-        buildRequest(buildEnvelope([]))
-      );
+      const response = await POST(buildRequest(buildEnvelope([])));
       const body = await response.json();
 
       expect(response.status).toBe(400);
@@ -473,23 +475,18 @@ describe("POST /api/v2/ingest/orders", () => {
     });
 
     it("rejects batch size 201 with 413", async () => {
-      const records = Array.from(
-        { length: 201 },
-        (_, i) => ({
-          externalOrderId: `RECORD-${i}`,
-          sourceVersion: "2026-07-18T08:00:00.000Z",
-          sourceStatusRaw: "待取车",
-          orderNo: `ORDER-${i}`,
-          businessType: "STORE_PICKUP",
-          promisedPickupAt: "2026-07-18T09:00:00.000Z",
-          pickupAddress: "取车点",
-          deliveryAddress: "送达点",
-          storeCode: "STORE_HZ_XH"
-        })
-      );
-      const response = await POST(
-        buildRequest(buildEnvelope(records))
-      );
+      const records = Array.from({ length: 201 }, (_, i) => ({
+        externalOrderId: `RECORD-${i}`,
+        sourceVersion: "2026-07-18T08:00:00.000Z",
+        sourceStatusRaw: "待取车",
+        orderNo: `ORDER-${i}`,
+        businessType: "STORE_PICKUP",
+        promisedPickupAt: "2026-07-18T09:00:00.000Z",
+        pickupAddress: "取车点",
+        deliveryAddress: "送达点",
+        storeCode: "STORE_HZ_XH"
+      }));
+      const response = await POST(buildRequest(buildEnvelope(records)));
       const body = await response.json();
 
       expect(response.status).toBe(413);
@@ -515,13 +512,11 @@ describe("POST /api/v2/ingest/orders", () => {
         remark: "X".repeat(1048576 - 100) // 让总体超过 1 MiB
       };
       const body = JSON.stringify(buildEnvelope([record]));
-      expect(
-        new TextEncoder().encode(body).byteLength
-      ).toBeGreaterThan(1048576);
-
-      const response = await POST(
-        buildRequest(buildEnvelope([record]))
+      expect(new TextEncoder().encode(body).byteLength).toBeGreaterThan(
+        1048576
       );
+
+      const response = await POST(buildRequest(buildEnvelope([record])));
       const responseBody = await response.json();
 
       expect(response.status).toBe(413);

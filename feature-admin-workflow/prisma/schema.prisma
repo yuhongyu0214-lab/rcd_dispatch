@@ -27,10 +27,6 @@ enum OrderSourceSystem {
   PLUGIN
   API
   V1_IMPORT
-  /// Storage namespace reserved for OrderSourceEvent only.
-  /// MUST NOT be written to Order.sourceSystem (enforced by DB CHECK).
-  /// NOT part of CanonicalOrderV2 or any HTTP DTO sourceSystem.
-  INTERNAL
 }
 
 enum OrderExecutionStatus {
@@ -368,6 +364,29 @@ model OrderSourceEvent {
   @@index([orderId, receivedAt])
   @@index([result, receivedAt])
   @@index([traceId])
+}
+
+model DispatchEventOutbox {
+  id           String    @id @default(cuid())
+  eventId      String    @unique
+  type         String
+  orderId      String?
+  driverId     String?
+  assignmentId String?
+  occurredAt   DateTime  @db.Timestamptz(6)
+  traceId      String
+  attempts     Int       @default(0)
+  availableAt  DateTime  @default(now()) @db.Timestamptz(6)
+  lockedAt     DateTime? @db.Timestamptz(6)
+  lockToken    String?
+  processedAt  DateTime? @db.Timestamptz(6)
+  lastError    String?
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([processedAt, availableAt])
+  @@index([lockedAt])
+  @@index([driverId, type, occurredAt])
 }
 
 model DriverShift {

@@ -87,16 +87,16 @@ function base64UrlDecode(str: string): string {
 
 interface DriverTokenPayload {
   sub: string; // driverId
-  exp?: number;
+  exp: number;
   iat?: number;
 }
 
 function getDriverJwtSecret(): string {
-  return (
-    process.env.DRIVER_JWT_SECRET ||
-    process.env.NEXTAUTH_SECRET ||
-    "dispatch-driver-secret"
-  );
+  const secret = process.env.DRIVER_JWT_SECRET?.trim();
+  if (!secret) {
+    throw new Error("DRIVER_JWT_SECRET is not configured");
+  }
+  return secret;
 }
 
 /**
@@ -112,7 +112,9 @@ export function createDriverToken(driverId: string): string {
     iat: now,
     exp: now + 60 * 60 * 8 // 8 hours
   };
-  const encodedHeader = base64UrlEncode(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+  const encodedHeader = base64UrlEncode(
+    JSON.stringify({ alg: "HS256", typ: "JWT" })
+  );
   const encodedPayload = base64UrlEncode(JSON.stringify(payload));
   const signature = crypto
     .createHmac("sha256", secret)
@@ -124,29 +126,42 @@ export function createDriverToken(driverId: string): string {
 /**
  * 验证司机 JWT token（HMAC-SHA256）。
  * 成功返回 payload，失败返回 null。
- * 开发环境下跳过签名验证（仅解析 payload）。
  */
 export function verifyDriverToken(token: string): DriverTokenPayload | null {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
 
+    const header = JSON.parse(base64UrlDecode(parts[0])) as {
+      alg?: string;
+      typ?: string;
+    };
+    if (header.alg !== "HS256" || header.typ !== "JWT") return null;
+
+    const secret = getDriverJwtSecret();
+    const expectedSignature = crypto
+      .createHmac("sha256", secret)
+      .update(`${parts[0]}.${parts[1]}`)
+      .digest();
+    const actualSignature = Buffer.from(parts[2], "base64url");
+    if (
+      expectedSignature.length !== actualSignature.length ||
+      !crypto.timingSafeEqual(expectedSignature, actualSignature)
+    ) {
+      return null;
+    }
+
     const payload = JSON.parse(base64UrlDecode(parts[1])) as DriverTokenPayload;
 
     if (!payload.sub || typeof payload.sub !== "string") return null;
 
-    // 过期检查
-    if (payload.exp && payload.exp * 1000 < Date.now()) return null;
-
-    // 生产环境验证签名
-    if (process.env.NODE_ENV === "production") {
-      const secret = getDriverJwtSecret();
-      const signature = crypto
-        .createHmac("sha256", secret)
-        .update(`${parts[0]}.${parts[1]}`)
-        .digest("base64url");
-
-      if (signature !== parts[2]) return null;
+    // exp is mandatory: a signed token without an expiry must never become
+    // a permanent driver credential.
+    if (
+      !Number.isSafeInteger(payload.exp) ||
+      payload.exp <= Math.floor(Date.now() / 1000)
+    ) {
+      return null;
     }
 
     return payload;
@@ -160,10 +175,11 @@ export function verifyDriverToken(token: string): DriverTokenPayload | null {
  * 优先级：
  * 1. JWT Bearer token（小程序端标准流程）
  * 2. Web session cookie → 查找关联的 Driver（admin/dispatcher 同时是司机）
- * 3. Query param / body fallback（仅开发环境）
  * 返回 driverId 或 null。
  */
-export async function extractDriverId(request: Request): Promise<string | null> {
+export async function extractDriverId(
+  request: Request
+): Promise<string | null> {
   // 1. JWT Bearer token
   const authHeader = request.headers.get("Authorization");
   if (authHeader?.startsWith("Bearer ")) {
@@ -176,9 +192,8 @@ export async function extractDriverId(request: Request): Promise<string | null> 
   try {
     const cookieHeader = request.headers.get("cookie");
     if (cookieHeader) {
-      const { AUTH_SESSION_COOKIE_NAME, verifySessionToken } = await import(
-        "@/lib/auth/session"
-      );
+      const { AUTH_SESSION_COOKIE_NAME, verifySessionToken } =
+        await import("@/lib/auth/session");
       const cookies = cookieHeader.split(";").map((c) => c.trim());
       const sessionCookie = cookies.find((c) =>
         c.startsWith(`${AUTH_SESSION_COOKIE_NAME}=`)
@@ -200,8 +215,11 @@ export async function extractDriverId(request: Request): Promise<string | null> 
     // Session 解析失败，继续其他方式
   }
 
-  // 3. Query param / body fallback（仅开发环境）
-  if (process.env.NODE_ENV !== "production") {
+  // 3. 显式启用的本地调试回退；默认关闭，避免非生产环境绕过鉴权。
+  if (
+    process.env.NODE_ENV !== "production" &&
+    process.env.ALLOW_INSECURE_DRIVER_ID === "true"
+  ) {
     try {
       const url = new URL(request.url);
       const queryId = url.searchParams.get("driverId")?.trim();
@@ -272,7 +290,8 @@ export function toDriverTaskDTO(order: DriverTaskOrder): DriverTaskDTO {
     pickupAddress: order.pickupAddress,
     returnAddress: order.returnAddress,
     scheduledAt: order.scheduledAt.toISOString(),
-    assignedAt: assignment?.assignedAt?.toISOString() ?? order.createdAt.toISOString(),
+    assignedAt:
+      assignment?.assignedAt?.toISOString() ?? order.createdAt.toISOString(),
     store: {
       id: order.store.id,
       code: order.store.code,
@@ -296,7 +315,9 @@ export function toDriverTaskDTO(order: DriverTaskOrder): DriverTaskDTO {
 // 系统操作员
 // ============================================================================
 
-export async function resolveSystemOperatorUserId(tx: Prisma.TransactionClient) {
+export async function resolveSystemOperatorUserId(
+  tx: Prisma.TransactionClient
+) {
   const user = await tx.user.findFirst({
     where: { role: { in: [...ADMIN_ROLES] } },
     orderBy: { createdAt: "asc" },

@@ -1,20 +1,75 @@
-import type { Assignment, DriverShift } from "@prisma/client";
+import { randomUUID } from "crypto";
+
+import type { Assignment, DriverShift, Prisma } from "@prisma/client";
 
 import type { ApiErrorV2 } from "@/types/v2";
 
-import { ADMIN_ROLES } from "@/lib/auth/roles";
+import { SYSTEM_ROLES } from "@/lib/auth/roles";
 import { createApiErrorV2 } from "@/lib/contracts/v2";
+import { processInternalEvent } from "@/lib/events/processor";
+import { enqueueInternalEvent } from "@/lib/events/store";
 import { createLogger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import { acquireDispatchLock, releaseDispatchLock } from "@/lib/redis";
+import { acquireResourceLock, releaseResourceLock } from "@/lib/redis";
 
 import type { ShiftResult } from "./types";
 
 const log = createLogger("shifts");
 
+async function resolveSystemOperator(
+  tx: Prisma.TransactionClient
+): Promise<string> {
+  const operator = await tx.user.findFirst({
+    where: { role: { in: [...SYSTEM_ROLES] } },
+    orderBy: { createdAt: "asc" },
+    select: { id: true }
+  });
+  if (!operator) throw new Error("SYSTEM_OPERATOR_NOT_CONFIGURED");
+  return operator.id;
+}
+
+async function writeShiftAuditLog(
+  tx: Prisma.TransactionClient,
+  params: {
+    action: "SHIFT_START" | "SHIFT_END";
+    shiftId: string;
+    driverId: string;
+    traceId: string;
+    occurredAt: Date;
+  }
+) {
+  const operatorUserId = await resolveSystemOperator(tx);
+  await tx.operationLog.create({
+    data: {
+      entityType: "DRIVER_SHIFT",
+      entityId: params.shiftId,
+      action: params.action,
+      operatorUserId,
+      driverId: params.driverId,
+      traceId: params.traceId,
+      reason:
+        params.action === "SHIFT_START"
+          ? "Driver shift started"
+          : "Driver shift ended",
+      metadataJson: {
+        shiftId: params.shiftId,
+        driverId: params.driverId,
+        actor: "DRIVER_API",
+        occurredAt: params.occurredAt.toISOString()
+      }
+    }
+  });
+  return operatorUserId;
+}
+
 /** Internal outcome of the endShift transaction. */
 type EndShiftTxOutcome =
-  | { kind: "completed"; shift: DriverShift; releasedCount: number }
+  | {
+      kind: "completed";
+      shift: DriverShift;
+      releasedCount: number;
+      dispatchEventId: string;
+    }
   | { kind: "missing_shift_repaired" }
   | { kind: "rejected"; error: ApiErrorV2 };
 
@@ -24,7 +79,6 @@ type EndShiftTxOutcome =
  * Rule 8:
  * - Creates a DriverShift record with the current timestamp
  * - Sets driver.onShift = true
- * - Sets driver.availability = AVAILABLE
  * - Increments driver.planVersion (API contract §1.6)
  *
  * Concurrency: acquires a short Redis lock per driver (API contract §1.6),
@@ -36,9 +90,10 @@ export async function startShift(
   driverId: string,
   traceId: string
 ): Promise<ShiftResult> {
-  const lockKey = `dispatch_lock:${driverId}`;
-  const locked = await acquireDispatchLock(lockKey, 10);
-  if (!locked) {
+  const lockKey = `dispatch:lock:${driverId}`;
+  const lockToken = randomUUID();
+  const lockResult = await acquireResourceLock(lockKey, lockToken, 15);
+  if (lockResult === "busy") {
     return {
       success: false,
       error: createApiErrorV2(
@@ -80,7 +135,7 @@ export async function startShift(
       // onShift=true but no open shift row — repair inside a transaction
       // so the state correction is atomic
       const result = await prisma.$transaction<
-        | { kind: "repaired"; shift: DriverShift }
+        | { kind: "repaired"; shift: DriverShift; dispatchEventId: string }
         | { kind: "not_found" }
       >(async (tx) => {
         const recheck = await tx.driver.findUnique({
@@ -93,15 +148,38 @@ export async function startShift(
         const repairedShift = await tx.driverShift.create({
           data: { driverId, startedAt: new Date() }
         });
-        return { kind: "repaired" as const, shift: repairedShift };
+        await writeShiftAuditLog(tx, {
+          action: "SHIFT_START",
+          shiftId: repairedShift.id,
+          driverId,
+          traceId,
+          occurredAt: repairedShift.startedAt
+        });
+        const dispatchEventId = `driver-shift-started:${repairedShift.id}`;
+        await enqueueInternalEvent(tx, {
+          eventId: dispatchEventId,
+          type: "DRIVER_SHIFT_STARTED",
+          driverId,
+          occurredAt: repairedShift.startedAt.toISOString(),
+          traceId
+        });
+        return {
+          kind: "repaired" as const,
+          shift: repairedShift,
+          dispatchEventId
+        };
       });
 
       if (result.kind === "repaired") {
-        log.warn("Shift state repaired — onShift was true but no open shift row", {
-          traceId,
-          driverId,
-          shiftId: result.shift.id
-        });
+        log.warn(
+          "Shift state repaired — onShift was true but no open shift row",
+          {
+            traceId,
+            driverId,
+            shiftId: result.shift.id
+          }
+        );
+        await processDispatchEventBestEffort(result.dispatchEventId, traceId);
         return { success: true, shift: result.shift };
       }
       return {
@@ -112,13 +190,17 @@ export async function startShift(
 
     // Normal flow: conditional update + shift create in one transaction
     const result = await prisma.$transaction<
-      { kind: "created"; shift: DriverShift } | { kind: "race_lost" }
+      | {
+          kind: "created";
+          shift: DriverShift;
+          dispatchEventId: string;
+        }
+      | { kind: "race_lost" }
     >(async (tx) => {
       const claim = await tx.driver.updateMany({
         where: { id: driverId, isActive: true, onShift: false },
         data: {
           onShift: true,
-          availability: "AVAILABLE",
           planVersion: { increment: 1 }
         }
       });
@@ -130,8 +212,24 @@ export async function startShift(
       const shift = await tx.driverShift.create({
         data: { driverId, startedAt: new Date() }
       });
+      await writeShiftAuditLog(tx, {
+        action: "SHIFT_START",
+        shiftId: shift.id,
+        driverId,
+        traceId,
+        occurredAt: shift.startedAt
+      });
 
-      return { kind: "created", shift };
+      const dispatchEventId = `driver-shift-started:${shift.id}`;
+      await enqueueInternalEvent(tx, {
+        eventId: dispatchEventId,
+        type: "DRIVER_SHIFT_STARTED",
+        driverId,
+        occurredAt: shift.startedAt.toISOString(),
+        traceId
+      });
+
+      return { kind: "created", shift, dispatchEventId };
     });
 
     if (result.kind === "race_lost") {
@@ -141,11 +239,14 @@ export async function startShift(
         orderBy: { startedAt: "desc" }
       });
       if (activeShift) {
-        log.info("Shift start idempotent — concurrent claim lost, reusing open shift", {
-          traceId,
-          driverId,
-          shiftId: activeShift.id
-        });
+        log.info(
+          "Shift start idempotent — concurrent claim lost, reusing open shift",
+          {
+            traceId,
+            driverId,
+            shiftId: activeShift.id
+          }
+        );
         return { success: true, shift: activeShift };
       }
       return {
@@ -155,9 +256,12 @@ export async function startShift(
     }
 
     log.info("Shift started", { traceId, driverId, shiftId: result.shift.id });
+    await processDispatchEventBestEffort(result.dispatchEventId, traceId);
     return { success: true, shift: result.shift };
   } finally {
-    await releaseDispatchLock(lockKey);
+    if (lockResult === "acquired") {
+      await releaseResourceLock(lockKey, lockToken);
+    }
   }
 }
 
@@ -193,9 +297,10 @@ export async function endShift(
   driverId: string,
   traceId: string
 ): Promise<ShiftResult> {
-  const lockKey = `dispatch_lock:${driverId}`;
-  const locked = await acquireDispatchLock(lockKey, 10);
-  if (!locked) {
+  const lockKey = `dispatch:lock:${driverId}`;
+  const lockToken = randomUUID();
+  const lockResult = await acquireResourceLock(lockKey, lockToken, 15);
+  if (lockResult === "busy") {
     return {
       success: false,
       error: createApiErrorV2(
@@ -211,9 +316,16 @@ export async function endShift(
     try {
       outcome = await prisma.$transaction<EndShiftTxOutcome>(
         async (tx) => {
+          await tx.$queryRaw`
+            SELECT "id"
+            FROM "Driver"
+            WHERE "id" = ${driverId}
+            FOR UPDATE
+          `;
+
           const driver = await tx.driver.findUnique({
             where: { id: driverId },
-            select: { id: true, onShift: true }
+            select: { id: true, onShift: true, planVersion: true }
           });
 
           if (!driver) {
@@ -249,7 +361,10 @@ export async function endShift(
             // State inconsistency: onShift === true but no open shift
             await tx.driver.update({
               where: { id: driverId },
-              data: { onShift: false }
+              data: {
+                onShift: false,
+                planVersion: driver.planVersion + 1
+              }
             });
             return { kind: "missing_shift_repaired" };
           }
@@ -259,7 +374,7 @@ export async function endShift(
           const blockingAssignments = await tx.assignment.findMany({
             where: {
               driverId,
-              status: "ACTIVE",
+              status: { in: ["ACTIVE", "ACCEPTED"] },
               order: {
                 executionStatus: { in: ["EN_ROUTE", "IN_SERVICE"] }
               }
@@ -285,7 +400,7 @@ export async function endShift(
           const plannedAssignments = await tx.assignment.findMany({
             where: {
               driverId,
-              status: "ACTIVE",
+              status: { in: ["ACTIVE", "ACCEPTED"] },
               order: {
                 executionStatus: "PLANNED"
               }
@@ -293,25 +408,20 @@ export async function endShift(
             select: { id: true, orderId: true }
           });
 
+          let operatorUserId: string;
+          try {
+            operatorUserId = await resolveSystemOperator(tx);
+          } catch {
+            return {
+              kind: "rejected",
+              error: createApiErrorV2(
+                "INTERNAL_ERROR",
+                "No system operator account available to log the shift change"
+              )
+            };
+          }
+
           if (plannedAssignments.length > 0) {
-            // OperationLog requires an operator user; driver-triggered releases
-            // are logged under the earliest admin/dispatcher (system operator).
-            const operator = await tx.user.findFirst({
-              where: { role: { in: [...ADMIN_ROLES] } },
-              orderBy: { createdAt: "asc" },
-              select: { id: true }
-            });
-
-            if (!operator) {
-              return {
-                kind: "rejected",
-                error: createApiErrorV2(
-                  "INTERNAL_ERROR",
-                  "No system operator account available to log the release"
-                )
-              };
-            }
-
             const releasedAt = new Date();
 
             for (const assignment of plannedAssignments) {
@@ -340,7 +450,7 @@ export async function endShift(
                   entityType: "ASSIGNMENT",
                   entityId: assignment.id,
                   action: "RECYCLE",
-                  operatorUserId: operator.id,
+                  operatorUserId,
                   orderId: assignment.orderId,
                   driverId,
                   assignmentId: assignment.id,
@@ -365,24 +475,53 @@ export async function endShift(
             where: { id: activeShift.id },
             data: { endedAt: new Date() }
           });
+          await tx.operationLog.create({
+            data: {
+              entityType: "DRIVER_SHIFT",
+              entityId: closedShift.id,
+              action: "SHIFT_END",
+              operatorUserId,
+              driverId,
+              traceId,
+              reason: "Driver shift ended",
+              metadataJson: {
+                shiftId: closedShift.id,
+                driverId,
+                actor: "DRIVER_API",
+                occurredAt: closedShift.endedAt!.toISOString(),
+                releasedAssignmentCount: plannedAssignments.length
+              }
+            }
+          });
 
-          // planVersion always increments on a real shift end (§1.6),
-          // regardless of whether PLANNED assignments were released.
+          // Assignment compatibility triggers may increment planVersion once
+          // per released row. Reset it to the aggregate command's single
+          // version step while the driver row remains locked.
           await tx.driver.update({
             where: { id: driverId },
             data: {
               onShift: false,
-              planVersion: { increment: 1 }
+              planVersion: driver.planVersion + 1
             }
+          });
+
+          const dispatchEventId = `driver-shift-ended:${closedShift.id}`;
+          await enqueueInternalEvent(tx, {
+            eventId: dispatchEventId,
+            type: "DRIVER_SHIFT_ENDED",
+            driverId,
+            occurredAt: closedShift.endedAt!.toISOString(),
+            traceId
           });
 
           return {
             kind: "completed",
             shift: closedShift,
-            releasedCount: plannedAssignments.length
+            releasedCount: plannedAssignments.length,
+            dispatchEventId
           };
         },
-        { timeout: 15_000 }
+        { timeout: 10_000 }
       );
     } catch (error) {
       // Any throw inside the callback rolled the whole transaction back —
@@ -431,9 +570,27 @@ export async function endShift(
       releasedPlanned: outcome.releasedCount
     });
 
+    await processDispatchEventBestEffort(outcome.dispatchEventId, traceId);
     return { success: true, shift: outcome.shift };
   } finally {
-    await releaseDispatchLock(lockKey);
+    if (lockResult === "acquired") {
+      await releaseResourceLock(lockKey, lockToken);
+    }
+  }
+}
+
+async function processDispatchEventBestEffort(
+  eventId: string,
+  traceId: string
+) {
+  try {
+    await processInternalEvent(eventId);
+  } catch (error) {
+    log.error("Shift dispatch event processing failed; outbox retained", {
+      eventId,
+      traceId,
+      error: error instanceof Error ? error.message : String(error)
+    });
   }
 }
 
@@ -447,7 +604,7 @@ export async function getActivePlannedAssignments(
   return prisma.assignment.findMany({
     where: {
       driverId,
-      status: "ACTIVE",
+      status: { in: ["ACTIVE", "ACCEPTED"] },
       order: {
         executionStatus: "PLANNED"
       }

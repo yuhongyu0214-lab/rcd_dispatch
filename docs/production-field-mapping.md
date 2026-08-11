@@ -1,11 +1,16 @@
 # 生产化字段映射表
 
+> **V1 历史输入，不是 V2 权威（2026-08-01）**：本文只用于维护现有 V1 Adapter
+> 和追溯外部字段来源，不得定义 V2 的 CanonicalOrder、Schema、API、状态机或调度规则。
+> V2 当前口径只认 `docs/versions/v2.0/data-architecture-v2.md` 与
+> `docs/versions/v2.0/api-contract-v2.md`。下方“冻结声明”仅约束 V1 兼容维护。
+
 > **冻结声明**：本文档冻结后，字段变更必须先修改本文档再改代码。任何未经文档更新的字段变更视为违规，Code Review 阶段必须驳回。
 
 版本：v1.0  
 冻结日期：2026-07-04  
 适用范围：`integration-adapter` 阶段及之后所有与外部平台对接的代码  
-关联文档：`docs/demo-v12-api-contract.md`、`prisma/schema.prisma`（data-model 冻结版）
+V1 关联实现：`prisma/schema.prisma`（data-model 冻结版）；V2 HTTP 契约只认 `docs/versions/v2.0/api-contract-v2.md`
 
 ---
 
@@ -509,7 +514,7 @@ export * as haluo from "./haluo";
 | `feature-admin-workflow/src/lib/adapters/gps/mapper.ts` | GPS 字段映射实现 |
 | `feature-admin-workflow/src/lib/adapters/index.ts` | Adapter 注册表 |
 | `feature-admin-workflow/src/lib/adapters/adapters.test.ts` | Adapter 单元测试 |
-| `docs/demo-v12-api-contract.md` | API DTO 契约定义 |
+| `docs/versions/v2.0/api-contract-v2.md` | V2 当前 API DTO 契约；不得由本文覆盖 |
 
 ## 附录 C：文档修订记录
 
