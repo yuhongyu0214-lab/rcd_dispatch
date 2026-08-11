@@ -10,14 +10,15 @@
 >
 > 镜像：`sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`（ACR index digest）
 >
-> 结论：`DOCUMENT_BASELINE_PASS / FINAL_GATE_DECISION_PENDING`
+> 结论：`DOCUMENT_BASELINE_PASS / GATE3_FINAL_PASS`（2026-08-11 主控裁决）
 
 ## 1. 白话结论
 
 代码仓库、镜像仓库和预生产服务器使用的是同一版程序，系统健康、冻结 10 单、故障恢复和
 应用回退结果也没有漂移。文档中的旧候选和旧进度已经返修，并已形成可追溯文档基线
 `feature/v2-gate3-review-remediation @ 57ef86c43bf220f48774e130575c40b8c94a83d5`；本地、upstream
-与 GitHub 远程 SHA 完全一致。Gate 3 仍等待主控最终裁决，不需要重新构建或部署。
+与 GitHub 远程 SHA 完全一致。主控已于 2026-08-11 完成最终裁决，Gate 3 为 `PASS`；
+不需要重新构建或部署。
 
 ## 2. 代码与镜像一致性
 
@@ -87,9 +88,11 @@ Schema、migration、枚举、依赖和设计变量没有变化。
 runtime consistency: PASS
 document content after remediation: PASS
 traceable document baseline SHA: PASS (57ef86c43bf220f48774e130575c40b8c94a83d5)
-Gate 3: NOT_PASS / FINAL_GATE_DECISION_PENDING
-second round: FROZEN
+Gate 3: PASS
+second round: AUTHORIZED / NOT_STARTED
 ```
 
-下一步只允许由主控对已通过的退出条件作 Gate 3 最终裁决。该步骤不需要重新构建镜像、
-部署、migration、基础资料写入或业务数据清理。
+最终裁决依据与 PASS 后冻结边界见
+[2026-08-11 Gate 3 最终闸门裁决](2026-08-11-gate3-final-gate-decision.md)。本轮 PASS 文档形成
+新的可追溯提交、且 Gate 3 候选按批准路径完成 `develop` 交接前，不创建第二轮分支；不得因此
+重新构建镜像、部署、执行 migration、写入基础资料或清理业务证据。
