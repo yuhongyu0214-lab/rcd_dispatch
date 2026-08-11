@@ -1,7 +1,7 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`，PASS 文档内容基线 `464ee5d…` 已远程核验。第二轮为 `AUTHORIZED / NOT_STARTED`，等待 Gate 3→`develop` 批准交接
+> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`，PASS 文档内容基线 `464ee5d…` 已远程核验；交接分支 `b853a7a…` 已合入并推送，Gate 3 代码交接点为 `develop @ 51ddb5f…`。第二轮为 `AUTHORIZED / NOT_STARTED`，尚未创建分支
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
@@ -651,13 +651,14 @@ Gate 3 若因事务 outbox 必须修改上游业务写入点，仍由同一实�
 - Gate 0：已正式通过并冻结，状态提交 `b69d383`。
 - Gate 1：Schema 与迁移提交 `342784c` 已进入 develop；Gate 2 契约提交 `378531b / 344ab0f` 已进入 develop。
 - 第一轮并行：1A 合并点 `7d0fb9b`、1B 合并点 `92e8f5b`、1C 合并点 `239dc8d`。
-- Gate 3-0 契约封口已合入 develop，当前 develop / origin/develop 为 `60a2e35`。
+- Gate 3-0 契约封口合入时的 develop / origin/develop 为 `60a2e35`。
 - Gate 3-1/3-2 实现位于 `feature/v2-dispatch-integration`，审查基线 `cd4bca5`。
 - 2026-07-26 Gate -1～Gate 3-2 综合审查结论为 `FAIL`：发现认证、事务边界、内部事件所有权、真实调度接线、审计与文档状态等 P0/P1 缺口。
 - 同日二次独立验收结论为 `REQUEST CHANGES`：旧司机入口仍可绕过认证、JWT 缺 `exp`、十分钟基线无生产者、位置变化未原子递增版本、位置样本触发过密、ETA 混合 Top-8 可淘汰真实起点；六项已补反例并在当前工作树修复，仍待终审裁决。
 - 后续追加发现 ETA Top-8 仍会裁掉本轮 A 槽新生成的 delivery cursor，导致可连续进入 B 的订单误报 `ETA_UNAVAILABLE`；已恢复计划池全部 delivery→pickup 必要组合，并补 `buildEtaMatrix()` → `runDispatchV2()` A/B 串联回归。
 - G3-3 本地开发已闭环：司机类事件按受影响门店加载全部活动司机参与比较；相同逻辑计划重试不回收/重建 Assignment 或递增 `planVersion`；outbox 只有持有当前租约的 worker 才计为处理成功；锁忙、Redis 不可用降级、过期快照重算均有独立编排测试。
+- Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
 - 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 已完成 Git、回归、ACR、预生产、真实 10 单、worker 积压恢复与应用回退。`084649f4…` 回退 30 秒、当前候选恢复 31 秒，最终 HTTPS、真实依赖、三容器 revision、单 worker 和 outbox 通过。最终一致性审查、文档追溯与主控裁决全部完成，Gate 3 为 `PASS`；第二轮已获准准备但尚未启动。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
 - 当前执行限制：不得再次变更 app、worker 或 Nginx，不得执行 migration、重复基础资料、清理任何失败样本或直接写业务数据库。错误 helper 产生的独立 `G3FAULT` 订单必须保留并与冻结 10 单分开统计。
-- 下一动作：按批准的分支流把 Gate 3 候选与 PASS 文档基线交接到 `develop`；随后由主控从同一 `develop` SHA 创建第二轮 Web、司机接口和观测分支。实时 H5 高德地图、获准点位和整体排版进入第二轮产品/API 再冻结，不反向修改 Gate 3 验收范围。
+- 下一动作：完成本次状态激活后，由主控从同一最终 `origin/develop` HEAD 指定第二轮 Web、司机接口和观测分支、文件白名单与验收标准；当前尚未创建分支。实时 H5 高德地图、获准点位和整体排版进入第二轮产品/API 再冻结，不反向修改 Gate 3 验收范围。

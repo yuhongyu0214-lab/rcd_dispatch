@@ -1,10 +1,10 @@
 # Gate 3-R 工作现场保护与基建权威档案执行优化方案
 
-> 方案版本：`RCD-GATE3R-PLAN-V5-20260811`
+> 方案版本：`RCD-GATE3R-PLAN-V6-20260811`
 >
 > 状态：Gate 3-R 预生产实施、运行验收与 Gate 3 最终裁决已完成；当前不可变验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。Git/ACR/ECS、RDS/Tair、app、worker、Nginx、HTTPS、SLS、真实 10 单、故障恢复、应用回退、文档追溯和主控裁决均通过；Gate 3 为 `PASS`，PASS 文档内容基线 `464ee5d…` 已远程核验
 >
-> 当前裁决：Gate 3 `PASS`；第二轮 `AUTHORIZED / NOT_STARTED`；完成 Gate 3→`develop` 批准交接后再创建第二轮分支
+> 当前裁决：Gate 3 `PASS`；交接分支 `b853a7a…` 已合入并推送至 `develop @ 51ddb5f…`；第二轮 `AUTHORIZED / NOT_STARTED`，尚未创建分支
 >
 > 适用范围：保护 `feature/v2-gate3-review-remediation` 当前工作现场，建立四份生产基础设施权威档案
 >
