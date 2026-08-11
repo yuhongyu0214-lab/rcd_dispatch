@@ -1,6 +1,6 @@
 # 人车单生产基础设施架构 V2
 
-> 文档版本：`RCD-INFRA-V2.0-R5-20260811`
+> 文档版本：`RCD-INFRA-V2.0-R6-20260811`
 >
 > 状态：Gate 3-R 预生产基础设施已实施，并通过真实 10 单、故障恢复与应用回退验收；正式域名、备案、可信证书和整机/RDS 灾备仍未验收
 >
@@ -89,7 +89,7 @@ Railway 仅保留为历史 Demo 证据；CloudBase 只能承载假数据或脱�
 | 入口与日志 | 自签名 HTTPS、Nginx、本机 `json-file 20m × 5`、LoongCollector 与 SLS 子闸门通过；正式可信 HTTPS 延后 |
 | 业务与恢复 | 冻结真实 10 单、worker 积压恢复、应用回退与当前候选恢复通过；整机与 RDS 灾备仍是独立演练 |
 
-完整状态与证据分别见[项目状态总览](../../status/README.md)、[真实 E2E 重验进度](../../status/2026-08-10-gate3r-real-e2e-retest-progress.md)、[故障与回退验收](../../status/2026-08-10-gate3r-fault-rollback-acceptance.md)和[最终闸门裁决](../../status/2026-08-11-gate3-final-gate-decision.md)。主控已于 2026-08-11 裁决 Gate 3 `PASS`；该结论不改变正式域名、备案、可信证书和整机/RDS 灾备仍待独立验收的边界。
+完整状态与证据分别见[项目状态总览](../../status/README.md)、[真实 E2E 重验进度](../../status/2026-08-10-gate3r-real-e2e-retest-progress.md)、[故障与回退验收](../../status/2026-08-10-gate3r-fault-rollback-acceptance.md)和[最终闸门裁决](../../status/2026-08-11-gate3-final-gate-decision.md)。主控已于 2026-08-11 裁决 Gate 3 `PASS`，PASS 文档内容基线 `464ee5d…` 已远程核验；该结论不改变正式域名、备案、可信证书和整机/RDS 灾备仍待独立验收的边界。
 
 ## 4. 组件职责
 
@@ -231,3 +231,4 @@ Redis/Tair 故障时允许实时能力降级，但不得产生第二套业务事
 | V2.0-r3 | 2026-08-10 | 登记阿里云预生产 app/worker/Nginx、RDS/Tair、ACR/SLS、真实 10 单、故障恢复和应用回退已实施；正式生产可信入口与整机/RDS 灾备边界不变 |
 | V2.0-r4 | 2026-08-10 | 登记最终运行一致性审查与文档基线 `57ef86c…` 追溯完成；架构组件、正式生产可信入口和整机/RDS 灾备边界不变 |
 | V2.0-r5 | 2026-08-11 | 登记 Gate 3 最终 `PASS`；阿里云主线与预生产架构不变，正式可信入口和整机/RDS 灾备仍不在本次通过范围 |
+| V2.0-r6 | 2026-08-11 | 登记 Gate 3 PASS 文档内容基线 `464ee5d…` 已远程核验；架构组件与正式生产未决边界不变 |

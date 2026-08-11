@@ -93,6 +93,7 @@ second round: AUTHORIZED / NOT_STARTED
 ```
 
 最终裁决依据与 PASS 后冻结边界见
-[2026-08-11 Gate 3 最终闸门裁决](2026-08-11-gate3-final-gate-decision.md)。本轮 PASS 文档形成
-新的可追溯提交、且 Gate 3 候选按批准路径完成 `develop` 交接前，不创建第二轮分支；不得因此
+[2026-08-11 Gate 3 最终闸门裁决](2026-08-11-gate3-final-gate-decision.md)。PASS 文档内容基线
+`464ee5d6ffdb435d76b65f9814d82e4666fd84a9` 已完成三方核验；Gate 3 候选按批准路径完成
+`develop` 交接前，不创建第二轮分支；不得因此
 重新构建镜像、部署、执行 migration、写入基础资料或清理业务证据。

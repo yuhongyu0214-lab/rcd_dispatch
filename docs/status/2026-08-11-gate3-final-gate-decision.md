@@ -8,9 +8,7 @@
 >
 > ACR index digest：`sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`
 >
-> 文档内容基线：`feature/v2-gate3-review-remediation @ 57ef86c43bf220f48774e130575c40b8c94a83d5`
->
-> 文档状态激活提交：`3ee8cfc6f5b7706a193172f67f27e98056d9e9fe`
+> Gate 3 PASS 文档内容基线：`feature/v2-gate3-review-remediation @ 464ee5d6ffdb435d76b65f9814d82e4666fd84a9`
 >
 > 最终结论：`GATE3_PASS`
 
@@ -30,7 +28,7 @@ P0/P1。
 |---|---|---|
 | P0/P1 | `PASS` | 无未解决 P0/P1；Gate 3 六项退出条件全部满足 |
 | 代码与远程 | `PASS` | 候选 worktree 干净；本地、upstream、GitHub 均为 `958afca…` |
-| 文档追溯 | `PASS` | 内容基线 `57ef86c…`、状态激活提交 `3ee8cfc…` 已完成本地/upstream/GitHub 核验 |
+| 文档追溯 | `PASS` | Gate 3 PASS 内容基线 `464ee5d…` 已完成本地/upstream/GitHub 核验 |
 | 本地回归 | `PASS` | 53 个测试文件、517 个测试通过；7 个无本地真实依赖的集成测试按设计跳过，真实预生产证据覆盖 |
 | 代码检查与构建 | `PASS` | `pnpm lint` 与 Next.js 生产构建通过；构建含类型检查和 29 个页面生成 |
 | migration 指纹 | `PASS` | 17 个 SQL 逐项无不匹配；正向清单与全部 SQL 聚合 SHA-256 均与冻结值一致 |
@@ -69,7 +67,7 @@ HTTPS 健康仍为 200，GitHub SHA 未漂移。该项登记为 P2 运维观察�
 - 保留首轮失败、门店映射失败、边界抖动、helper 偏差、`G3FAULT` 订单和历史 migration 容器。
 - 不重复执行 9 个 migration，不重复写入 G3E2E 基础资料，不直接修改业务数据库。
 - 本裁决不自动合并 `develop`，不自动创建第二轮分支，不授权部署或云资源变更。
-- 第二轮启动前，先提交并推送本轮 Gate 3 `PASS` 文档同步，再由主控指定统一 `develop` 基线、
-  分支、文件白名单和验收标准。
+- 第二轮启动前，先按批准路径完成 Gate 3 候选到 `develop` 的交接，再由主控指定统一
+  `develop` 基线、分支、文件白名单和验收标准。
 - Gate 3 后已登记的司机 H5 实时高德地图、获准点位和整体排版进入第二轮产品/API 再冻结，
   不反向扩大已通过的 Gate 3 范围。

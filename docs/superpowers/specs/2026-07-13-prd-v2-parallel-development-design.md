@@ -1,7 +1,7 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`。第二轮为 `AUTHORIZED / NOT_STARTED`，等待 PASS 文档新基线与 Gate 3→`develop` 批准交接
+> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`，PASS 文档内容基线 `464ee5d…` 已远程核验。第二轮为 `AUTHORIZED / NOT_STARTED`，等待 Gate 3→`develop` 批准交接
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
@@ -660,4 +660,4 @@ Gate 3 若因事务 outbox 必须修改上游业务写入点，仍由同一实�
 - 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 已完成 Git、回归、ACR、预生产、真实 10 单、worker 积压恢复与应用回退。`084649f4…` 回退 30 秒、当前候选恢复 31 秒，最终 HTTPS、真实依赖、三容器 revision、单 worker 和 outbox 通过。最终一致性审查、文档追溯与主控裁决全部完成，Gate 3 为 `PASS`；第二轮已获准准备但尚未启动。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
 - 当前执行限制：不得再次变更 app、worker 或 Nginx，不得执行 migration、重复基础资料、清理任何失败样本或直接写业务数据库。错误 helper 产生的独立 `G3FAULT` 订单必须保留并与冻结 10 单分开统计。
-- 下一动作：先为本轮 PASS 文档形成可追溯提交，再按批准的分支流把 Gate 3 候选交接到 `develop`；随后由主控从同一 `develop` SHA 创建第二轮 Web、司机接口和观测分支。实时 H5 高德地图、获准点位和整体排版进入第二轮产品/API 再冻结，不反向修改 Gate 3 验收范围。
+- 下一动作：按批准的分支流把 Gate 3 候选与 PASS 文档基线交接到 `develop`；随后由主控从同一 `develop` SHA 创建第二轮 Web、司机接口和观测分支。实时 H5 高德地图、获准点位和整体排版进入第二轮产品/API 再冻结，不反向修改 Gate 3 验收范围。

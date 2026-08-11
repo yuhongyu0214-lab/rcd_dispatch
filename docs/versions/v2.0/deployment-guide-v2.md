@@ -1,8 +1,8 @@
 # 人车单生产部署、迁移与回退指南 V2
 
-> 文档版本：`RCD-DEPLOY-V2.0-R12-20260811`
+> 文档版本：`RCD-DEPLOY-V2.0-R13-20260811`
 >
-> 状态：Gate 3 已最终 `PASS`；代码、ACR digest、预生产运行身份与文档追溯完成，最终运行保持 `958afca…`；本裁决不授权重复部署或 migration
+> 状态：Gate 3 已最终 `PASS`，PASS 文档内容基线 `464ee5d…` 已远程核验；代码、ACR digest 与预生产运行身份保持 `958afca…`；本裁决不授权重复部署或 migration
 >
 > 权威范围：构建、镜像、发布、迁移、启动、验证和回退顺序
 >
@@ -321,3 +321,4 @@ docker compose --env-file <受控配置文件> \
 | V2.0-r10 | 2026-08-10 | 最终一致性审查确认 GitHub 远程 `958afca…`、ACR index digest `sha256:13e0…5bff`、amd64 manifest、ECS app/worker 镜像与三服务 release revision 一致；未重新构建、部署或执行 migration |
 | V2.0-r11 | 2026-08-10 | 登记文档基线 `feature/v2-gate3-review-remediation @ 57ef86c…` 已提交、推送并完成本地/upstream/GitHub 远程核验；应用发布、回退与禁止 migration 规则不变 |
 | V2.0-r12 | 2026-08-11 | 登记 Gate 3 最终 `PASS`；不可变镜像、分阶段发布、回退目标和禁止重复 migration/基础资料规则不变，第二轮部署仍需单独授权 |
+| V2.0-r13 | 2026-08-11 | 登记 Gate 3 PASS 文档内容基线 `464ee5d…` 已提交、推送并完成三方核验；运行镜像、部署、回退与 migration 边界不变 |
