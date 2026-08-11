@@ -10,6 +10,8 @@
 >
 > Gate 3 PASS 文档内容基线：`feature/v2-gate3-review-remediation @ 464ee5d6ffdb435d76b65f9814d82e4666fd84a9`
 >
+> Gate 3→develop 交接：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` → `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`
+>
 > 最终结论：`GATE3_PASS`
 
 ## 1. 白话结论
@@ -18,9 +20,9 @@ Gate 3 最终验收通过。冻结的代码、镜像、预生产运行身份、�
 幂等、worker 故障恢复、应用回退、migration 指纹和文档基线均满足退出条件，没有未解决的
 P0/P1。
 
-第二轮 Web、司机接口与观测工作获得进入准备阶段的资格，但本裁决不自动创建分支、合并代码、
-部署、执行 migration、重复写基础资料或清理失败证据。本轮状态同步形成新的可追溯文档提交，
-且 Gate 3 候选按批准的 `feature/* → develop` 路径完成交接前，第二轮保持 `AUTHORIZED / NOT_STARTED`。
+第二轮 Web、司机接口与观测工作获得进入准备阶段的资格，但本裁决本身不自动创建分支、合并代码、
+部署、执行 migration、重复写基础资料或清理失败证据。用户后续单独批准阶段交接，Gate 3 候选已按
+`feature/* → develop` 路径完成并远程核验；第二轮仍为 `AUTHORIZED / NOT_STARTED`，尚未创建分支。
 
 ## 2. 最终裁决依据
 
@@ -29,6 +31,7 @@ P0/P1。
 | P0/P1 | `PASS` | 无未解决 P0/P1；Gate 3 六项退出条件全部满足 |
 | 代码与远程 | `PASS` | 候选 worktree 干净；本地、upstream、GitHub 均为 `958afca…` |
 | 文档追溯 | `PASS` | Gate 3 PASS 内容基线 `464ee5d…` 已完成本地/upstream/GitHub 核验 |
+| develop 交接 | `PASS` | 交接分支 `b853a7a…` 已通过 517 tests、lint、29 页面 build、migration 指纹与五轴审查，并合入 `develop @ 51ddb5f…`；本地/upstream/GitHub 一致 |
 | 本地回归 | `PASS` | 53 个测试文件、517 个测试通过；7 个无本地真实依赖的集成测试按设计跳过，真实预生产证据覆盖 |
 | 代码检查与构建 | `PASS` | `pnpm lint` 与 Next.js 生产构建通过；构建含类型检查和 29 个页面生成 |
 | migration 指纹 | `PASS` | 17 个 SQL 逐项无不匹配；正向清单与全部 SQL 聚合 SHA-256 均与冻结值一致 |
@@ -66,8 +69,9 @@ HTTPS 健康仍为 200，GitHub SHA 未漂移。该项登记为 P2 运维观察�
 - 保持 `958afca…@sha256:13e0…5bff` 为 Gate 3 不可变验收候选，禁止使用 `latest` 或混用镜像。
 - 保留首轮失败、门店映射失败、边界抖动、helper 偏差、`G3FAULT` 订单和历史 migration 容器。
 - 不重复执行 9 个 migration，不重复写入 G3E2E 基础资料，不直接修改业务数据库。
-- 本裁决不自动合并 `develop`，不自动创建第二轮分支，不授权部署或云资源变更。
-- 第二轮启动前，先按批准路径完成 Gate 3 候选到 `develop` 的交接，再由主控指定统一
-  `develop` 基线、分支、文件白名单和验收标准。
+- 本裁决本身不自动合并 `develop`，也不授权部署或云资源变更；用户后续单独批准的 Gate 3
+  交接已完成，但没有创建第二轮分支。
+- 第二轮启动前，由主控以状态激活后的同一 `origin/develop` HEAD 指定代码/文档基线、分支、
+  文件白名单和验收标准。
 - Gate 3 后已登记的司机 H5 实时高德地图、获准点位和整体排版进入第二轮产品/API 再冻结，
   不反向扩大已通过的 Gate 3 范围。

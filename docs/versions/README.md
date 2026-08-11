@@ -1,6 +1,6 @@
 # 人车单项目文档版本总入口
 
-> 版本戳：`RCD-DOC-REGISTRY-20260811-R23`
+> 版本戳：`RCD-DOC-REGISTRY-20260811-R24`
 > 建立日期：2026-07-13
 > 治理更新时间：2026-08-10
 > 归档方式：现行权威集中到 `v2.0/`；已融合或冲突的旧方案从工作树清场，历史由 Git 追溯
@@ -30,8 +30,8 @@
 | 构建、部署与回退 | V2.0-r13 | Gate 3 `PASS` 文档基线 `464ee5d…` 已远程核验；分阶段和禁止重复 migration 规则不变 | [部署指南 V2](v2.0/deployment-guide-v2.md) |
 | 生产运行与恢复 | V2.0-r6 | 最终运行资源、健康、10 单、outbox 和证据一致性通过；整机/RDS 灾备仍为独立演练 | [运维指南 V2](v2.0/operations-guide-v2.md) |
 | 基础设施决策与替代历史 | V2.0-r3 | INFRA-001～023 已登记；公网 IP 预生产演示获准，正式上线条件不变 | [基础设施决策日志](v2.0/infrastructure-decision-log.md) |
-| 项目当前状态 | 2026-08-11 | Gate 3 最终 `PASS`，文档基线 `464ee5d…` 通过；第二轮等待 `develop` 交接 | [状态总览](../status/README.md) |
-| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260811-R22 | Layer 0；所有 Agent 必读；不超过 150 行；已接入 Codex 回合结束确认 Hook | [Agent 公共上下文](../context/agent-common-context.md) |
+| 项目当前状态 | 2026-08-11 | Gate 3 最终 `PASS`；`b853a7a…` 已合入 `develop @ 51ddb5f…` 并远程核验；第二轮尚未启动 | [状态总览](../status/README.md) |
+| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260811-R23 | Layer 0；所有 Agent 必读；不超过 150 行；已接入 Codex 回合结束确认 Hook | [Agent 公共上下文](../context/agent-common-context.md) |
 | V1 产品与开发主线 | V1.x | 历史只读 | [V1 历史索引](v1/README.md) |
 
 ## 文档权威顺序（按领域拆分，唯一权威口径）
@@ -169,7 +169,7 @@ remote commit: 958afca537b412fb972b6e180561a9b37022834d
 2. 新候选的 Schema/migration tree 与完成一次性空 PostgreSQL 演练的旧冻结候选完全相同；原有 9 个正向 migration、最终 Schema、8 个 rollback 和五类安全护栏结论继续有效。
 3. 冻结真实 10 单已完成：订单 1～6、8～10 共 9 单完成，订单 7 按预期为 `INFEASIBLE` 且保留 1 条开放预警；并发、旧版本、到达后改排拒绝与订单 10 幂等重放均通过。首轮失败、旧映射、边界抖动和错误 helper 现场继续保留，不得清理。
 4. 最终一致性审查确认本地/远程代码、ACR digest、ECS 运行身份、真实依赖、10 单结果和故障/回退证据一致；文档口径已返修，并以 `feature/v2-gate3-review-remediation @ 57ef86c43bf220f48774e130575c40b8c94a83d5` 形成可追溯基线，本地、upstream 与 GitHub 远程核验一致。
-5. 主控已于 2026-08-11 最终裁决 Gate 3 `PASS`，PASS 文档内容基线 `feature/v2-gate3-review-remediation @ 464ee5d6ffdb435d76b65f9814d82e4666fd84a9` 已完成本地/upstream/GitHub 核验，证据见[最终闸门裁决](../status/2026-08-11-gate3-final-gate-decision.md)。第二轮为 `AUTHORIZED / NOT_STARTED`；Gate 3 候选按批准路径进入 `develop` 后，才能从同一 `develop` SHA 创建 Web、司机接口和观测分支。不得因此重复部署、执行 migration、整批写入基础资料、清理失败样本或直接写业务数据库。
+5. 主控已于 2026-08-11 最终裁决 Gate 3 `PASS`，PASS 文档内容基线 `feature/v2-gate3-review-remediation @ 464ee5d6ffdb435d76b65f9814d82e4666fd84a9` 已完成远程核验；交接分支 `feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 已合入并推送，Gate 3 代码交接点为 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`。第二轮为 `AUTHORIZED / NOT_STARTED`，尚未创建分支；状态激活后必须从同一最终 `origin/develop` HEAD 启动 Web、司机接口和观测分支。不得因此重复部署、执行 migration、整批写入基础资料、清理失败样本或直接写业务数据库。
 
 状态事实和阻断项统一在[状态总览](../status/README.md)维护；状态文档不得修改领域契约。
 

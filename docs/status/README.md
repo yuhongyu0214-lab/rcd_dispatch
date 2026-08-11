@@ -6,14 +6,14 @@
 
 ## 一句话结论
 
-Gate 3 当前唯一代码/镜像/预生产运行候选为 `958afca537b412fb972b6e180561a9b37022834d@sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。2026-08-11 最终裁决确认无未解决 P0/P1，代码、镜像、运行资源、真实 10 单、并发与改排、预警、幂等、故障恢复、应用回退、migration 指纹和文档追溯全部满足退出条件，Gate 3 为 `PASS`。PASS 文档内容基线 `464ee5d6ffdb435d76b65f9814d82e4666fd84a9` 已提交、推送并完成本地/upstream/GitHub 三方核验。第二轮为 `AUTHORIZED / NOT_STARTED`；完成 Gate 3 候选到 `develop` 的批准交接前，不创建第二轮分支。
+Gate 3 当前唯一代码/镜像/预生产运行候选为 `958afca537b412fb972b6e180561a9b37022834d@sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。2026-08-11 最终裁决确认无未解决 P0/P1，代码、镜像、运行资源、真实 10 单、并发与改排、预警、幂等、故障恢复、应用回退、migration 指纹和文档追溯全部满足退出条件，Gate 3 为 `PASS`。PASS 文档内容基线 `464ee5d6ffdb435d76b65f9814d82e4666fd84a9` 已远程核验；交接分支 `b853a7af245942758de1cd46c9a25c384c08ec62` 已合入并推送，Gate 3 代码交接点为 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`。第二轮仍为 `AUTHORIZED / NOT_STARTED`，尚未创建分支；后续统一从状态激活后的同一 `origin/develop` HEAD 启动。
 
 ## 当前工作流状态
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
 | 文档治理 | `GATE3_PASS_BASELINE_COMMITTED_REMOTE_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | PASS 内容基线 `464ee5d…` 已提交、推送并完成三方核验 |
-| 应用候选 | `958AFCA_GATE3_ACCEPTED` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变运行身份，待批准后按分支流交接到 `develop` |
+| 应用候选 | `958AFCA_GATE3_ACCEPTED_DEVELOP_HANDOFF_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变运行身份；代码已按分支流交接到 `develop @ 51ddb5f…` |
 | 依赖安全 | `COMPLETED` | [依赖安全返修](2026-08-01-gate3-dependency-security-remediation.md) | 依赖变化时重跑全套审计 |
 | migration 指纹 | `PREPROD_APPLIED_PASS` | [migration 清单](2026-08-01-gate3-migration-manifest.md) | 保持冻结，后续候选变化必须重新生成与迁移 |
 | 数据库迁移 | `PREPROD_9_MIGRATIONS_OWNER_RETIRED_PASS` | [RDS 迁移与权限证据](2026-08-05-gate3r-rds-preprod-migration-permissions.md) | 保持冻结，不得重复 migration |
@@ -25,7 +25,7 @@ Gate 3 当前唯一代码/镜像/预生产运行候选为 `958afca537b412fb972b6
 | 既有预生产成果审查 | `RUNTIME_FINAL_CONSISTENCY_PASS` | [RDS 迁移与权限证据](2026-08-05-gate3r-rds-preprod-migration-permissions.md) | 保持备份、9 个 migration、最小权限、单 worker 和运行身份不变 |
 | 真实 10 单 | `REAL10_PASS_9_COMPLETED_1_INFEASIBLE_ALERT` | [真实 E2E 重验进度](2026-08-10-gate3r-real-e2e-retest-progress.md) | 保留全部成功与失败现场，不清理 |
 | Gate 3 总闸门 | `PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变候选与证据，进入受控阶段交接 |
-| 第二轮并行 | `AUTHORIZED_NOT_STARTED` | 同上 | Gate 3 候选按批准路径进入 `develop` 后再创建统一基线分支 |
+| 第二轮并行 | `AUTHORIZED_NOT_STARTED` | 同上 | 前置交接已满足；尚未创建分支，等待下一份明确任务单并使用最终 `origin/develop` HEAD |
 
 ## 唯一代码、文档与迁移基线
 
@@ -53,6 +53,8 @@ document baseline branch: feature/v2-gate3-review-remediation
 document baseline commit: 57ef86c43bf220f48774e130575c40b8c94a83d5
 document status activation commit: 3ee8cfc6f5b7706a193172f67f27e98056d9e9fe
 gate3 pass document content baseline commit: 464ee5d6ffdb435d76b65f9814d82e4666fd84a9
+gate3 develop handoff branch commit: b853a7af245942758de1cd46c9a25c384c08ec62
+gate3 code handoff develop merge: 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e
 ```
 
 中间提交、来源分支和主工作区未提交代码不属于 Gate 3 当前验收对象。当前 HEAD、Git 远程、ACR 与预生产 app/worker 均为 `958afca…@sha256:13e0…5bff`；Nginx 沿用原镜像、配置、证书和端口，只把运行 revision 刷新为 `958afca…`。`7595a649…`、`4eb3b485…`、`084649f4…` 与迁移期候选继续保留，运行不得混用；`08d84cfc…` 是被后续限流返修取代、未进入预生产运行的候选。app、worker、Nginx、本机结构化日志、轮转和 SLS 集中观测仍健康；G3E2E R2.2 基础资料禁止重复整批写入，所有失败证据继续保留。
