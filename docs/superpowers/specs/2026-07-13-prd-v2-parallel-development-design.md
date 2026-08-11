@@ -1,7 +1,7 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`，PASS 文档内容基线 `464ee5d…` 已远程核验；交接分支 `b853a7a…` 已合入并推送，Gate 3 代码交接点为 `develop @ 51ddb5f…`。第二轮为 `AUTHORIZED / NOT_STARTED`，尚未创建分支
+> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`，PASS 文档内容基线 `464ee5d…` 已远程核验；交接分支 `b853a7a…` 已合入并推送，Gate 3 代码历史交接点为 `develop @ 51ddb5f…`。第二轮为 `AUTHORIZED / NOT_STARTED`，尚未创建分支；唯一启动基线为 `origin/develop @ ae4714849fa965940b0df1c6766638cf398ac0ce`
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`

@@ -1,8 +1,8 @@
 # 人车单项目文档版本总入口
 
-> 版本戳：`RCD-DOC-REGISTRY-20260811-R24`
+> 版本戳：`RCD-DOC-REGISTRY-20260811-R25`
 > 建立日期：2026-07-13
-> 治理更新时间：2026-08-10
+> 治理更新时间：2026-08-11
 > 归档方式：现行权威集中到 `v2.0/`；已融合或冲突的旧方案从工作树清场，历史由 Git 追溯
 > 可视化导航：[Obsidian 项目全景白板](../rcd-v2-project-map.canvas)（仅作导航，不替代下方权威文档）
 
@@ -30,8 +30,8 @@
 | 构建、部署与回退 | V2.0-r13 | Gate 3 `PASS` 文档基线 `464ee5d…` 已远程核验；分阶段和禁止重复 migration 规则不变 | [部署指南 V2](v2.0/deployment-guide-v2.md) |
 | 生产运行与恢复 | V2.0-r6 | 最终运行资源、健康、10 单、outbox 和证据一致性通过；整机/RDS 灾备仍为独立演练 | [运维指南 V2](v2.0/operations-guide-v2.md) |
 | 基础设施决策与替代历史 | V2.0-r3 | INFRA-001～023 已登记；公网 IP 预生产演示获准，正式上线条件不变 | [基础设施决策日志](v2.0/infrastructure-decision-log.md) |
-| 项目当前状态 | 2026-08-11 | Gate 3 最终 `PASS`；`b853a7a…` 已合入 `develop @ 51ddb5f…` 并远程核验；第二轮尚未启动 | [状态总览](../status/README.md) |
-| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260811-R23 | Layer 0；所有 Agent 必读；不超过 150 行；已接入 Codex 回合结束确认 Hook | [Agent 公共上下文](../context/agent-common-context.md) |
+| 项目当前状态 | 2026-08-11 | Gate 3 最终 `PASS`；代码历史交接点为 `51ddb5f…`；第二轮唯一启动基线为 `origin/develop @ ae4714849fa965940b0df1c6766638cf398ac0ce`，尚未创建分支 | [状态总览](../status/README.md) |
+| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260811-R24 | Layer 0；所有 Agent 必读；不超过 150 行；已接入 Codex 回合结束确认 Hook | [Agent 公共上下文](../context/agent-common-context.md) |
 | V1 产品与开发主线 | V1.x | 历史只读 | [V1 历史索引](v1/README.md) |
 
 ## 文档权威顺序（按领域拆分，唯一权威口径）
@@ -140,7 +140,7 @@ HTTP 契约               → v2.0/api-contract-v2.md
 | 运行与入口 | 单 ECS 试运行；Docker + Nginx；同一不可变镜像分别运行 Next.js app、HTTP-only 单副本 worker、一次性 migration | app、worker、Nginx、自签名 HTTPS 与外部健康/登录路由已验收；正式可信 HTTPS 延后 |
 | 镜像与日志 | ACR 保存按 commit SHA 追溯的镜像；SLS 集中采集结构化日志 | ECS app/worker 当前按 `958afca…@sha256:13e0…5bff` 运行，Nginx 原镜像不变且 release revision 已对齐；本机轮转与 SLS 验收结论继续有效 |
 | 事实数据库 | 阿里云 RDS PostgreSQL 是唯一业务事实库；Prisma 负责 ORM 与 migration | 上海独立预生产库已完成 0805 全量备份、9 个 migration 和最小权限验收；正式生产另建物理实例 |
-| 实时数据 | 阿里云 Tair/Redis 保存最新位置、在线状态、ETA 短缓存和短锁，不得成为业务事实源 | 上海预生产 Tair 白名单与内网登录通过；app 运行后的前缀、锁竞争和降级验收仍待完成 |
+| 实时数据 | 阿里云 Tair/Redis 保存最新位置、在线状态、ETA 短缓存和短锁，不得成为业务事实源 | 上海预生产 Tair 白名单、内网登录、固定前缀、隔离短锁竞争与恢复均已通过；自动化不可用降级已验收，PostgreSQL 继续作为唯一业务事实库 |
 | 地图与路径 | 高德 JS API 负责前端地图；高德服务端 API 负责地理编码、路径与真实 ETA | Key 分离，服务端 Key 不得进入浏览器 |
 | 应用技术栈 | Next.js 15.5.21、React 19.2.8、TypeScript、Tailwind CSS 3、shadcn/ui、Prisma 6、Pino、Vitest | 应用候选已完成依赖审计与回归 |
 | 构建与依赖 | pnpm 10.11.0；SheetJS 官方 CDN `xlsx 0.20.3`；受审计的精确 pnpm overrides | 已冻结，不得回退到 npm/yarn 或 npm `xlsx 0.18.x` |
@@ -169,7 +169,7 @@ remote commit: 958afca537b412fb972b6e180561a9b37022834d
 2. 新候选的 Schema/migration tree 与完成一次性空 PostgreSQL 演练的旧冻结候选完全相同；原有 9 个正向 migration、最终 Schema、8 个 rollback 和五类安全护栏结论继续有效。
 3. 冻结真实 10 单已完成：订单 1～6、8～10 共 9 单完成，订单 7 按预期为 `INFEASIBLE` 且保留 1 条开放预警；并发、旧版本、到达后改排拒绝与订单 10 幂等重放均通过。首轮失败、旧映射、边界抖动和错误 helper 现场继续保留，不得清理。
 4. 最终一致性审查确认本地/远程代码、ACR digest、ECS 运行身份、真实依赖、10 单结果和故障/回退证据一致；文档口径已返修，并以 `feature/v2-gate3-review-remediation @ 57ef86c43bf220f48774e130575c40b8c94a83d5` 形成可追溯基线，本地、upstream 与 GitHub 远程核验一致。
-5. 主控已于 2026-08-11 最终裁决 Gate 3 `PASS`，PASS 文档内容基线 `feature/v2-gate3-review-remediation @ 464ee5d6ffdb435d76b65f9814d82e4666fd84a9` 已完成远程核验；交接分支 `feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 已合入并推送，Gate 3 代码交接点为 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`。第二轮为 `AUTHORIZED / NOT_STARTED`，尚未创建分支；状态激活后必须从同一最终 `origin/develop` HEAD 启动 Web、司机接口和观测分支。不得因此重复部署、执行 migration、整批写入基础资料、清理失败样本或直接写业务数据库。
+5. 主控已于 2026-08-11 最终裁决 Gate 3 `PASS`，PASS 文档内容基线 `feature/v2-gate3-review-remediation @ 464ee5d6ffdb435d76b65f9814d82e4666fd84a9` 已完成远程核验；交接分支 `feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 已合入并推送，Gate 3 代码历史交接点为 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`。第二轮为 `AUTHORIZED / NOT_STARTED`，尚未创建分支；状态激活后的唯一启动基线为 `origin/develop @ ae4714849fa965940b0df1c6766638cf398ac0ce`，Web、司机接口和观测分支必须从该完整 SHA 创建。不得因此重复部署、执行 migration、整批写入基础资料、清理失败样本或直接写业务数据库。
 
 状态事实和阻断项统一在[状态总览](../status/README.md)维护；状态文档不得修改领域契约。
 
