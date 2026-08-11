@@ -1,9 +1,10 @@
 # 人车单 V2 API 契约
 
-> 契约版本：`RCD-API-V2.0-20260717`
-> 状态：Gate 0 已冻结
+> 契约版本：`RCD-API-V2.0-R13-20260810`
+> 状态：Gate 3 应用候选复核通过；外部 HTTP 契约未因框架升级改变
 > 实施约束：本文件只冻结契约，不含任何代码；TypeScript DTO、错误类型和契约测试在 Gate 2 落地
 > 上游依据：[PRD V2](prd-v2.md) · [数据架构 V2](data-architecture-v2.md) · [项目规则 V2](project-rules-v2.md)
+> 代码事实：`codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`
 
 ## 1. 通用约定
 
@@ -94,6 +95,12 @@
 | `ingest` | `X-Ingest-Key` 或 `Authorization: Bearer`，Origin 白名单；**每个凭证绑定唯一 `sourceSystem`**，投递的 `IngestEnvelope.sourceSystem` 与凭证绑定不一致返回 403 `FORBIDDEN`（防止来源冒充写入他源唯一键空间） | 订单来源（插件/外部 API） |
 | `system` | 服务端内部调用，不暴露公网 | 调度引擎、定时校验 |
 
+### 1.8 框架适配边界（冻结）
+
+- Next.js 15 将动态路由 `params`、页面 `searchParams` 与 `cookies()` 改为异步读取；这是服务端实现细节，不是 HTTP 契约变更。
+- 本次适配没有新增、删除或改名任何对外路径与 HTTP 方法，没有改变鉴权主体、请求字段、响应字段、状态码、错误码、分页、幂等、版本或 traceId 语义。
+- 任何后续框架升级若需要改变上述任一外部行为，必须先修改本契约并升级契约版本；不得以“框架兼容”为由静默改约。
+
 ## 2. 接口清单
 
 ### 2.1 调度员（dispatcher）
@@ -172,6 +179,7 @@ IngestRecord（规范化接入 DTO：字段为 Canonical 命名，由来源侧�
 - 外部原始状态仅写入 `sourceStatusRaw` 与来源事件，不得直接映射为内部执行状态之外的写入。
 - **`sourceStatusRaw` 存储边界（冻结）**：`sourceStatusRaw` 可经过 Adapter 流转，但**仅持久化到 `OrderSourceEvent`**；`Order` 快照和任何调度 DTO（§3）不保存、不暴露该字段。
 - 重复（库内已存在同幂等键、批内重复、旧版本晚到）计入 `skipped`，不计入 `failed`。
+- 单条记录引用不存在的 `storeCode` 时计入 `failed`，reason 为 `STORE_NOT_FOUND`；不阻断同批其他记录。
 
 ### 2.4 系统（system）
 
@@ -179,6 +187,7 @@ IngestRecord（规范化接入 DTO：字段为 Canonical 命名，由来源侧�
 |---|---|---|
 | GET | `/api/v2/health` | 匿名存活探针；只返回 `{ status: "ok" }` 与 traceId，**不暴露**数据库 / Redis / 高德的可达状态 |
 | GET | `/api/v2/health/readiness` | 详细依赖可达状态（db / redis / amap）；仅限 `dispatcher` 会话或 `system` 内部调用，匿名访问返回 401 |
+| POST | `/api/v2/system/dispatch-events/process?limit=1..100` | 按 UTC 十分钟稳定桶幂等确保当前 `BASELINE_RECALCULATION` 已入队，再领取并处理待重试的调度 outbox 事件；使用 `Authorization: Bearer <INTERNAL_CRON_SECRET>` 或 `X-Internal-Key`，未鉴权返回 401；供每分钟周期任务调用，不面向浏览器 |
 
 ## 3. 核心 DTO（字段级冻结）
 
@@ -271,3 +280,12 @@ lat, lng, accuracyMeters, capturedAt
 | V2.0-r2 | 2026-07-17 | Gate 0 三轮返修：§1.6 冻结命令两分类（计划编辑命令带 `expected*`，业务事实/控制命令服务端事务内递增）；§2.3 冻结来源取消遇终态的返回语义（`success` + `FOLLOW_UP_REQUIRED`，不整批 400）与 `sourceStatusRaw` 存储边界（仅 `OrderSourceEvent`）；§1.1 区分 V1 读/写接口存续时点；§1.7 ingest 凭证绑定唯一 `sourceSystem`；可用性设置幂等 `replayed` |
 | V2.0-r3 | 2026-07-17 | Gate 0 四轮返修：§1.6 版本携带规则改封闭式（仅四类计划编辑命令带版本，其余含模块修改/位置变化/订单接入/周期校验一律服务端递增）；§2.2 模块端点标注不携带 `expectedPlanVersion` |
 | V2.0-r4 | 2026-07-18 | Gate 1 冲突裁决：V2 在线 ingest 禁止 `"v1-migration"`；版本比较器将该迁移/V1 兼容基线恒视为最旧版本 |
+| V2.0-r5 | 2026-07-26 | Gate 3-2 审查返修：补 `STORE_NOT_FOUND` 单条失败 reason；登记受内部密钥保护的 outbox 周期补偿端点 |
+| V2.0-r6 | 2026-07-26 | Gate 3-2 二次返修：系统 worker 每次调用先以 UTC 十分钟稳定桶幂等生成基线校验事件，再消费 outbox |
+| V2.0-r7 | 2026-08-01 | 对齐应用候选 `7f60fd0d55783d1f057c814e46a3dab7f73e2416`：登记 Next.js 15 异步动态 API 仅属内部适配；HTTP 路径、方法、鉴权、DTO、状态码、错误码与 traceId 语义零变化 |
+| V2.0-r8 | 2026-08-01 | 对齐最终候选 `3dea9260865f7e6ed42938d83e370e3823d31a2d`：仅修复两份 rollback 的依赖拆除顺序；外部 HTTP 契约零变化 |
+| V2.0-r9 | 2026-08-02 | 对齐部署可用性返修后的唯一候选 `169f2ad8b27f9f0be2d4630144315694656b6a67`：V2 health/readiness 按既有契约实现，外部业务 HTTP 契约零变化 |
+| V2.0-r10 | 2026-08-02 | 对齐部署入口加固候选 `7378303f513d92e781a7930cfff7e14269ec3126`：受保护 readiness 与入口 trace 过滤沿用既有契约，外部业务 HTTP 契约零变化 |
+| V2.0-r11 | 2026-08-03 | 对齐 Compose 命令修正候选 `492c86ea51b40da9426b8ad5b6aef861aa429ab5`：只修改部署 README 与部署测试，HTTP 方法、路径、鉴权、DTO、状态码、错误码与 traceId 语义零变化 |
+| V2.0-r12 | 2026-08-08 | 对齐可观测性候选 `4eb3b4857caae9730eb70dd9f2fb152bd8972ca0`：发布 revision、日志字段、Nginx 访问日志与轮转返修不改变 HTTP 方法、路径、鉴权、DTO、状态码、错误码或 traceId 语义 |
+| V2.0-r13 | 2026-08-10 | 对齐当前候选 `958afca537b412fb972b6e180561a9b37022834d`：Gate 3 最小 E2E、ETA 重试、司机地图读取、H5 显示和全实例高德 3 QPS 限流返修均保持既有 HTTP 方法、路径、鉴权、DTO、状态码、错误码与 traceId 语义 |

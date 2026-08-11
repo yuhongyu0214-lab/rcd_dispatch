@@ -2,7 +2,7 @@
 
 > 归档版本戳：`RCD-V1-ARCHIVE-20260713`
 > 状态：历史只读
-> 原则：不删除、不改名、不覆盖原文件
+> 原则：只保留维护现有 V1 代码仍需要的来源证据；被 V2 吸收或与 V2 冲突的旧方案只在 Git 历史中追溯
 
 ## V1 正式业务材料
 
@@ -22,14 +22,13 @@
 | Claude 工程规则 | `CLAUDE.md` | 同上 |
 | V1 代码审查 | `skill/mvp代码审查SKILL.md` | 不直接判断 V2 业务正确性 |
 | 产品视觉基调 | `PRODUCT.md` | 视觉性格继续有效，业务描述由 V2 替换 |
-| UI/UX 规格 | `docs/demo-v12-ui-ux-spec.md` | 保留视觉变量，Top N 等交互由 V2 覆盖 |
 | 设计参数 | `feature-admin-workflow/.extract-design-system/demo_v12-design-parameters.md` | 作为 token 数值来源 |
-| API 契约 | `docs/demo-v12-api-contract.md` | 统一响应等通用规则保留，业务 DTO 需升级 |
-| 字段映射 | `docs/production-field-mapping.md` | 作为 Adapter V1 输入 |
-| RDS/插件方案 | `docs/人车单-RDS-浏览器插件-字段对接优化方案.md` | 作为订单来源过渡方案 |
-| 位置协议 | `docs/production-location-protocol.md` | 可复用部分进入 V2 |
-| 高德策略 | `docs/production-amap-strategy.md` | 可复用部分进入 V2 |
-| Tair Key | `docs/production-tair-key-design.md` | 可复用部分进入 V2 |
+| 字段映射 | `docs/production-field-mapping.md` | 仅作为现有 Adapter 的 V1 字段来源；顶部已标明不得定义 V2 |
+| RDS/插件方案 | `docs/人车单-RDS-浏览器插件-字段对接优化方案.md` | 仅作为浏览器插件兼容链路来源；顶部已标明不得定义 V2 |
+| 字段评估原始证据 | `docs/执行结果1_字段可用性评估.xlsx` | 只作来源证据，不是产品、API 或数据权威 |
+
+旧 UI/API、生产升级、位置、高德、Tair 和端到端执行方案的可复用内容已进入 V2 权威，
+冲突内容已于 2026-08-01 从工作树删除。需要审计时使用 Git，不恢复为现行文件。
 
 ## V1 与 V2 的硬边界
 

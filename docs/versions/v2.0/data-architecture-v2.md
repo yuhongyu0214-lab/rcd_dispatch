@@ -1,8 +1,9 @@
 # 人车单数据架构说明 V2
 
-> 架构版本：`RCD-DATA-V2.0-20260713`
-> 状态：架构口径冻结；物理 schema 与迁移脚本尚未实施
+> 架构版本：`RCD-DATA-V2.0-R16-20260810`
+> 状态：架构口径冻结；Gate 3 应用候选包含 9 个内容固定的 migration
 > 目标：当前 RDS 可运行，未来替换外部 API 时迁移代价最小
+> 代码事实：`codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`
 
 ## 1. 白话结论
 
@@ -127,8 +128,13 @@ validate(raw) → normalize(raw) → map(raw) → CanonicalOrder
 | `OrderServicePlan` | 五个模块选择、总时长、修改版本 | 用受控枚举 + JSONB，避免五张配置表 |
 | `DispatchAlert` | 不可行预警、处理状态（`OPEN / RESOLVED`）、解决方式 | 预警需持续展示，不能只写日志 |
 | `DriverLocationSample` | 按§7.1 冻结口径采样的历史位置 | Redis 只存最新位置，不能事后追溯 |
+| `DispatchEventOutbox` | 业务事实触发调度的事务型事件队列、消费租约、重试状态 | 事件与来源业务事实同事务写入，避免提交后进程中断导致漏排；不复用 `OrderSourceEvent` |
 
 为保持精简，V2 不建立“模块字典表”和“全天排程表”。A/B/C 由有效 Assignment 的计划顺序派生。
+
+`OrderSourceEvent` 只保存外部订单来源事实，`sourceSystem` 仍严格限定为
+`HALUO / PLUGIN / API / V1_IMPORT`。内部调度事件不得伪装成订单来源，
+也不得为此扩展外部来源枚举。
 
 ## 6. Assignment V2 关键字段
 
@@ -162,6 +168,7 @@ A/B/C 是展示和算法概念，不建议永久写死为唯一状态；按同�
 | 调度短锁 | 5–15 秒 | 最终 Assignment 用事务提交 |
 | A/B/C 结果 | 可缓存快照 | Assignment 是事实来源 |
 | 操作和预警 | 可做通知缓存 | 必须持久化 |
+| 调度触发事件 | 不存业务事实 | `DispatchEventOutbox` 持久化，至少一次消费 |
 
 Key 命名为**非契约示例**（Gate 1 定稿具体命名）；各 Key 的语义、TTL 范围和“Redis 只存实时/短期数据”边界是契约：
 
@@ -199,10 +206,21 @@ H5 进入后台后不承诺持续定位；超过 120 秒自然转为 `STALE`。�
 | 重排触发阈值 | 每次真实 ETA 重算与上次有效值比较，绝对变化超过 10 分钟触发局部重排 |
 | ETA 计算时机 | 原始 30 秒位置上报不必次次调用高德；司机移动达到 200 米、缓存到期、业务事件（出发/到达/完成/订单变化/班次变化/模块变化）或 10 分钟基线校验时再计算 |
 
+实现边界：通过校验且时间更新的样本始终更新最新位置高水位；历史位置继续按
+首次样本、移动超过 200 米或距上次历史样本满 120 秒落库。调度触发独立按
+首次样本、移动超过 200 米或 ETA 缓存到期判定。触发时必须在同一事务内递增
+司机 `planVersion` 并写入 `DRIVER_LOCATION_UPDATED` outbox；满足历史采样条件
+时一并保存样本。提交后先更新实时位置缓存，再即时消费事件。其余约 30 秒样本
+不触发完整重排。
+
 ## 8. 高德调用边界
 
 - 地址首次进入或变更：地理编码。
-- 调度预筛后：只对可能进入 A/B/C 的少量组合计算路径 ETA。
+- Gate 3 正确性优先：司机当前位置、既有 A/B/C 时间轴的 delivery cursor，
+  以及计划池全部订单的 `deliveryLocation` 都属于必算 deadhead 起点；预计算
+  全部必要的 delivery→pickup 组合，保证本轮 A 槽完成后生成的 cursor 可继续
+  规划 B/C。未来降低调用量须另行冻结能感知 `(driver, slot, cursor)` 的候选预筛，
+  不得用固定 Top-N 截断可能被核心使用的起点。
 - 出发：用手机位置到当前工单取车点开启导航并刷新 ETA。
 - 到达：记录实际时间；后续计划起点先按预计送达位置计算。
 - 完成：用手机实时位置作为下一工单 ETA 起点。
@@ -210,15 +228,23 @@ H5 进入后台后不承诺持续定位；超过 120 秒自然转为 `STALE`。�
 
 ## 9. 重排一致性
 
-1. 为受影响司机和订单取得 Redis 短锁。
-2. 读取每名受影响司机的 `planVersion`、锁定和执行状态。
-3. 计算候选 A/B/C 与 ETA。
-4. 在数据库事务中验证各司机 `planVersion` 未变化。
-5. 写入顺序、计划时间、可行性、预警和日志。
-6. 递增每名受影响司机的 `planVersion`，释放短锁。
-7. 前端刷新受影响对象。
+1. 订单、位置、班次或执行状态变化时，在写业务事实的同一数据库事务中写入 `DispatchEventOutbox`；稳定 `eventId` 唯一去重。
+2. 提交后由即时消费或受保护的周期补偿任务领取事件；消费失败保留事件并退避重试。
+3. 为受影响司机和订单取得 Redis 短锁；Redis 不可用时降级为数据库行锁与版本校验，不伪造已取得锁。
+4. 读取每名受影响司机的 `planVersion`、锁定和执行状态。
+5. 计算候选 A/B/C 与真实 ETA。
+6. 在数据库事务中再次锁定订单/司机行并验证各司机 `planVersion` 未变化。
+7. 写入 Assignment 顺序、计划时间、可行性、预警和日志，每名受影响司机的 `planVersion` 只递增一次。
+8. 提交成功后标记 outbox 事件已处理并释放短锁；版本已变化则重读快照重算，不能覆盖新计划。
 
 版本已变化时放弃旧计算并重新排，不允许最后写入者无条件覆盖。
+
+G3-3 细化：司机位置、班次或 Assignment 事件的局部范围以受影响门店为候选
+边界，必须加载门店内全部活动司机进行比较，不得只加载触发司机。outbox
+至少一次重试产生与当前持久计划完全相同的逻辑结果时，保留原 Assignment，
+不重复回收/创建、不重复写计划日志、不递增 `planVersion`；计划时间、槽位或
+真实 ETA 任一变化时仍按正常计划变更提交。worker 只有在 `lockToken` 仍归自己
+所有时才能把事件计为 `processed`。
 
 ## 10. 外部 API 迁移流程
 
@@ -239,17 +265,24 @@ H5 进入后台后不承诺持续定位；超过 120 秒自然转为 `STALE`。�
 - 调度引擎、Redis Key、高德和前端 DTO 不因外部字段名改变而修改。
 - 外部 API 故障时，已进入内部系统的订单和执行任务仍可操作。
 
-## 11. 当前代码差距
+## 11. Gate 3-3 实施状态
 
-| 当前能力 | 状态 | V2 差距 |
+| 当前能力 | 状态 | 说明 |
 |---|---|---|
-| PostgreSQL + Prisma | 已有 | 缺来源事件、班次、模块计划、预警等数据 |
-| OrderDTO Adapter | 已有 | `externalOrderId` 未落库，缺版本和原始状态 |
-| Redis 最新定位 | 已有 | 需明确采样与过期策略 |
-| 高德 ETA | 已有 | 当前是单订单候选 ETA，需支持 A/B/C 衔接 ETA |
-| Assignment | 已有 | 缺顺序、锁定、计划版本和出发/到达事件 |
-| OperationLog | 已有 | Action 枚举不足以覆盖 V2 追溯 |
-| Vehicle | 已有 | 需从匹配逻辑移除，数据继续展示 |
+| PostgreSQL + Prisma | 已实施 | V2 实体、索引和兼容迁移已落地；Gate 3-2 审查新增独立 `DispatchEventOutbox` 迁移 |
+| OrderSourceAdapter | 已实施 | 外部版本幂等、取消矩阵、完整 before/after 审计和事务内事件入队 |
+| Redis 最新定位与锁 | 已实施 | 位置 CAS/TTL、批量读取、司机/订单短锁；故障时保守降级到数据库一致性保护 |
+| 高德 ETA | 已实施 | 司机当前位置、既有时间轴 cursor 和计划池全部订单 deliveryLocation 必算，预计算全部必要 delivery→pickup 组合；未来优化不得用固定 Top-N 裁掉本轮动态 cursor |
+| Assignment | 已实施 | Gate 3 提交器在事务中完成释放/新建、快照回写、预警、日志和聚合版本递增；相同逻辑计划重试保留原 Assignment |
+| OperationLog | 已实施 | 自动调度、订单修改/取消、Assignment 回收、班次起止均保存操作者、原因、traceId 与必要前后值 |
+| Vehicle | 已隔离 | 仅作展示快照，不进入调度输入、过滤或评分 |
+
+### 11.1 依赖安全返修的数据边界
+
+- Next.js 15.5.21、React 19.2.8 与 SheetJS 0.20.3 的适配没有修改 `prisma/schema.prisma`。
+- migration 目录仍精确为 9 个，目录名、正向 SQL 与已有 rollback 文件内容均未在框架适配中变化。
+- 数据表、字段、索引、约束、Prisma 枚举、持久化所有权和事务边界没有改变；不得把依赖升级误写成数据库版本升级。
+- 最终 migration 清单和 SHA-256 只能从上述应用候选 Git 对象读取；不得对主工作区未提交文件计算后冒充候选指纹。
 
 ## 12. 实施顺序
 
@@ -279,3 +312,14 @@ Gate 0：V2 文档冻结（含 CanonicalOrder 与 API 契约的文档级冻结�
 | V2.0-r3 | 2026-07-17 | Gate 0 三轮返修：§6 补版本携带命令两分类；§3.1/§5.1 冻结 `sourceStatusRaw` 仅持久化 `OrderSourceEvent`；§3.3 冻结 `sourceVersion` 两种合法格式（UTC `Z` 毫秒 ISO 或零填充序号） |
 | V2.0-r4 | 2026-07-17 | Gate 0 四轮返修：§6 版本携带规则改封闭式（补模块修改/位置变化/订单接入/周期校验）；§3.3 冻结 `"v1-migration"` 保留值例外（仅 `V1_IMPORT`，不经在线 ingest，不参与比较） |
 | V2.0-r5 | 2026-07-18 | Gate 1 冲突裁决：`orderNo` 明确为非唯一展示号；`"v1-migration"` 扩展为存量迁移及 V1 写兼容基线，保留原来源映射，版本比较时恒小于合法在线版本 |
+| V2.0-r6 | 2026-07-26 | Gate 3-2 审查返修：冻结内部调度事件与外部 `OrderSourceEvent` 的所有权边界；新增事务型 `DispatchEventOutbox`、至少一次消费/退避重试/周期补偿语义；更新重排事务步骤与实施状态 |
+| V2.0-r7 | 2026-07-26 | Gate 3-2 二次返修：区分 200m/120s 历史采样与 200m/ETA 缓存到期调度触发，冻结 `planVersion`/outbox 原子边界；司机当前位置和既有时间轴 cursor 为 ETA 必算起点 |
+| V2.0-r8 | 2026-07-26 | Gate 3-2 追加 ETA P0 返修：计划池全部订单 deliveryLocation 纳入必算起点，恢复必要 delivery→pickup 组合；固定 Top-N 优化须待 cursor-aware 方案另行冻结 |
+| V2.0-r9 | 2026-07-26 | G3-3：司机类事件按受影响门店加载全部活动司机；相同逻辑计划重试不产生 Assignment/版本抖动；outbox 完成确认校验当前租约所有权 |
+| V2.0-r10 | 2026-08-01 | 对齐应用候选 `7f60fd0d55783d1f057c814e46a3dab7f73e2416`：确认框架与 Excel 安全返修未改变 Schema、Prisma 枚举或 9 个 migration 内容，并冻结从 Git 对象生成最终指纹的规则 |
+| V2.0-r11 | 2026-08-01 | 对齐最终候选 `3dea9260865f7e6ed42938d83e370e3823d31a2d`：两份 rollback 仅修正外键拆除顺序，最终 Schema、Prisma 枚举和 9 个正向 migration 内容零变化；空库演练差异为 0 |
+| V2.0-r12 | 2026-08-02 | 对齐部署可用性返修后的唯一候选 `169f2ad8b27f9f0be2d4630144315694656b6a67`：Schema/migration tree 与旧冻结候选完全相同，原空库演练和指纹继续有效 |
+| V2.0-r13 | 2026-08-02 | 对齐部署入口加固候选 `7378303f513d92e781a7930cfff7e14269ec3126`：Schema blob 与 migration tree 继续完全相同，无数据架构变更 |
+| V2.0-r14 | 2026-08-03 | 对齐 Compose 命令修正候选 `492c86ea51b40da9426b8ad5b6aef861aa429ab5`：Schema blob `196a87c7...`、migration tree `c9b46aa4...` 与 9 个 migration 原始字节继续完全相同，无数据架构变更 |
+| V2.0-r15 | 2026-08-08 | 对齐可观测性候选 `4eb3b4857caae9730eb70dd9f2fb152bd8972ca0`：未修改 Prisma Schema、Prisma 枚举、9 个 migration 或 rollback，既有 migration 指纹与预生产实施结论继续有效 |
+| V2.0-r16 | 2026-08-10 | 对齐当前候选 `958afca537b412fb972b6e180561a9b37022834d`：Gate 3 最小 E2E、ETA 重试、H5 显示和全实例高德 3 QPS 限流返修均未修改 Prisma Schema、枚举、9 个 migration 或 rollback；预生产指纹与最小权限结论继续有效 |
