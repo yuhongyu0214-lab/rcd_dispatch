@@ -1,8 +1,8 @@
 # 人车单项目文档版本总入口
 
-> 版本戳：`RCD-DOC-REGISTRY-20260811-R25`
+> 版本戳：`RCD-DOC-REGISTRY-20260813-R26`
 > 建立日期：2026-07-13
-> 治理更新时间：2026-08-11
+> 治理更新时间：2026-08-13
 > 归档方式：现行权威集中到 `v2.0/`；已融合或冲突的旧方案从工作树清场，历史由 Git 追溯
 > 可视化导航：[Obsidian 项目全景白板](../rcd-v2-project-map.canvas)（仅作导航，不替代下方权威文档）
 
@@ -19,10 +19,10 @@
 
 | 范围 | 当前版本 | 状态 | 入口 |
 |---|---|---|---|
-| 产品需求 | V2.0-r4 | Gate 3 H5 最小显示返修与 Gate 3 后司机端地图/排版专项已分开登记 | [PRD V2](v2.0/prd-v2.md) |
+| 产品需求 | V2.0-r5 | §9.2.2 H5 整体重做优先；地图 DTO、可见字段、刷新、鉴权和移动端验收已再冻结 | [PRD V2](v2.0/prd-v2.md) |
 | 数据架构 | V2.0-r16 | 当前候选 Schema/migration tree 与冻结基线完全相同 | [数据架构 V2](v2.0/data-architecture-v2.md) |
-| 代码与设计约束 | V2.0-r17 | 当前候选、真实 10 单和故障/回退事实已校正；业务规则和设计变量零变化 | [项目规则 V2](v2.0/project-rules-v2.md) |
-| API 契约 | V2.0-r13 | 当前候选对外部 HTTP 契约零变化 | [API 契约 V2](v2.0/api-contract-v2.md) |
+| 代码与设计约束 | V2.0-r18 | 第二轮串行前置和 2A/2B/2C 唯一文件所有权已冻结 | [项目规则 V2](v2.0/project-rules-v2.md) |
+| API 契约 | V2.0-r14 | H5 三接口读取组合和地图字段已再冻结；V1 兼容退出边界不变 | [API 契约 V2](v2.0/api-contract-v2.md) |
 | 领域词汇 | V2.0-r13 | 当前候选领域术语与枚举零变化已登记 | [领域词汇 V2](v2.0/domain-glossary-v2.md) |
 | 应用框架与依赖决策 | V2.0-r5 | 当前候选未改变框架、依赖来源或兼容边界 | [应用决策日志](v2.0/application-decision-log.md) |
 | V1→V2 兼容映射 | V2.0 | Gate 0 已冻结 | [兼容矩阵](v2.0/v1-v2-compatibility-matrix.md) |
@@ -30,8 +30,8 @@
 | 构建、部署与回退 | V2.0-r13 | Gate 3 `PASS` 文档基线 `464ee5d…` 已远程核验；分阶段和禁止重复 migration 规则不变 | [部署指南 V2](v2.0/deployment-guide-v2.md) |
 | 生产运行与恢复 | V2.0-r6 | 最终运行资源、健康、10 单、outbox 和证据一致性通过；整机/RDS 灾备仍为独立演练 | [运维指南 V2](v2.0/operations-guide-v2.md) |
 | 基础设施决策与替代历史 | V2.0-r3 | INFRA-001～023 已登记；公网 IP 预生产演示获准，正式上线条件不变 | [基础设施决策日志](v2.0/infrastructure-decision-log.md) |
-| 项目当前状态 | 2026-08-11 | Gate 3 最终 `PASS`；代码历史交接点为 `51ddb5f…`；第二轮唯一启动基线为 `origin/develop @ ae4714849fa965940b0df1c6766638cf398ac0ce`，尚未创建分支 | [状态总览](../status/README.md) |
-| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260811-R24 | Layer 0；所有 Agent 必读；不超过 150 行；已接入 Codex 回合结束确认 Hook | [Agent 公共上下文](../context/agent-common-context.md) |
+| 项目当前状态 | 2026-08-13 | Gate 3 `PASS`；第二轮 `PREFLIGHT / NOT_STARTED`，冻结来源为本地 `develop @ f90bac6…`，串行接线从本轮文档提交创建 | [状态总览](../status/README.md) |
+| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260813-R25 | Layer 0；所有 Agent 必读；不超过 150 行；已接入 Codex 回合结束确认 Hook | [Agent 公共上下文](../context/agent-common-context.md) |
 | V1 产品与开发主线 | V1.x | 历史只读 | [V1 历史索引](v1/README.md) |
 
 ## 文档权威顺序（按领域拆分，唯一权威口径）
@@ -169,7 +169,7 @@ remote commit: 958afca537b412fb972b6e180561a9b37022834d
 2. 新候选的 Schema/migration tree 与完成一次性空 PostgreSQL 演练的旧冻结候选完全相同；原有 9 个正向 migration、最终 Schema、8 个 rollback 和五类安全护栏结论继续有效。
 3. 冻结真实 10 单已完成：订单 1～6、8～10 共 9 单完成，订单 7 按预期为 `INFEASIBLE` 且保留 1 条开放预警；并发、旧版本、到达后改排拒绝与订单 10 幂等重放均通过。首轮失败、旧映射、边界抖动和错误 helper 现场继续保留，不得清理。
 4. 最终一致性审查确认本地/远程代码、ACR digest、ECS 运行身份、真实依赖、10 单结果和故障/回退证据一致；文档口径已返修，并以 `feature/v2-gate3-review-remediation @ 57ef86c43bf220f48774e130575c40b8c94a83d5` 形成可追溯基线，本地、upstream 与 GitHub 远程核验一致。
-5. 主控已于 2026-08-11 最终裁决 Gate 3 `PASS`，PASS 文档内容基线 `feature/v2-gate3-review-remediation @ 464ee5d6ffdb435d76b65f9814d82e4666fd84a9` 已完成远程核验；交接分支 `feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 已合入并推送，Gate 3 代码历史交接点为 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`。第二轮为 `AUTHORIZED / NOT_STARTED`，尚未创建分支；状态激活后的唯一启动基线为 `origin/develop @ ae4714849fa965940b0df1c6766638cf398ac0ce`，Web、司机接口和观测分支必须从该完整 SHA 创建。不得因此重复部署、执行 migration、整批写入基础资料、清理失败样本或直接写业务数据库。
+5. 主控已于 2026-08-11 最终裁决 Gate 3 `PASS`。2026-08-13 第二轮进入 `PREFLIGHT / NOT_STARTED`：本轮冻结来源为本地 `develop @ f90bac6ec5f80abff33635cab4b23c0f86795086`，远程仍为 `ae471484…` 且稍后处理；司机 H5 已再冻结，调度员 V2 API 串行接线从本轮文档提交创建。接线合入并全量验收后记录新的批准 `develop` SHA，Web、司机端和观测三分支必须从该同一 SHA 创建。不得因此重复部署、migration、基础资料或证据清理。
 
 状态事实和阻断项统一在[状态总览](../status/README.md)维护；状态文档不得修改领域契约。
 

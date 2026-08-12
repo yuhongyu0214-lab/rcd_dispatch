@@ -1,7 +1,7 @@
 # 人车单 V2 API 契约
 
-> 契约版本：`RCD-API-V2.0-R13-20260810`
-> 状态：Gate 3 应用候选复核通过；外部 HTTP 契约未因框架升级改变
+> 契约版本：`RCD-API-V2.0-R14-20260813`
+> 状态：Gate 3 应用候选复核通过；第二轮司机 H5 读取组合与字段边界已再冻结
 > 实施约束：本文件只冻结契约，不含任何代码；TypeScript DTO、错误类型和契约测试在 Gate 2 落地
 > 上游依据：[PRD V2](prd-v2.md) · [数据架构 V2](data-architecture-v2.md) · [项目规则 V2](project-rules-v2.md)
 > 代码事实：`codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`
@@ -12,6 +12,7 @@
 
 - V2 全部新接口位于 `/api/v2/**`，与 V1 路径（`/api/orders` 等）物理隔离。
 - V1 **读**接口在兼容窗口内保持可用（经兼容层单向读 V2 事实）；V1 **写**接口在 V2 状态机切换开关开启后停用（410）。两个时点的冻结定义见兼容矩阵 §7：切换开关开启 ≠ 兼容窗口关闭。
+- 第二轮增加调度员 V2 API 串行接线任务不授权删除 V1 路由：切换开关开启前 V1 读写继续运行；开启后仅 V1 写返回 410；并行验证 3A 通过且用户批准关闭兼容窗口后，V1 读接口与页面才整体下线。
 - 契约变更只允许向后兼容扩展；删除字段或改变语义必须升级 major 版本（`/api/v3/**`）。
 
 ### 1.2 统一响应
@@ -146,6 +147,11 @@
 
 - 司机访问非本人 `assignmentId` 返回 403 `FORBIDDEN`。
 - 司机无拒单和改派接口；此类操作不存在于 driver 路径下。
+- 第二轮 H5 地图不新增聚合路径，固定组合本节三个读取接口：`/driver/map`、`/driver/tasks` 与 `/driver/orders/unassigned`；客户端每 15 秒读取，位置上报仍按数据架构的 30 秒目标频率。
+- `/driver/map` 保持返回 `DriverV2[]`，只含上班司机的位置层；`slots` 不得用于泄露他人订单详情。`lastLocation` 只有在 `lat/lng/accuracyMeters/capturedAt` 完整时才整体出现。
+- `/driver/tasks` 只返回本人 A/B/C，并为地图展示向 `AssignmentSummaryV2` 向后兼容增加 `businessType`、`lockType`、`feasibility`、`promisedPickupAt`、`pickupPoint`、`deliveryPoint`、`pickupAddress`、`deliveryAddress`。
+- `/driver/orders/unassigned` 只返回尚未分配订单的 `DriverOrderMarkerV2[]`；订单分配给任一司机后立即从结果移除。任何司机读取其他司机已分配订单详情返回 403。
+- 三个读取接口均从已认证身份解析调用者 `driverId`；query/body 中出现的 `driverId` 不得改变授权主体。浏览器不得接收 `AMAP_SERVER_KEY`。
 
 ### 2.3 订单接入（ingest）
 
@@ -265,6 +271,24 @@ lat, lng, accuracyMeters, capturedAt
 - (driverId, capturedAt) 重复          → skipped, reason=DUPLICATE
 ```
 
+### 3.7 DriverOrderMarkerV2（司机 H5 地图）
+
+```text
+orderId, orderNo,
+businessType: STORE_PICKUP | STORE_RETURN | DOOR_DELIVERY | DOOR_PICKUP,
+executionStatus: UNASSIGNED | PLANNED | EN_ROUTE | IN_SERVICE,
+slot: NONE | A | B | C,
+lockType: NONE | AUTO_FROZEN | MANUAL_LOCKED,
+feasibility: UNKNOWN | NORMAL | AT_RISK | INFEASIBLE,
+promisedPickupAt,
+pickupPoint?: { lat, lng }, deliveryPoint?: { lat, lng },
+pickupAddress?, deliveryAddress?
+```
+
+- 本人 A/B/C 可返回 `slot=A/B/C`；未分配池只返回 `executionStatus=UNASSIGNED` 与 `slot=NONE`。
+- 坐标或展示地址缺失时整体省略对应可选字段，禁止填充 `0`、空字符串或假坐标。
+- 该 DTO 不含客户、手机号、来源原文、其他司机身份或车辆匹配字段。
+
 ## 4. 与调度核心的关系
 
 - 本契约的 DTO 是页面与 API 的边界；调度核心只接收内部输入类型（Gate 2 定义），不直接消费 HTTP DTO。
@@ -289,3 +313,4 @@ lat, lng, accuracyMeters, capturedAt
 | V2.0-r11 | 2026-08-03 | 对齐 Compose 命令修正候选 `492c86ea51b40da9426b8ad5b6aef861aa429ab5`：只修改部署 README 与部署测试，HTTP 方法、路径、鉴权、DTO、状态码、错误码与 traceId 语义零变化 |
 | V2.0-r12 | 2026-08-08 | 对齐可观测性候选 `4eb3b4857caae9730eb70dd9f2fb152bd8972ca0`：发布 revision、日志字段、Nginx 访问日志与轮转返修不改变 HTTP 方法、路径、鉴权、DTO、状态码、错误码或 traceId 语义 |
 | V2.0-r13 | 2026-08-10 | 对齐当前候选 `958afca537b412fb972b6e180561a9b37022834d`：Gate 3 最小 E2E、ETA 重试、司机地图读取、H5 显示和全实例高德 3 QPS 限流返修均保持既有 HTTP 方法、路径、鉴权、DTO、状态码、错误码与 traceId 语义 |
+| V2.0-r14 | 2026-08-13 | 第二轮司机 H5 再冻结：不新增地图聚合路径，固定组合 `/driver/map`、`/driver/tasks`、`/driver/orders/unassigned`；保持 `DriverV2[]` 向后兼容并新增 `DriverOrderMarkerV2`/本人任务地图字段、15 秒读取和身份边界；同时明确调度员 V2 API 接线不授权提前删除 V1 |

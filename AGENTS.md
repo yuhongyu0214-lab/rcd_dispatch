@@ -59,7 +59,7 @@ Gate -1 基线整理（已通过，develop @ 37ee8a3）
 
 - 每个 Gate 通过验收后才能创建下一阶段分支；不得提前建分支。
 - Gate 3 当前唯一代码/ACR/预生产运行候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`；app、worker 与 Nginx release revision 已对齐，Nginx 原镜像、配置、证书和端口未变。更早运行/回退候选继续保留，不得使用 `latest` 或混用候选。
-- Gate 3-R 生产主线为阿里云；Railway 只保留历史 Demo 证据。预生产备份、9 个 migration、最小权限、app/worker/Nginx/HTTPS/SLS、冻结真实 10 单、worker 积压恢复和应用回退均通过；`084649f4…` 回退 30 秒、`958afca…` 恢复 31 秒，最终三容器 revision 对齐、HTTPS 200、outbox 无积压或错误。最终一致性审查确认代码、镜像、运行资源和证据一致；Gate 3 `PASS` 文档内容基线 `feature/v2-gate3-review-remediation @ 464ee5d6ffdb435d76b65f9814d82e4666fd84a9` 已完成远程核验。一次错误 helper 留下 1 个独立未分配 `G3FAULT` 订单，未清理且不计入冻结 10 单。2026-08-11 主控最终裁决 Gate 3 `PASS`；交接分支 `feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 已按 `feature/* → develop` 合入并推送，Gate 3 代码历史交接点为 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`。第二轮仍为 `AUTHORIZED / NOT_STARTED`，尚未创建分支；唯一启动基线为状态激活后的 `origin/develop @ ae4714849fa965940b0df1c6766638cf398ac0ce`。禁止重复部署、migration、基础资料写入或证据清理。
+- Gate 3-R 生产主线为阿里云；Railway 只保留历史 Demo 证据。预生产备份、9 个 migration、最小权限、app/worker/Nginx/HTTPS/SLS、冻结真实 10 单、worker 积压恢复和应用回退均通过；`084649f4…` 回退 30 秒、`958afca…` 恢复 31 秒。2026-08-11 主控最终裁决 Gate 3 `PASS`。第二轮当前为 `PREFLIGHT / NOT_STARTED`：本轮冻结来源为本地 `develop @ f90bac6ec5f80abff33635cab4b23c0f86795086`，串行接线分支必须从包含本轮冻结文档的提交创建；远程同步稍后处理。形成新的批准 `develop` SHA 前不得创建 2A/2B/2C 分支。禁止重复部署、migration、基础资料写入或证据清理。
 - V2 分支命名 `feature/v2-*`；合并路径仍为 `feature/* → develop → main`。
 - 每个分支只能修改自己的独占文件范围；Schema、公共 DTO、共享样式、logger、调度事务各有唯一所有者线。
 
