@@ -1,7 +1,7 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`。第二轮为 `PREFLIGHT / NOT_STARTED`；本轮冻结来源为本地 `develop @ f90bac6ec5f80abff33635cab4b23c0f86795086`，串行接线分支从包含本轮冻结文档的提交创建，远程同步稍后处理。完成本节串行前置并形成新的批准 `develop` SHA 前不得创建并行分支。
+> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`。第二轮为 `PREFLIGHT / SERIAL_API_WIRING_READY`；本轮状态同步提交作为正式代码/文档基线，完整 SHA 由主控任务卡登记，串行分支 `feature/v2-dispatcher-api-wiring` 必须对齐同一 SHA 且工作区干净后实施，远程同步稍后处理。完成本节串行前置并形成新的批准 `develop` SHA 前不得创建并行分支。
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
@@ -399,7 +399,7 @@ Gate 3 若因事务 outbox 必须修改上游业务写入点，仍由同一实�
 3. **V1 兼容保留**：本任务不删除、不重命名、不复用 V1 路由。V1 写/读退出严格按兼容矩阵 §7 的两个独立时点执行。
 4. **集成验收**：统一响应、鉴权、分页、错误码、`traceId`、乐观锁、事务副作用和契约测试通过；不修改 Schema、migration、调度核心、司机 H5 页面、共享样式或观测独占文件。
 
-建议串行分支：`feature/v2-dispatcher-api-wiring`。该分支合入并完成全量 test/lint/build 后，主控记录新的本地 `develop` 完整 SHA，才允许创建三条并行分支。
+串行分支：`feature/v2-dispatcher-api-wiring`，worktree 为 `.worktrees/dispatcher-api-wiring`；正式基线为本轮状态同步提交，完整 SHA 由主控任务卡登记。该分支对齐基线后实施；合入并完成全量 test/lint/build 后，主控记录新的本地 `develop` 完整 SHA，才允许创建三条并行分支。
 
 ### 7.1 并行线 2A：调度员 Web
 
@@ -673,4 +673,4 @@ Gate 3 若因事务 outbox 必须修改上游业务写入点，仍由同一实�
 - 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 已完成 Git、回归、ACR、预生产、真实 10 单、worker 积压恢复与应用回退。`084649f4…` 回退 30 秒、当前候选恢复 31 秒，最终 HTTPS、真实依赖、三容器 revision、单 worker 和 outbox 通过。最终一致性审查、文档追溯与主控裁决全部完成，Gate 3 为 `PASS`；第二轮已获准准备但尚未启动。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
 - 当前执行限制：不得再次变更 app、worker 或 Nginx，不得执行 migration、重复基础资料、清理任何失败样本或直接写业务数据库。错误 helper 产生的独立 `G3FAULT` 订单必须保留并与冻结 10 单分开统计。
-- 下一动作：提交基于本地 `develop @ f90bac6ec5f80abff33635cab4b23c0f86795086` 形成的 7.0 冻结文档，并从该文档提交创建调度员 V2 API 串行接线分支；远程同步稍后单独处理。串行任务通过并形成新的批准 `develop` SHA 后，才从同一 SHA 创建 2A/2B/2C 分支。司机 H5 契约已按 PRD §9.2.2 与 API §2.2/§3.7 再冻结，不反向修改 Gate 3 验收范围。
+- 下一动作：新 Agent 从主控任务卡登记的正式代码/文档基线执行 `feature/v2-dispatcher-api-wiring` §7.0 后端串行接线；远程同步稍后单独处理。串行任务通过、合入并形成新的批准 `develop` SHA 后，才从同一 SHA 创建 2A/2B/2C 分支。司机 H5 契约已按 PRD §9.2.2 与 API §2.2/§3.7 再冻结，不反向修改 Gate 3 验收范围。

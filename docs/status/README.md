@@ -6,13 +6,13 @@
 
 ## 一句话结论
 
-Gate 3 保持 `PASS`，运行候选与预生产证据不变。第二轮当前为 `PREFLIGHT / NOT_STARTED`：本轮冻结来源为本地 `develop @ f90bac6ec5f80abff33635cab4b23c0f86795086`，远程仍为 `ae471484…` 且稍后处理；司机 H5 产品/API 已按当前已验收行为再冻结。调度员 V2 API 串行接线从本轮冻结文档提交创建；接线合入并全量验收、形成新的批准 `develop` SHA 前，不创建 2A/2B/2C 分支。
+Gate 3 保持 `PASS`，运行候选与预生产证据不变。第二轮当前为 `PREFLIGHT / SERIAL_API_WIRING_READY`：司机 H5 产品/API 已再冻结，本轮状态同步提交作为串行接线的正式代码/文档基线，完整 SHA 由主控任务卡登记；`feature/v2-dispatcher-api-wiring` 快进到同一 SHA 且工作区干净后正式实施。该任务合入并全量验收、形成新的批准 `develop` SHA 前，不创建或启动 2A/2B/2C 分支；远程仍为 `ae471484…`，稍后处理。
 
 ## 当前工作流状态
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
-| 文档治理 | `ROUND2_PREFLIGHT_DOC_SYNC_UNCOMMITTED` | 本轮 PRD/API/规则/状态/Layer 0/Canvas 同步 | 已写入工作树，待用户审查与另行 Git 授权；产生文档 SHA 前新 Agent 只读 |
+| 文档治理 | `ROUND2_SERIAL_BASELINE_READY_LOCAL` | 本轮状态同步提交；完整 SHA 由主控任务卡登记 | 正式代码/文档基线完成本地提交；未推送远程 |
 | 应用候选 | `958AFCA_GATE3_ACCEPTED_DEVELOP_HANDOFF_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变运行身份；代码历史交接点为 `develop @ 51ddb5f…`，最终状态激活 HEAD 为 `ae471484…` |
 | 依赖安全 | `COMPLETED` | [依赖安全返修](2026-08-01-gate3-dependency-security-remediation.md) | 依赖变化时重跑全套审计 |
 | migration 指纹 | `PREPROD_APPLIED_PASS` | [migration 清单](2026-08-01-gate3-migration-manifest.md) | 保持冻结，后续候选变化必须重新生成与迁移 |
@@ -25,7 +25,8 @@ Gate 3 保持 `PASS`，运行候选与预生产证据不变。第二轮当前为
 | 既有预生产成果审查 | `RUNTIME_FINAL_CONSISTENCY_PASS` | [RDS 迁移与权限证据](2026-08-05-gate3r-rds-preprod-migration-permissions.md) | 保持备份、9 个 migration、最小权限、单 worker 和运行身份不变 |
 | 真实 10 单 | `REAL10_PASS_9_COMPLETED_1_INFEASIBLE_ALERT` | [真实 E2E 重验进度](2026-08-10-gate3r-real-e2e-retest-progress.md) | 保留全部成功与失败现场，不清理 |
 | Gate 3 总闸门 | `PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变候选与证据，进入受控阶段交接 |
-| 第二轮并行 | `PREFLIGHT_NOT_STARTED` | [并行开发主计划](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md) §7.0 | H5 再冻结已完成；先串行完成调度员 V2 API 接线，再从同一新 `develop` SHA 创建三分支 |
+| 串行调度员 V2 API 接线 | `BASELINE_READY_NOT_STARTED` | `feature/v2-dispatcher-api-wiring` 与正式基线同 SHA、工作区干净 | 新 Agent 只执行 §7.0 后端串行任务；完成 test/lint/build 后交主控验收 |
+| 第二轮并行 | `PREFLIGHT_NOT_STARTED` | [并行开发主计划](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md) §7.0 | 2A/2B/2C 尚未创建；必须等待串行接线合入后的统一 `develop` SHA |
 
 ## 唯一代码、文档与迁移基线
 
@@ -56,7 +57,10 @@ gate3 pass document content baseline commit: 464ee5d6ffdb435d76b65f9814d82e4666f
 gate3 develop handoff branch commit: b853a7af245942758de1cd46c9a25c384c08ec62
 gate3 code handoff develop merge: 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e
 round2 freeze source: local develop @ f90bac6ec5f80abff33635cab4b23c0f86795086
-dispatcher API wiring baseline: 本轮冻结文档提交 SHA（由提交后任务卡登记）
+round2 frozen contract source: local develop @ 117653e55ac69a8e0d20dbf9e9904fc874707f81
+formal code/document baseline: 本轮状态同步提交（完整 SHA 由主控任务卡登记）
+dispatcher API wiring branch: feature/v2-dispatcher-api-wiring（必须与正式基线同 SHA）
+dispatcher API wiring worktree: .worktrees/dispatcher-api-wiring（clean；implementation not started）
 remote tracking reference: origin/develop @ ae4714849fa965940b0df1c6766638cf398ac0ce (稍后处理)
 parallel branch baseline: 待串行调度员 V2 API 接线合入并验收后生成
 ```
