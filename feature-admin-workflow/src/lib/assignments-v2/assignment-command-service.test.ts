@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     assignment: { findUnique: vi.fn() },
+    order: { findUnique: vi.fn() },
+    driver: { findFirst: vi.fn() },
     $transaction: vi.fn()
   }
 }));
@@ -21,7 +23,9 @@ vi.mock("@/lib/events/processor", () => ({
 }));
 
 vi.mock("@/lib/triggers/gate3-triggers", () => ({
-  triggerAssignmentReassigned: vi.fn()
+  triggerAssignmentAssigned: vi.fn(),
+  triggerAssignmentReassigned: vi.fn(),
+  triggerAssignmentWithdrawn: vi.fn()
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -39,11 +43,18 @@ import {
   acquireResourceLocks,
   releaseResourceLock
 } from "@/lib/redis";
-import { triggerAssignmentReassigned } from "@/lib/triggers/gate3-triggers";
+import {
+  triggerAssignmentAssigned,
+  triggerAssignmentReassigned,
+  triggerAssignmentWithdrawn
+} from "@/lib/triggers/gate3-triggers";
 
 import {
+  assignOrder,
   executeDriverAssignmentAction,
   reassignAssignment,
+  unlockAssignment,
+  withdrawAssignment,
   type DriverExecutionAction
 } from "./assignment-command-service";
 
@@ -57,13 +68,14 @@ function createTransactionMock() {
       update: vi.fn(),
       create: vi.fn()
     },
-    order: { update: vi.fn() },
+    order: { findUnique: vi.fn(), update: vi.fn() },
     driver: {
+      findFirst: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn()
     },
     user: { findUnique: vi.fn() },
-    operationLog: { create: vi.fn() }
+    operationLog: { create: vi.fn(), findFirst: vi.fn() }
   };
 }
 
@@ -106,7 +118,9 @@ beforeEach(() => {
     committed: true
   });
   vi.mocked(processInternalEvent).mockResolvedValue({ processed: true } as never);
+  vi.mocked(triggerAssignmentAssigned).mockResolvedValue();
   vi.mocked(triggerAssignmentReassigned).mockResolvedValue();
+  vi.mocked(triggerAssignmentWithdrawn).mockResolvedValue();
   vi.mocked(prisma.assignment.findUnique).mockResolvedValue({
     driverId: "driver-1",
     orderId: "order-1"
@@ -405,5 +419,215 @@ describe("reassignAssignment", () => {
       })
     });
     expect(tx.assignment.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("dispatcher plan edit commands", () => {
+  it("manually assigns the first free slot and commits audit plus outbox atomically", async () => {
+    vi.mocked(prisma.order.findUnique).mockResolvedValue({ id: "order-1" } as never);
+    vi.mocked(prisma.driver.findFirst).mockResolvedValue({ id: "driver-1" } as never);
+    const tx = createTransactionMock();
+    runTransaction(tx);
+    tx.driver.findFirst.mockResolvedValue({
+      id: "driver-1",
+      name: "司机一",
+      onShift: true,
+      availability: "AVAILABLE",
+      planVersion: 4,
+      assignments: [{ sequenceNo: 1 }]
+    });
+    tx.order.findUnique.mockResolvedValue({
+      id: "order-1",
+      orderNo: "ORDER-1",
+      executionStatus: "UNASSIGNED",
+      currentAssignment: null
+    });
+    tx.assignment.create.mockResolvedValue({ id: "assignment-new" });
+
+    const result = await assignOrder({
+      orderId: "order-1",
+      driverId: "driver-1",
+      reason: "人工锁定",
+      expectedPlanVersion: 4,
+      operatorUserId: "dispatcher-1",
+      traceId: "trace-assign"
+    });
+
+    expect(result).toEqual({
+      success: true,
+      data: expect.objectContaining({
+        assignmentId: "assignment-new",
+        planVersion: 5,
+        replayed: false
+      })
+    });
+    expect(tx.assignment.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        sequenceNo: 2,
+        lockType: "MANUAL_LOCKED",
+        type: "MANUAL_ASSIGN"
+      }),
+      select: { id: true }
+    });
+    expect(triggerAssignmentAssigned).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tx,
+        assignmentId: "assignment-new",
+        eventId: "assignment-assigned:order-1:driver-1:5"
+      })
+    );
+  });
+
+  it("rejects a stale manual assignment version before creating facts", async () => {
+    vi.mocked(prisma.order.findUnique).mockResolvedValue({ id: "order-1" } as never);
+    vi.mocked(prisma.driver.findFirst).mockResolvedValue({ id: "driver-1" } as never);
+    const tx = createTransactionMock();
+    runTransaction(tx);
+    tx.driver.findFirst.mockResolvedValue({
+      id: "driver-1",
+      name: "司机一",
+      onShift: true,
+      availability: "AVAILABLE",
+      planVersion: 5,
+      assignments: []
+    });
+    tx.order.findUnique.mockResolvedValue({
+      id: "order-1",
+      orderNo: "ORDER-1",
+      executionStatus: "UNASSIGNED",
+      currentAssignment: null
+    });
+
+    const result = await assignOrder({
+      orderId: "order-1",
+      driverId: "driver-1",
+      reason: "人工锁定",
+      expectedPlanVersion: 4,
+      operatorUserId: "dispatcher-1",
+      traceId: "trace-stale"
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: expect.objectContaining({
+        code: "PLAN_VERSION_CONFLICT",
+        details: { currentPlanVersion: 5 }
+      })
+    });
+    expect(tx.assignment.create).not.toHaveBeenCalled();
+  });
+
+  it("withdraws only PLANNED assignments with one version increment", async () => {
+    const tx = createTransactionMock();
+    runTransaction(tx);
+    tx.assignment.findUnique.mockResolvedValue({
+      id: "assignment-1",
+      orderId: "order-1",
+      driverId: "driver-1",
+      status: "ACTIVE",
+      driver: { planVersion: 7 },
+      order: {
+        currentAssignmentId: "assignment-1",
+        executionStatus: "PLANNED"
+      }
+    });
+
+    const result = await withdrawAssignment({
+      assignmentId: "assignment-1",
+      reason: "撤回重排",
+      expectedPlanVersion: 7,
+      operatorUserId: "dispatcher-1",
+      traceId: "trace-withdraw"
+    });
+
+    expect(result).toEqual({
+      success: true,
+      data: expect.objectContaining({ planVersion: 8, replayed: false })
+    });
+    expect(tx.order.update).toHaveBeenCalledWith({
+      where: { id: "order-1" },
+      data: {
+        executionStatus: "UNASSIGNED",
+        status: "PENDING",
+        currentAssignmentId: null
+      }
+    });
+    expect(triggerAssignmentWithdrawn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tx,
+        eventId: "assignment-withdrawn:assignment-1:8"
+      })
+    );
+  });
+
+  it("rejects withdrawal after service starts", async () => {
+    const tx = createTransactionMock();
+    runTransaction(tx);
+    tx.assignment.findUnique.mockResolvedValue({
+      id: "assignment-1",
+      orderId: "order-1",
+      driverId: "driver-1",
+      status: "ACTIVE",
+      driver: { planVersion: 7 },
+      order: {
+        currentAssignmentId: "assignment-1",
+        executionStatus: "IN_SERVICE"
+      }
+    });
+
+    const result = await withdrawAssignment({
+      assignmentId: "assignment-1",
+      reason: "非法撤回",
+      expectedPlanVersion: 7,
+      operatorUserId: "dispatcher-1",
+      traceId: "trace-withdraw-illegal"
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: expect.objectContaining({
+        code: "ILLEGAL_TRANSITION",
+        details: { currentStatus: "IN_SERVICE", targetStatus: "UNASSIGNED" }
+      })
+    });
+    expect(tx.assignment.update).not.toHaveBeenCalled();
+  });
+
+  it("unlocks a manual assignment and emits the dedicated event", async () => {
+    const tx = createTransactionMock();
+    runTransaction(tx);
+    tx.assignment.findUnique.mockResolvedValue({
+      id: "assignment-1",
+      orderId: "order-1",
+      driverId: "driver-1",
+      status: "ACTIVE",
+      lockType: "MANUAL_LOCKED",
+      driver: { planVersion: 9 },
+      order: {
+        currentAssignmentId: "assignment-1",
+        executionStatus: "PLANNED"
+      }
+    });
+
+    const result = await unlockAssignment({
+      assignmentId: "assignment-1",
+      reason: "恢复自动排程",
+      expectedPlanVersion: 9,
+      operatorUserId: "dispatcher-1",
+      traceId: "trace-unlock"
+    });
+
+    expect(result).toEqual({
+      success: true,
+      data: expect.objectContaining({ planVersion: 10, replayed: false })
+    });
+    expect(enqueueInternalEvent).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        type: "ASSIGNMENT_UNLOCKED",
+        assignmentId: "assignment-1",
+        eventId: "assignment-unlocked:assignment-1:10"
+      })
+    );
   });
 });

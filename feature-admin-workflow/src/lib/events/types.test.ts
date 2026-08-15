@@ -22,9 +22,16 @@ describe("WHITELISTED_EVENT_TYPES", () => {
     expect(WHITELISTED_EVENT_TYPES).toContain("BASELINE_RECALCULATION");
   });
 
-  it("contains exactly 15 entries covering 1A, 1B, Gate 3, 2B, and baseline", () => {
-    // 3 (1A) + 3 (1B) + 4 (Gate 3) + 4 (2B) + 1 baseline = 15
-    expect(WHITELISTED_EVENT_TYPES).toHaveLength(15);
+  it("contains dispatcher availability and unlock events", () => {
+    expect(WHITELISTED_EVENT_TYPES).toContain(
+      "DRIVER_AVAILABILITY_CHANGED"
+    );
+    expect(WHITELISTED_EVENT_TYPES).toContain("ASSIGNMENT_UNLOCKED");
+  });
+
+  it("contains exactly 17 entries covering 1A, 1B, Gate 3, 2B, and baseline", () => {
+    // 3 (1A) + 4 (1B) + 5 (Gate 3) + 4 (2B) + 1 baseline = 17
+    expect(WHITELISTED_EVENT_TYPES).toHaveLength(17);
   });
 
   it("no duplicates in the whitelist", () => {

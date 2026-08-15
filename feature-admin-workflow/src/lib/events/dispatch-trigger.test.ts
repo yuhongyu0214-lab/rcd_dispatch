@@ -76,4 +76,50 @@ describe("handleInternalEvent", () => {
       "trace-baseline"
     );
   });
+
+  it("maps driver availability changes and preserves the driver trace context", async () => {
+    await handleInternalEvent({
+      eventId: "driver-availability:driver-1:2",
+      type: "DRIVER_AVAILABILITY_CHANGED",
+      driverId: "driver-1",
+      occurredAt: "2026-08-16T06:00:00.000Z",
+      traceId: "trace-availability"
+    });
+
+    expect(runDispatchApplication).toHaveBeenCalledTimes(1);
+    expect(runDispatchApplication).toHaveBeenCalledWith(
+      {
+        type: "DRIVER_AVAILABILITY_CHANGED",
+        occurredAt: "2026-08-16T06:00:00.000Z",
+        orderId: undefined,
+        driverId: "driver-1",
+        assignmentId: undefined
+      },
+      "trace-availability"
+    );
+  });
+
+  it("maps assignment unlocks and preserves all subject identifiers", async () => {
+    await handleInternalEvent({
+      eventId: "assignment-unlocked:assignment-1:4",
+      type: "ASSIGNMENT_UNLOCKED",
+      orderId: "order-1",
+      driverId: "driver-1",
+      assignmentId: "assignment-1",
+      occurredAt: "2026-08-16T06:00:00.000Z",
+      traceId: "trace-unlock"
+    });
+
+    expect(runDispatchApplication).toHaveBeenCalledTimes(1);
+    expect(runDispatchApplication).toHaveBeenCalledWith(
+      {
+        type: "ASSIGNMENT_EXECUTION_CHANGED",
+        occurredAt: "2026-08-16T06:00:00.000Z",
+        orderId: "order-1",
+        driverId: "driver-1",
+        assignmentId: "assignment-1"
+      },
+      "trace-unlock"
+    );
+  });
 });

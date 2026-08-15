@@ -11,7 +11,11 @@ import {
   acquireResourceLocks,
   releaseResourceLock
 } from "@/lib/redis";
-import { triggerAssignmentReassigned } from "@/lib/triggers/gate3-triggers";
+import {
+  triggerAssignmentAssigned,
+  triggerAssignmentReassigned,
+  triggerAssignmentWithdrawn
+} from "@/lib/triggers/gate3-triggers";
 
 import type { ApiErrorV2 } from "@/types/v2";
 
@@ -35,6 +39,30 @@ export type ReassignResult = CommandResult<{
   fromPlanVersion: number;
   toPlanVersion: number;
   replayed: false;
+}>;
+
+export type AssignResult = CommandResult<{
+  assignmentId: string;
+  orderId: string;
+  driverId: string;
+  planVersion: number;
+  replayed: boolean;
+}>;
+
+export type WithdrawResult = CommandResult<{
+  assignmentId: string;
+  orderId: string;
+  driverId: string;
+  planVersion: number;
+  replayed: boolean;
+}>;
+
+export type UnlockResult = CommandResult<{
+  assignmentId: string;
+  orderId: string;
+  driverId: string;
+  planVersion: number;
+  replayed: boolean;
 }>;
 
 type CommandResult<T> =
@@ -682,6 +710,680 @@ export async function reassignAssignment(params: {
       error: createApiErrorV2(
         "INTERNAL_ERROR",
         "Reassignment failed; no partial change was committed"
+      )
+    };
+  } finally {
+    await releaseCommandLocks(locks.heldLocks);
+  }
+}
+
+export async function assignOrder(params: {
+  orderId: string;
+  driverId: string;
+  reason: string;
+  expectedPlanVersion: number;
+  operatorUserId: string;
+  traceId: string;
+}): Promise<AssignResult> {
+  const [orderExists, driverExists] = await Promise.all([
+    prisma.order.findUnique({ where: { id: params.orderId }, select: { id: true } }),
+    prisma.driver.findFirst({
+      where: { id: params.driverId, isActive: true },
+      select: { id: true }
+    })
+  ]);
+  if (!orderExists) {
+    return {
+      success: false,
+      error: createApiErrorV2("NOT_FOUND", "Order not found")
+    };
+  }
+  if (!driverExists) {
+    return {
+      success: false,
+      error: createApiErrorV2("NOT_FOUND", "Driver not found")
+    };
+  }
+
+  const locks = await acquireCommandLocks([
+    `dispatch:lock:${params.driverId}`,
+    `order:lock:${params.orderId}`
+  ]);
+  if (locks.busy) {
+    return {
+      success: false,
+      error: createApiErrorV2(
+        "DUPLICATE_OPERATION",
+        "Another plan edit is in progress"
+      )
+    };
+  }
+
+  try {
+    const transactionResult = await prisma.$transaction<
+      | { kind: "success"; data: AssignResult & { success: true }; eventId: string }
+      | { kind: "replayed"; data: AssignResult & { success: true } }
+      | { kind: "rejected"; error: ApiErrorV2 }
+    >(async (tx) => {
+      await tx.$queryRaw`
+        SELECT "id" FROM "Driver"
+        WHERE "id" = ${params.driverId}
+        FOR UPDATE
+      `;
+      await tx.$queryRaw`
+        SELECT "id" FROM "Order"
+        WHERE "id" = ${params.orderId}
+        FOR UPDATE
+      `;
+
+      const [driver, order] = await Promise.all([
+        tx.driver.findFirst({
+          where: { id: params.driverId, isActive: true },
+          select: {
+            id: true,
+            name: true,
+            onShift: true,
+            availability: true,
+            planVersion: true,
+            assignments: {
+              where: {
+                status: { in: ["ACTIVE", "ACCEPTED"] },
+                order: {
+                  executionStatus: { notIn: ["COMPLETED", "CANCELLED"] }
+                }
+              },
+              select: { sequenceNo: true }
+            }
+          }
+        }),
+        tx.order.findUnique({
+          where: { id: params.orderId },
+          select: {
+            id: true,
+            orderNo: true,
+            executionStatus: true,
+            currentAssignment: {
+              select: {
+                id: true,
+                driverId: true,
+                status: true,
+                lockType: true
+              }
+            }
+          }
+        })
+      ]);
+      if (!driver) {
+        return {
+          kind: "rejected",
+          error: createApiErrorV2("NOT_FOUND", "Driver not found")
+        };
+      }
+      if (!order) {
+        return {
+          kind: "rejected",
+          error: createApiErrorV2("NOT_FOUND", "Order not found")
+        };
+      }
+      if (
+        order.executionStatus === "PLANNED" &&
+        order.currentAssignment?.driverId === driver.id &&
+        order.currentAssignment.lockType === "MANUAL_LOCKED" &&
+        ["ACTIVE", "ACCEPTED"].includes(order.currentAssignment.status)
+      ) {
+        return {
+          kind: "replayed",
+          data: {
+            success: true,
+            data: {
+              assignmentId: order.currentAssignment.id,
+              orderId: order.id,
+              driverId: driver.id,
+              planVersion: driver.planVersion,
+              replayed: true
+            }
+          }
+        };
+      }
+      if (order.executionStatus !== "UNASSIGNED") {
+        return {
+          kind: "rejected",
+          error: illegalTransition(order.executionStatus, "PLANNED")
+        };
+      }
+      if (driver.planVersion !== params.expectedPlanVersion) {
+        return {
+          kind: "rejected",
+          error: createApiErrorV2(
+            "PLAN_VERSION_CONFLICT",
+            "Driver plan version is stale",
+            { currentPlanVersion: driver.planVersion }
+          )
+        };
+      }
+      if (!driver.onShift || driver.availability !== "AVAILABLE") {
+        return {
+          kind: "rejected",
+          error: createApiErrorV2(
+            "VALIDATION_FAILED",
+            "Driver must be on shift and available",
+            { fields: { driverId: ["Driver must be on shift and available"] } }
+          )
+        };
+      }
+
+      const occupied = new Set(
+        driver.assignments
+          .map((assignment) => assignment.sequenceNo)
+          .filter((sequenceNo): sequenceNo is number => sequenceNo !== null)
+      );
+      const sequenceNo = [1, 2, 3].find((candidate) => !occupied.has(candidate));
+      if (!sequenceNo) {
+        return {
+          kind: "rejected",
+          error: createApiErrorV2(
+            "VALIDATION_FAILED",
+            "Driver has no available A/B/C slot",
+            { fields: { driverId: ["No available plan slot"] } }
+          )
+        };
+      }
+
+      const occurredAt = new Date();
+      const assignment = await tx.assignment.create({
+        data: {
+          orderId: order.id,
+          driverId: driver.id,
+          type: "MANUAL_ASSIGN",
+          status: "ACTIVE",
+          createdByUserId: params.operatorUserId,
+          sequenceNo,
+          lockType: "MANUAL_LOCKED"
+        },
+        select: { id: true }
+      });
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          executionStatus: "PLANNED",
+          status: "ASSIGNED",
+          currentAssignmentId: assignment.id,
+          driverNameSnapshot: driver.name
+        }
+      });
+      const nextPlanVersion = driver.planVersion + 1;
+      await tx.driver.update({
+        where: { id: driver.id },
+        data: { status: "S3", planVersion: nextPlanVersion }
+      });
+      await tx.operationLog.create({
+        data: {
+          entityType: "ASSIGNMENT",
+          entityId: assignment.id,
+          action: "ASSIGN",
+          operatorUserId: params.operatorUserId,
+          orderId: order.id,
+          driverId: driver.id,
+          assignmentId: assignment.id,
+          traceId: params.traceId,
+          reason: params.reason,
+          metadataJson: {
+            orderNo: order.orderNo,
+            sequenceNo,
+            lockType: "MANUAL_LOCKED",
+            expectedPlanVersion: params.expectedPlanVersion,
+            nextPlanVersion
+          }
+        }
+      });
+
+      const eventId = `assignment-assigned:${order.id}:${driver.id}:${nextPlanVersion}`;
+      await triggerAssignmentAssigned({
+        tx,
+        eventId,
+        assignmentId: assignment.id,
+        orderId: order.id,
+        driverId: driver.id,
+        occurredAt: occurredAt.toISOString(),
+        traceId: params.traceId
+      });
+      return {
+        kind: "success",
+        eventId,
+        data: {
+          success: true,
+          data: {
+            assignmentId: assignment.id,
+            orderId: order.id,
+            driverId: driver.id,
+            planVersion: nextPlanVersion,
+            replayed: false
+          }
+        }
+      };
+    });
+
+    if (transactionResult.kind === "rejected") {
+      return { success: false, error: transactionResult.error };
+    }
+    if (transactionResult.kind === "success") {
+      await releaseCommandLocks(locks.heldLocks);
+      locks.heldLocks.length = 0;
+      await processEventBestEffort(transactionResult.eventId, params.traceId);
+    }
+    return transactionResult.data;
+  } catch (error) {
+    log.error("assignment_manual_assign_failed", {
+      orderId: params.orderId,
+      driverId: params.driverId,
+      traceId: params.traceId,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return {
+      success: false,
+      error: createApiErrorV2(
+        "INTERNAL_ERROR",
+        "Manual assignment failed; no partial change was committed"
+      )
+    };
+  } finally {
+    await releaseCommandLocks(locks.heldLocks);
+  }
+}
+
+export async function withdrawAssignment(params: {
+  assignmentId: string;
+  reason: string;
+  expectedPlanVersion: number;
+  operatorUserId: string;
+  traceId: string;
+}): Promise<WithdrawResult> {
+  const preflight = await prisma.assignment.findUnique({
+    where: { id: params.assignmentId },
+    select: { orderId: true, driverId: true }
+  });
+  if (!preflight) {
+    return {
+      success: false,
+      error: createApiErrorV2("NOT_FOUND", "Assignment not found")
+    };
+  }
+  const locks = await acquireCommandLocks([
+    `dispatch:lock:${preflight.driverId}`,
+    `order:lock:${preflight.orderId}`
+  ]);
+  if (locks.busy) {
+    return {
+      success: false,
+      error: createApiErrorV2(
+        "DUPLICATE_OPERATION",
+        "Another plan edit is in progress"
+      )
+    };
+  }
+
+  try {
+    const transactionResult = await prisma.$transaction<
+      | { kind: "success"; data: WithdrawResult & { success: true }; eventId: string }
+      | { kind: "replayed"; data: WithdrawResult & { success: true } }
+      | { kind: "rejected"; error: ApiErrorV2 }
+    >(async (tx) => {
+      await tx.$queryRaw`
+        SELECT "id" FROM "Driver" WHERE "id" = ${preflight.driverId} FOR UPDATE
+      `;
+      await tx.$queryRaw`
+        SELECT "id" FROM "Order" WHERE "id" = ${preflight.orderId} FOR UPDATE
+      `;
+      await tx.$queryRaw`
+        SELECT "id" FROM "Assignment" WHERE "id" = ${params.assignmentId} FOR UPDATE
+      `;
+      const assignment = await tx.assignment.findUnique({
+        where: { id: params.assignmentId },
+        include: {
+          driver: { select: { planVersion: true } },
+          order: {
+            select: { currentAssignmentId: true, executionStatus: true }
+          }
+        }
+      });
+      if (!assignment) {
+        return {
+          kind: "rejected",
+          error: createApiErrorV2("NOT_FOUND", "Assignment not found")
+        };
+      }
+      if (
+        assignment.status === "WITHDRAWN" &&
+        assignment.order.executionStatus === "UNASSIGNED"
+      ) {
+        return {
+          kind: "replayed",
+          data: {
+            success: true,
+            data: {
+              assignmentId: assignment.id,
+              orderId: assignment.orderId,
+              driverId: assignment.driverId,
+              planVersion: assignment.driver.planVersion,
+              replayed: true
+            }
+          }
+        };
+      }
+      if (assignment.driver.planVersion !== params.expectedPlanVersion) {
+        return {
+          kind: "rejected",
+          error: createApiErrorV2(
+            "PLAN_VERSION_CONFLICT",
+            "Driver plan version is stale",
+            { currentPlanVersion: assignment.driver.planVersion }
+          )
+        };
+      }
+      if (
+        assignment.order.currentAssignmentId !== assignment.id ||
+        !["ACTIVE", "ACCEPTED"].includes(assignment.status) ||
+        assignment.order.executionStatus !== "PLANNED"
+      ) {
+        return {
+          kind: "rejected",
+          error: illegalTransition(
+            assignment.order.executionStatus,
+            "UNASSIGNED"
+          )
+        };
+      }
+
+      const occurredAt = new Date();
+      await tx.assignment.update({
+        where: { id: assignment.id },
+        data: {
+          status: "WITHDRAWN",
+          withdrawnAt: occurredAt,
+          sequenceNo: null,
+          lockType: "NONE"
+        }
+      });
+      await tx.order.update({
+        where: { id: assignment.orderId },
+        data: {
+          executionStatus: "UNASSIGNED",
+          status: "PENDING",
+          currentAssignmentId: null
+        }
+      });
+      const nextPlanVersion = assignment.driver.planVersion + 1;
+      await tx.driver.update({
+        where: { id: assignment.driverId },
+        data: { status: "S1", planVersion: nextPlanVersion }
+      });
+      await tx.operationLog.create({
+        data: {
+          entityType: "ASSIGNMENT",
+          entityId: assignment.id,
+          action: "WITHDRAW",
+          operatorUserId: params.operatorUserId,
+          orderId: assignment.orderId,
+          driverId: assignment.driverId,
+          assignmentId: assignment.id,
+          traceId: params.traceId,
+          reason: params.reason,
+          metadataJson: {
+            beforeExecutionStatus: "PLANNED",
+            afterExecutionStatus: "UNASSIGNED",
+            expectedPlanVersion: params.expectedPlanVersion,
+            nextPlanVersion
+          }
+        }
+      });
+      const eventId = `assignment-withdrawn:${assignment.id}:${nextPlanVersion}`;
+      await triggerAssignmentWithdrawn({
+        tx,
+        eventId,
+        assignmentId: assignment.id,
+        orderId: assignment.orderId,
+        driverId: assignment.driverId,
+        occurredAt: occurredAt.toISOString(),
+        traceId: params.traceId
+      });
+      return {
+        kind: "success",
+        eventId,
+        data: {
+          success: true,
+          data: {
+            assignmentId: assignment.id,
+            orderId: assignment.orderId,
+            driverId: assignment.driverId,
+            planVersion: nextPlanVersion,
+            replayed: false
+          }
+        }
+      };
+    });
+
+    if (transactionResult.kind === "rejected") {
+      return { success: false, error: transactionResult.error };
+    }
+    if (transactionResult.kind === "success") {
+      await releaseCommandLocks(locks.heldLocks);
+      locks.heldLocks.length = 0;
+      await processEventBestEffort(transactionResult.eventId, params.traceId);
+    }
+    return transactionResult.data;
+  } catch (error) {
+    log.error("assignment_withdraw_failed", {
+      assignmentId: params.assignmentId,
+      traceId: params.traceId,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return {
+      success: false,
+      error: createApiErrorV2(
+        "INTERNAL_ERROR",
+        "Assignment withdrawal failed; no partial change was committed"
+      )
+    };
+  } finally {
+    await releaseCommandLocks(locks.heldLocks);
+  }
+}
+
+export async function unlockAssignment(params: {
+  assignmentId: string;
+  reason: string;
+  expectedPlanVersion: number;
+  operatorUserId: string;
+  traceId: string;
+}): Promise<UnlockResult> {
+  const preflight = await prisma.assignment.findUnique({
+    where: { id: params.assignmentId },
+    select: { orderId: true, driverId: true }
+  });
+  if (!preflight) {
+    return {
+      success: false,
+      error: createApiErrorV2("NOT_FOUND", "Assignment not found")
+    };
+  }
+  const locks = await acquireCommandLocks([
+    `dispatch:lock:${preflight.driverId}`,
+    `order:lock:${preflight.orderId}`
+  ]);
+  if (locks.busy) {
+    return {
+      success: false,
+      error: createApiErrorV2(
+        "DUPLICATE_OPERATION",
+        "Another plan edit is in progress"
+      )
+    };
+  }
+
+  try {
+    const transactionResult = await prisma.$transaction<
+      | { kind: "success"; data: UnlockResult & { success: true }; eventId: string }
+      | { kind: "replayed"; data: UnlockResult & { success: true } }
+      | { kind: "rejected"; error: ApiErrorV2 }
+    >(async (tx) => {
+      await tx.$queryRaw`
+        SELECT "id" FROM "Driver" WHERE "id" = ${preflight.driverId} FOR UPDATE
+      `;
+      await tx.$queryRaw`
+        SELECT "id" FROM "Order" WHERE "id" = ${preflight.orderId} FOR UPDATE
+      `;
+      await tx.$queryRaw`
+        SELECT "id" FROM "Assignment" WHERE "id" = ${params.assignmentId} FOR UPDATE
+      `;
+      const assignment = await tx.assignment.findUnique({
+        where: { id: params.assignmentId },
+        include: {
+          driver: { select: { planVersion: true } },
+          order: {
+            select: { currentAssignmentId: true, executionStatus: true }
+          }
+        }
+      });
+      if (!assignment) {
+        return {
+          kind: "rejected",
+          error: createApiErrorV2("NOT_FOUND", "Assignment not found")
+        };
+      }
+      if (
+        assignment.lockType === "NONE" &&
+        assignment.order.currentAssignmentId === assignment.id &&
+        assignment.order.executionStatus === "PLANNED"
+      ) {
+        const priorUnlock = await tx.operationLog.findFirst({
+          where: { assignmentId: assignment.id, action: "UNLOCK" },
+          select: { id: true }
+        });
+        if (priorUnlock) {
+          return {
+            kind: "replayed",
+            data: {
+              success: true,
+              data: {
+                assignmentId: assignment.id,
+                orderId: assignment.orderId,
+                driverId: assignment.driverId,
+                planVersion: assignment.driver.planVersion,
+                replayed: true
+              }
+            }
+          };
+        }
+      }
+      if (assignment.driver.planVersion !== params.expectedPlanVersion) {
+        return {
+          kind: "rejected",
+          error: createApiErrorV2(
+            "PLAN_VERSION_CONFLICT",
+            "Driver plan version is stale",
+            { currentPlanVersion: assignment.driver.planVersion }
+          )
+        };
+      }
+      if (
+        assignment.order.currentAssignmentId !== assignment.id ||
+        !["ACTIVE", "ACCEPTED"].includes(assignment.status) ||
+        assignment.order.executionStatus !== "PLANNED"
+      ) {
+        return {
+          kind: "rejected",
+          error: illegalTransition(
+            assignment.order.executionStatus,
+            "PLANNED"
+          )
+        };
+      }
+      if (assignment.lockType !== "MANUAL_LOCKED") {
+        return {
+          kind: "rejected",
+          error: createApiErrorV2(
+            "VALIDATION_FAILED",
+            "Assignment is not manually locked",
+            { fields: { assignmentId: ["Assignment is not manually locked"] } }
+          )
+        };
+      }
+
+      const occurredAt = new Date();
+      await tx.assignment.update({
+        where: { id: assignment.id },
+        data: { lockType: "NONE" }
+      });
+      const nextPlanVersion = assignment.driver.planVersion + 1;
+      await tx.driver.update({
+        where: { id: assignment.driverId },
+        data: { planVersion: nextPlanVersion }
+      });
+      await tx.operationLog.create({
+        data: {
+          entityType: "ASSIGNMENT",
+          entityId: assignment.id,
+          action: "UNLOCK",
+          operatorUserId: params.operatorUserId,
+          orderId: assignment.orderId,
+          driverId: assignment.driverId,
+          assignmentId: assignment.id,
+          traceId: params.traceId,
+          reason: params.reason,
+          metadataJson: {
+            beforeLockType: "MANUAL_LOCKED",
+            afterLockType: "NONE",
+            expectedPlanVersion: params.expectedPlanVersion,
+            nextPlanVersion
+          }
+        }
+      });
+      const eventId = `assignment-unlocked:${assignment.id}:${nextPlanVersion}`;
+      await enqueueInternalEvent(tx, {
+        eventId,
+        type: "ASSIGNMENT_UNLOCKED",
+        assignmentId: assignment.id,
+        orderId: assignment.orderId,
+        driverId: assignment.driverId,
+        occurredAt: occurredAt.toISOString(),
+        traceId: params.traceId
+      });
+      return {
+        kind: "success",
+        eventId,
+        data: {
+          success: true,
+          data: {
+            assignmentId: assignment.id,
+            orderId: assignment.orderId,
+            driverId: assignment.driverId,
+            planVersion: nextPlanVersion,
+            replayed: false
+          }
+        }
+      };
+    });
+
+    if (transactionResult.kind === "rejected") {
+      return { success: false, error: transactionResult.error };
+    }
+    if (transactionResult.kind === "success") {
+      await releaseCommandLocks(locks.heldLocks);
+      locks.heldLocks.length = 0;
+      await processEventBestEffort(transactionResult.eventId, params.traceId);
+    }
+    return transactionResult.data;
+  } catch (error) {
+    log.error("assignment_unlock_failed", {
+      assignmentId: params.assignmentId,
+      traceId: params.traceId,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return {
+      success: false,
+      error: createApiErrorV2(
+        "INTERNAL_ERROR",
+        "Assignment unlock failed; no partial change was committed"
       )
     };
   } finally {
