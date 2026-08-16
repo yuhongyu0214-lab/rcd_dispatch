@@ -228,7 +228,7 @@ describe("dispatcher read service", () => {
     );
   });
 
-  it("returns the frozen order modification history summary", async () => {
+  it("returns frozen order modification summaries without exposing metadataJson", async () => {
     vi.mocked(prisma.order.findUnique).mockResolvedValue({
       ...orderRow(),
       currentAssignment: null,
@@ -236,35 +236,88 @@ describe("dispatcher read service", () => {
       operationLogs: [
         {
           id: "log-2",
-          action: "ORDER_MODIFY",
           reason: "客户改址",
+          traceId: "trace-log-2",
+          metadataJson: {
+            before: {
+              pickupLat: 31.1,
+              pickupLng: 121.1,
+              deliveryAddress: "旧送达点",
+              pickupAddress: "旧取车点",
+              internalSecret: "before-secret",
+              unsupported: { private: true }
+            },
+            after: {
+              pickupLat: 31.3,
+              pickupLng: 121.1,
+              deliveryAddress: "新送达点",
+              pickupAddress: "新取车点",
+              internalSecret: "after-secret",
+              unsupported: { private: false }
+            },
+            internalSecret: "must-not-leak"
+          },
           createdAt: new Date("2026-08-16T08:30:00.000Z"),
           operatorUser: { id: "dispatcher-1", name: "调度员" }
+        },
+        {
+          id: "log-1",
+          reason: null,
+          traceId: null,
+          metadataJson: {
+            before: { promisedPickupAt: "2026-08-16T09:00:00.000Z" },
+            after: { promisedPickupAt: "2026-08-16T09:30:00.000Z" }
+          },
+          createdAt: new Date("2026-08-16T08:10:00.000Z"),
+          operatorUser: { id: "dispatcher-2", name: "值班员" }
         }
-      ],
-      _count: { operationLogs: 3 }
+      ]
     } as never);
 
     const result = await getOrderDetail("order-1");
 
-    expect(result?.modificationHistory).toEqual({
-      total: 3,
-      latest: [
-        {
-          id: "log-2",
-          action: "ORDER_MODIFY",
-          reason: "客户改址",
-          createdAt: "2026-08-16T08:30:00.000Z",
-          operator: { id: "dispatcher-1", name: "调度员" }
-        }
-      ]
-    });
+    expect(result?.modificationHistory).toEqual([
+      {
+        id: "log-2",
+        operator: { id: "dispatcher-1", name: "调度员" },
+        reason: "客户改址",
+        changes: [
+          { field: "deliveryAddress", before: "旧送达点", after: "新送达点" },
+          { field: "pickupAddress", before: "旧取车点", after: "新取车点" },
+          { field: "pickupLat", before: 31.1, after: 31.3 }
+        ],
+        traceId: "trace-log-2",
+        createdAt: "2026-08-16T08:30:00.000Z"
+      },
+      {
+        id: "log-1",
+        operator: { id: "dispatcher-2", name: "值班员" },
+        reason: null,
+        changes: [
+          {
+            field: "promisedPickupAt",
+            before: "2026-08-16T09:00:00.000Z",
+            after: "2026-08-16T09:30:00.000Z"
+          }
+        ],
+        traceId: null,
+        createdAt: "2026-08-16T08:10:00.000Z"
+      }
+    ]);
+    expect(JSON.stringify(result?.modificationHistory)).not.toContain("metadataJson");
+    expect(JSON.stringify(result?.modificationHistory)).not.toContain("internalSecret");
+    expect(JSON.stringify(result?.modificationHistory)).not.toContain("after-secret");
+    expect(JSON.stringify(result?.modificationHistory)).not.toContain("must-not-leak");
     expect(prisma.order.findUnique).toHaveBeenCalledWith(
       expect.objectContaining({
         select: expect.objectContaining({
           operationLogs: expect.objectContaining({
             where: { action: "ORDER_MODIFY" },
-            take: 20
+            orderBy: { createdAt: "desc" },
+            select: expect.objectContaining({
+              metadataJson: true,
+              traceId: true
+            })
           })
         })
       })

@@ -20,21 +20,17 @@ import { POST as cancel } from "./[orderId]/cancel/route";
 
 const context = { params: Promise.resolve({ orderId: "order-1" }) };
 
-function request(url: string, method = "GET", body?: unknown) {
+function request(
+  url: string,
+  method = "GET",
+  body?: unknown,
+  traceId: string | null = "trace-order-route"
+) {
+  const headers = new Headers({ "content-type": "application/json" });
+  if (traceId !== null) headers.set("X-Trace-Id", traceId);
   return new Request(url, {
     method,
-    headers: {
-      "content-type": "application/json",
-      "X-Trace-Id": "trace-order-route"
-    },
-    body: body === undefined ? undefined : JSON.stringify(body)
-  });
-}
-
-function requestWithoutTrace(url: string, method = "GET", body?: unknown) {
-  return new Request(url, {
-    method,
-    headers: { "content-type": "application/json" },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body)
   });
 }
@@ -42,34 +38,53 @@ function requestWithoutTrace(url: string, method = "GET", body?: unknown) {
 const orderOperations = [
   {
     name: "GET /api/v2/orders",
-    invoke: () => list(request("http://localhost/api/v2/orders")),
+    invoke: (traceId: string | null = "trace-order-route") =>
+      list(
+        request("http://localhost/api/v2/orders", "GET", undefined, traceId)
+      ),
     service: listOrders
   },
   {
     name: "GET /api/v2/orders/{orderId}",
-    invoke: () =>
-      detail(request("http://localhost/api/v2/orders/order-1"), context),
+    invoke: (traceId: string | null = "trace-order-route") =>
+      detail(
+        request(
+          "http://localhost/api/v2/orders/order-1",
+          "GET",
+          undefined,
+          traceId
+        ),
+        context
+      ),
     service: getOrderDetail
   },
   {
     name: "PATCH /api/v2/orders/{orderId}",
-    invoke: () =>
+    invoke: (traceId: string | null = "trace-order-route") =>
       update(
-        request("http://localhost/api/v2/orders/order-1", "PATCH", {
-          promisedPickupAt: "2026-08-16T16:00:00+08:00",
-          reason: "客户改期"
-        }),
+        request(
+          "http://localhost/api/v2/orders/order-1",
+          "PATCH",
+          {
+            promisedPickupAt: "2026-08-16T16:00:00+08:00",
+            reason: "客户改期"
+          },
+          traceId
+        ),
         context
       ),
     service: updateOrder
   },
   {
     name: "POST /api/v2/orders/{orderId}/cancel",
-    invoke: () =>
+    invoke: (traceId: string | null = "trace-order-route") =>
       cancel(
-        request("http://localhost/api/v2/orders/order-1/cancel", "POST", {
-          reason: "客户取消"
-        }),
+        request(
+          "http://localhost/api/v2/orders/order-1/cancel",
+          "POST",
+          { reason: "客户取消" },
+          traceId
+        ),
         context
       ),
     service: cancelOrder
@@ -151,6 +166,19 @@ describe("dispatcher order routes", () => {
     }
   );
 
+  it.each(orderOperations)(
+    "generates a default UUID trace ID for $name",
+    async ({ invoke }) => {
+      const response = await invoke(null);
+      const body = await response.json();
+
+      expect(body.traceId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      );
+      expect(response.headers.get("X-Trace-Id")).toBe(body.traceId);
+    }
+  );
+
   it("uses pagination defaults and clamps pageSize to 100", async () => {
     await list(request("http://localhost/api/v2/orders"));
     expect(listOrders).toHaveBeenLastCalledWith({
@@ -178,7 +206,7 @@ describe("dispatcher order routes", () => {
         "http://localhost/api/v2/orders?page=0&executionStatus=BAD&slot=D"
       )
     );
-    const body = await response.json();
+    const body = await expectTrace(response, "trace-order-route");
 
     expect(response.status).toBe(400);
     expect(body.error.code).toBe("VALIDATION_FAILED");
@@ -195,8 +223,10 @@ describe("dispatcher order routes", () => {
       request("http://localhost/api/v2/orders/order-1"),
       context
     );
+    const body = await expectTrace(response, "trace-order-route");
+
     expect(response.status).toBe(404);
-    expect((await response.json()).error.code).toBe("NOT_FOUND");
+    expect(body.error.code).toBe("NOT_FOUND");
   });
 
   it("rejects a timezone-free promised pickup time", async () => {
@@ -207,7 +237,7 @@ describe("dispatcher order routes", () => {
       }),
       context
     );
-    const body = await response.json();
+    const body = await expectTrace(response, "trace-order-route");
 
     expect(response.status).toBe(400);
     expect(body.error.details.fields.promisedPickupAt).toEqual([
@@ -294,7 +324,7 @@ describe("dispatcher order routes", () => {
       }),
       context
     );
-    const body = await response.json();
+    const body = await expectTrace(response, "trace-order-route");
 
     expect(response.status).toBe(400);
     expect(body.error.code).toBe("VALIDATION_FAILED");
@@ -304,20 +334,4 @@ describe("dispatcher order routes", () => {
     expect(cancelOrder).not.toHaveBeenCalled();
   });
 
-  it("generates a default UUID trace ID for a representative write route", async () => {
-    const response = await cancel(
-      requestWithoutTrace(
-        "http://localhost/api/v2/orders/order-1/cancel",
-        "POST",
-        { reason: "客户取消" }
-      ),
-      context
-    );
-    const body = await response.json();
-
-    expect(body.traceId).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-    );
-    expect(response.headers.get("X-Trace-Id")).toBe(body.traceId);
-  });
 });

@@ -40,19 +40,25 @@ export type MapSnapshotV2 = {
   openAlertCount: number;
 };
 
+export type OrderModificationScalarV2 = string | number | boolean | null;
+
+export type OrderModificationSummaryV2 = {
+  id: string;
+  operator: { id: string; name: string };
+  reason: string | null;
+  changes: Array<{
+    field: string;
+    before: OrderModificationScalarV2;
+    after: OrderModificationScalarV2;
+  }>;
+  traceId: string | null;
+  createdAt: string;
+};
+
 export type OrderDetailV2 = OrderV2 & {
   currentAssignment?: AssignmentV2;
   alerts: DispatchAlertV2[];
-  modificationHistory: {
-    total: number;
-    latest: Array<{
-      id: string;
-      action: string;
-      reason?: string;
-      createdAt: string;
-      operator: { id: string; name: string };
-    }>;
-  };
+  modificationHistory: OrderModificationSummaryV2[];
 };
 
 type OrderRow = Prisma.OrderGetPayload<{
@@ -67,6 +73,59 @@ type ResolvedLocationSnapshot = {
   location: DriverLocationV2;
   capturedAtMs: number;
 };
+
+const ORDER_MODIFICATION_FIELDS = [
+  "deliveryAddress",
+  "deliveryLat",
+  "deliveryLng",
+  "pickupAddress",
+  "pickupLat",
+  "pickupLng",
+  "promisedPickupAt"
+] as const;
+
+function isJsonRecord(value: unknown): value is Prisma.JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isOrderModificationScalar(
+  value: unknown
+): value is OrderModificationScalarV2 {
+  return (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  );
+}
+
+function mapOrderModificationChanges(
+  metadataJson: Prisma.JsonValue | null
+): OrderModificationSummaryV2["changes"] {
+  if (!isJsonRecord(metadataJson)) return [];
+  const before = metadataJson.before;
+  const after = metadataJson.after;
+  if (!isJsonRecord(before) || !isJsonRecord(after)) return [];
+
+  return ORDER_MODIFICATION_FIELDS
+    .filter(
+      (field) =>
+        Object.prototype.hasOwnProperty.call(before, field) &&
+        Object.prototype.hasOwnProperty.call(after, field)
+    )
+    .flatMap((field) => {
+      const beforeValue = before[field];
+      const afterValue = after[field];
+      if (
+        !isOrderModificationScalar(beforeValue) ||
+        !isOrderModificationScalar(afterValue) ||
+        Object.is(beforeValue, afterValue)
+      ) {
+        return [];
+      }
+      return [{ field, before: beforeValue, after: afterValue }];
+    });
+}
 
 const ORDER_SELECT = {
   id: true,
@@ -428,17 +487,14 @@ export async function getOrderDetail(
       operationLogs: {
         where: { action: "ORDER_MODIFY" },
         orderBy: { createdAt: "desc" },
-        take: 20,
         select: {
           id: true,
-          action: true,
           reason: true,
+          traceId: true,
+          metadataJson: true,
           createdAt: true,
           operatorUser: { select: { id: true, name: true } }
         }
-      },
-      _count: {
-        select: { operationLogs: { where: { action: "ORDER_MODIFY" } } }
       }
     }
   });
@@ -460,16 +516,14 @@ export async function getOrderDetail(
       resolvedBy: alert.resolvedBy ?? undefined,
       historyRetained: true
     })),
-    modificationHistory: {
-      total: row._count.operationLogs,
-      latest: row.operationLogs.map((entry) => ({
-        id: entry.id,
-        action: entry.action,
-        reason: entry.reason ?? undefined,
-        createdAt: entry.createdAt.toISOString(),
-        operator: entry.operatorUser
-      }))
-    }
+    modificationHistory: row.operationLogs.map((entry) => ({
+      id: entry.id,
+      operator: entry.operatorUser,
+      reason: entry.reason,
+      changes: mapOrderModificationChanges(entry.metadataJson),
+      traceId: entry.traceId,
+      createdAt: entry.createdAt.toISOString()
+    }))
   };
 }
 

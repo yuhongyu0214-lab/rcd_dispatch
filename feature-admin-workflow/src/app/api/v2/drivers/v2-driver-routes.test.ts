@@ -19,13 +19,17 @@ import { GET as plan } from "./[driverId]/plan/route";
 
 const context = { params: Promise.resolve({ driverId: "driver-1" }) };
 
-function request(url: string, method = "GET", body?: unknown) {
+function request(
+  url: string,
+  method = "GET",
+  body?: unknown,
+  traceId: string | null = "trace-driver-route"
+) {
+  const headers = new Headers({ "content-type": "application/json" });
+  if (traceId !== null) headers.set("X-Trace-Id", traceId);
   return new Request(url, {
     method,
-    headers: {
-      "content-type": "application/json",
-      "X-Trace-Id": "trace-driver-route"
-    },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body)
   });
 }
@@ -33,23 +37,35 @@ function request(url: string, method = "GET", body?: unknown) {
 const driverOperations = [
   {
     name: "GET /api/v2/drivers",
-    invoke: () => list(request("http://localhost/api/v2/drivers")),
+    invoke: (traceId: string | null = "trace-driver-route") =>
+      list(
+        request("http://localhost/api/v2/drivers", "GET", undefined, traceId)
+      ),
     service: listDrivers
   },
   {
     name: "GET /api/v2/drivers/{driverId}/plan",
-    invoke: () =>
-      plan(request("http://localhost/api/v2/drivers/driver-1/plan"), context),
+    invoke: (traceId: string | null = "trace-driver-route") =>
+      plan(
+        request(
+          "http://localhost/api/v2/drivers/driver-1/plan",
+          "GET",
+          undefined,
+          traceId
+        ),
+        context
+      ),
     service: getDriverPlan
   },
   {
     name: "PATCH /api/v2/drivers/{driverId}/availability",
-    invoke: () =>
+    invoke: (traceId: string | null = "trace-driver-route") =>
       availability(
         request(
           "http://localhost/api/v2/drivers/driver-1/availability",
           "PATCH",
-          { availability: "UNAVAILABLE", reason: "停派" }
+          { availability: "UNAVAILABLE", reason: "停派" },
+          traceId
         ),
         context
       ),
@@ -57,9 +73,12 @@ const driverOperations = [
   }
 ] as const;
 
-async function expectTrace(response: Response) {
+async function expectTrace(
+  response: Response,
+  expectedTraceId = "trace-driver-route"
+) {
   const body = await response.json();
-  expect(body.traceId).toBe("trace-driver-route");
+  expect(body.traceId).toBe(expectedTraceId);
   expect(response.headers.get("X-Trace-Id")).toBe(body.traceId);
   return body;
 }
@@ -134,6 +153,26 @@ describe("dispatcher driver routes", () => {
     }
   );
 
+  it.each(driverOperations)(
+    "generates a default UUID trace ID for $name",
+    async ({ invoke }) => {
+      const response = await invoke(null);
+      const body = await response.json();
+
+      expect(body.traceId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      );
+      expect(response.headers.get("X-Trace-Id")).toBe(body.traceId);
+    }
+  );
+
+  it("uses driver pagination defaults", async () => {
+    const response = await list(request("http://localhost/api/v2/drivers"));
+
+    expect(response.status).toBe(200);
+    expect(listDrivers).toHaveBeenCalledWith({ page: 1, pageSize: 20 });
+  });
+
   it("clamps driver pageSize to 100", async () => {
     const response = await list(
       request("http://localhost/api/v2/drivers?page=3&pageSize=101")
@@ -143,24 +182,29 @@ describe("dispatcher driver routes", () => {
     expect(listDrivers).toHaveBeenCalledWith({ page: 3, pageSize: 100 });
   });
 
-  it("rejects invalid pagination before reading drivers", async () => {
-    const response = await list(
-      request("http://localhost/api/v2/drivers?page=nope")
-    );
+  it.each(["nope", "0"])(
+    "rejects page=%s before reading drivers",
+    async (page) => {
+      const response = await list(
+        request(`http://localhost/api/v2/drivers?page=${page}`)
+      );
+      const body = await expectTrace(response);
 
-    expect(response.status).toBe(400);
-    expect((await response.json()).error.code).toBe("VALIDATION_FAILED");
-    expect(listDrivers).not.toHaveBeenCalled();
-  });
+      expect(response.status).toBe(400);
+      expect(body.error.code).toBe("VALIDATION_FAILED");
+      expect(listDrivers).not.toHaveBeenCalled();
+    }
+  );
 
   it("returns 404 for an unknown driver plan", async () => {
     const response = await plan(
       request("http://localhost/api/v2/drivers/driver-1/plan"),
       context
     );
+    const body = await expectTrace(response);
 
     expect(response.status).toBe(404);
-    expect((await response.json()).error.code).toBe("NOT_FOUND");
+    expect(body.error.code).toBe("NOT_FOUND");
   });
 
   it("rejects an anonymous availability change", async () => {
@@ -174,6 +218,7 @@ describe("dispatcher driver routes", () => {
       context
     );
 
+    await expectTrace(response);
     expect(response.status).toBe(401);
     expect(setDriverAvailability).not.toHaveBeenCalled();
   });
@@ -187,7 +232,7 @@ describe("dispatcher driver routes", () => {
       ),
       context
     );
-    const body = await response.json();
+    const body = await expectTrace(response);
 
     expect(response.status).toBe(400);
     expect(body.error.details.fields).toEqual({
@@ -231,7 +276,7 @@ describe("dispatcher driver routes", () => {
       ),
       context
     );
-    const body = await response.json();
+    const body = await expectTrace(response);
 
     expect(response.status).toBe(400);
     expect(body.error.code).toBe("VALIDATION_FAILED");

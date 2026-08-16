@@ -28,27 +28,32 @@ const context = {
   params: Promise.resolve({ assignmentId: "assignment-1" })
 };
 
-function request(body: unknown) {
+function request(
+  body: unknown,
+  traceId: string | null = "trace-reassign-route"
+) {
+  const headers = new Headers({ "content-type": "application/json" });
+  if (traceId !== null) headers.set("X-Trace-Id", traceId);
   return new Request(
     "http://localhost/api/v2/assignments/assignment-1/reassign",
     {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "X-Trace-Id": "trace-reassign-route"
-      },
+      headers,
       body: JSON.stringify(body)
     }
   );
 }
 
-function commandRequest(url: string, body: unknown) {
+function commandRequest(
+  url: string,
+  body: unknown,
+  traceId: string | null = "trace-assignment-route"
+) {
+  const headers = new Headers({ "content-type": "application/json" });
+  if (traceId !== null) headers.set("X-Trace-Id", traceId);
   return new Request(url, {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "X-Trace-Id": "trace-assignment-route"
-    },
+    headers,
     body: JSON.stringify(body)
   });
 }
@@ -66,31 +71,37 @@ const assignmentOperations = [
   {
     name: "POST /api/v2/assignments",
     traceId: "trace-assignment-route",
-    invoke: () =>
+    invoke: (traceId: string | null = "trace-assignment-route") =>
       assign(
-        commandRequest("http://localhost/api/v2/assignments", {
-          orderId: "order-1",
-          driverId: "driver-1",
-          reason: "人工锁定",
-          expectedPlanVersion: 4
-        })
+        commandRequest(
+          "http://localhost/api/v2/assignments",
+          {
+            orderId: "order-1",
+            driverId: "driver-1",
+            reason: "人工锁定",
+            expectedPlanVersion: 4
+          },
+          traceId
+        )
       ),
     service: assignOrder
   },
   {
     name: "POST /api/v2/assignments/{assignmentId}/reassign",
     traceId: "trace-reassign-route",
-    invoke: () => reassign(request(command()), context),
+    invoke: (traceId: string | null = "trace-reassign-route") =>
+      reassign(request(command(), traceId), context),
     service: reassignAssignment
   },
   {
     name: "POST /api/v2/assignments/{assignmentId}/withdraw",
     traceId: "trace-assignment-route",
-    invoke: () =>
+    invoke: (traceId: string | null = "trace-assignment-route") =>
       withdraw(
         commandRequest(
           "http://localhost/api/v2/assignments/assignment-1/withdraw",
-          { reason: "撤回", expectedPlanVersion: 7 }
+          { reason: "撤回", expectedPlanVersion: 7 },
+          traceId
         ),
         context
       ),
@@ -99,11 +110,12 @@ const assignmentOperations = [
   {
     name: "POST /api/v2/assignments/{assignmentId}/unlock",
     traceId: "trace-assignment-route",
-    invoke: () =>
+    invoke: (traceId: string | null = "trace-assignment-route") =>
       unlock(
         commandRequest(
           "http://localhost/api/v2/assignments/assignment-1/unlock",
-          { reason: "解除锁定", expectedPlanVersion: 7 }
+          { reason: "解除锁定", expectedPlanVersion: 7 },
+          traceId
         ),
         context
       ),
@@ -214,12 +226,25 @@ describe("POST /api/v2/assignments/{assignmentId}/reassign", () => {
     }
   );
 
+  it.each(assignmentOperations)(
+    "generates a default UUID trace ID for $name",
+    async ({ invoke }) => {
+      const response = await invoke(null);
+      const body = await response.json();
+
+      expect(body.traceId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      );
+      expect(response.headers.get("X-Trace-Id")).toBe(body.traceId);
+    }
+  );
+
   it("rejects missing dual plan versions before calling the service", async () => {
     const response = await reassign(
       request({ toDriverId: "driver-2", reason: "manual" }),
       context
     );
-    const body = await response.json();
+    const body = await expectTrace(response, "trace-reassign-route");
 
     expect(response.status).toBe(400);
     expect(body.error.code).toBe("VALIDATION_FAILED");
@@ -258,7 +283,7 @@ describe("POST /api/v2/assignments/{assignmentId}/reassign", () => {
     });
 
     const response = await reassign(request(command()), context);
-    const body = await response.json();
+    const body = await expectTrace(response, "trace-reassign-route");
 
     expect(response.status).toBe(409);
     expect(body.error.details).toEqual({
@@ -330,7 +355,7 @@ describe("dispatcher assignment plan-edit routes", () => {
       ),
       context
     );
-    const body = await response.json();
+    const body = await expectTrace(response, "trace-assignment-route");
 
     expect(response.status).toBe(400);
     expect(body.error.details.fields.expectedPlanVersion).toEqual([
@@ -375,7 +400,7 @@ describe("dispatcher assignment plan-edit routes", () => {
       ),
       context
     );
-    const body = await response.json();
+    const body = await expectTrace(response, "trace-assignment-route");
 
     expect(response.status).toBe(409);
     expect(body.error.details).toEqual({ currentPlanVersion: 9 });
