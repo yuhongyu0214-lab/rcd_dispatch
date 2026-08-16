@@ -111,7 +111,7 @@ describe("deployment artifacts", () => {
 
     expect(
       deploymentReadme.match(
-        /docker compose --env-file <受控配置文件> \\\n  -f deploy\/compose\.preprod\.yml \\/g
+        /docker compose --env-file <受控配置文件> \\\r?\n  -f deploy\/compose\.preprod\.yml \\/g
       )
     ).toHaveLength(5);
     expect(deploymentReadme).toContain("  config --quiet");
