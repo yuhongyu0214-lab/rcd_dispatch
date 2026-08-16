@@ -6,13 +6,13 @@
 
 ## 一句话结论
 
-Gate 3 保持 `PASS`，运行候选与预生产证据不变。串行 API 最终候选 `feature/v2-dispatcher-api-wiring @ 76cd536defe21c900af774d142854e22cf9fb86c` 已基于正式基线 `0e8ea7fc70d523de2cfa81173f1a421cad16ade7` 完成返修，数据补丁 `c6850df0a85aab601c3034e542a0f0b575c9053e` 位于祖先链，26 文件边界与工作区通过代码审计。当前状态为 `PASS / TEST_PENDING`：只放行冻结的 HTTP、事务、隔离 PostgreSQL 与故障验收；测试通过前不得合入 `develop`，2A/2B/2C 继续保持未启动。预生产仍为 9 个 migration，远程仍为 `ae471484…`，稍后处理。
+Gate 3 保持 `PASS`，运行候选与预生产证据不变。串行 API 唯一测试候选为 `feature/v2-dispatcher-api-wiring @ 152f7c5142131a030be560a863285eb6d32d0a2f`，正式代码基线为 `0e8ea7fc70d523de2cfa81173f1a421cad16ade7`，数据补丁 `c6850df0a85aab601c3034e542a0f0b575c9053e` 位于祖先链；相对基线精确 27 个批准文件且工作区干净，代码审计结论为 `PASS / READY_FOR_T1`。`60f03af…` 已废止，不得测试或合并。T1 全部通过前不得合入 `develop`，2A/2B/2C 继续未启动；预生产仍为 9 个 migration，远程仍为 `ae471484…`。
 
 ## 当前工作流状态
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
-| 文档治理 | `ROUND2_SERIAL_API_TEST_CONTEXT_READY_LOCAL` | 正式基线 `0e8ea7f…`、候选 `76cd536…` 与测试方案已登记 | 作为测试 Agent 上下文；未推送远程 |
+| 文档治理 | `ROUND2_SERIAL_API_T1_CONTEXT_READY_LOCAL` | 正式基线 `0e8ea7f…`、唯一候选 `152f7c5…` 与 T1 方案已登记 | 作为 T1 Agent 上下文；未推送远程 |
 | 应用候选 | `958AFCA_GATE3_ACCEPTED_DEVELOP_HANDOFF_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变运行身份；代码历史交接点为 `develop @ 51ddb5f…`，最终状态激活 HEAD 为 `ae471484…` |
 | 依赖安全 | `COMPLETED` | [依赖安全返修](2026-08-01-gate3-dependency-security-remediation.md) | 依赖变化时重跑全套审计 |
 | migration 指纹 | `PREPROD_9_APPLIED_LOCAL_10_PASS` | 第 10 个 migration 提交 `c6850df0a85aab601c3034e542a0f0b575c9053e` | 隔离 PostgreSQL 已通过；预生产 9 个保持不变，未经授权不实施第 10 个 |
@@ -25,7 +25,7 @@ Gate 3 保持 `PASS`，运行候选与预生产证据不变。串行 API 最终�
 | 既有预生产成果审查 | `RUNTIME_FINAL_CONSISTENCY_PASS` | [RDS 迁移与权限证据](2026-08-05-gate3r-rds-preprod-migration-permissions.md) | 保持备份、9 个 migration、最小权限、单 worker 和运行身份不变 |
 | 真实 10 单 | `REAL10_PASS_9_COMPLETED_1_INFEASIBLE_ALERT` | [真实 E2E 重验进度](2026-08-10-gate3r-real-e2e-retest-progress.md) | 保留全部成功与失败现场，不清理 |
 | Gate 3 总闸门 | `PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变候选与证据，进入受控阶段交接 |
-| 串行调度员 V2 API 接线 | `PASS / TEST_PENDING` | `76cd536defe21c900af774d142854e22cf9fb86c`；正式基线和数据补丁均在祖先链，26 文件审计通过 | 执行冻结正式测试；通过后由主控裁决 `--no-ff` 合入 |
+| 串行调度员 V2 API 接线 | `PASS / READY_FOR_T1` | `152f7c5142131a030be560a863285eb6d32d0a2f`；正式基线和数据补丁均在祖先链，27 文件审计通过 | 执行冻结 T1；全部通过后由主控裁决 `--no-ff` 合入 |
 | 第二轮并行 | `PREFLIGHT_NOT_STARTED` | [并行开发主计划](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md) §7.0 | 2A/2B/2C 尚未创建；必须等待串行接线合入后的统一 `develop` SHA |
 
 ## 唯一代码、文档与迁移基线
@@ -61,7 +61,8 @@ round2 frozen contract source: local develop @ 117653e55ac69a8e0d20dbf9e9904fc87
 formal serial API code baseline: local develop @ 0e8ea7fc70d523de2cfa81173f1a421cad16ade7
 rejected dispatcher API candidate: feature/v2-dispatcher-api-wiring @ 319f73401359ef4a232a2217afaaef2ef4212af2
 superseded unaligned API remediation candidate: feature/v2-dispatcher-api-wiring @ 5b84ab4881e1a8da12672c19d87098674798e60c
-audited serial API test candidate: feature/v2-dispatcher-api-wiring @ 76cd536defe21c900af774d142854e22cf9fb86c
+superseded API remediation candidate: feature/v2-dispatcher-api-wiring @ 60f03af3c73bb867a7139b705741135d276b50ab
+unique audited T1 candidate: feature/v2-dispatcher-api-wiring @ 152f7c5142131a030be560a863285eb6d32d0a2f
 data-model remediation develop commit: c6850df0a85aab601c3034e542a0f0b575c9053e
 data-model remediation branch: feature/v2-dispatch-event-constraint
 data-model remediation worktree: .worktrees/dispatch-event-constraint
@@ -87,9 +88,10 @@ parallel branch baseline: 待串行调度员 V2 API 接线合入并验收后生�
   30 秒位置上报、120 秒过期；Gate 3 的单一导航、测试标记过滤和位置同源读取不得回退。
 - 调度员 13 个唯一 V2 URL 中，串行接线负责除 `/alerts`、`/logs` 外的 11 个；这两个路径
   继续由 2C 独占。V1 暂不删除，按兼容矩阵的切换与窗口关闭两个时点退出。
-- 串行 API 原候选 `319f734…` 的审计缺口已分层闭合：数据模型提交 `c6850df…` 已进入本地
-  `develop`；最终候选 `76cd536…` 已继承正式基线，补齐人工计划、地址重编码、严格版本冲突、
-  跨门店释放和确定性测试时钟。代码审计结论为 `PASS / TEST_PENDING`；测试通过前不合入。
+- 串行 API 原候选的审计缺口已分层闭合：数据模型提交 `c6850df…` 已进入本地 `develop`；
+  唯一候选 `152f7c5…` 已补齐人工计划、地址重编码、严格版本冲突、跨门店释放、完整
+  `modificationHistory`、12 操作鉴权/traceId、分页及事务测试。代码审计结论为
+  `PASS / READY_FOR_T1`；`60f03af…` 已废止，T1 通过前不合入。
 - 主工作区复审分支仍是历史脏现场；与本地 `develop` 比对后，司机鉴权主体已进入 `develop`，
   残余差异包含旧动态路由写法和测试缺失，不代表更新实现。本轮未覆盖该现场，2B 不得从其建分支。
 - 现有司机页面仍保留 V1“接单”入口；这是待 2B 移除的兼容遗留，不改变 V2“司机无接单/
