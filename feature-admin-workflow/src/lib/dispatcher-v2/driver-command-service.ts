@@ -112,7 +112,7 @@ export async function setDriverAvailability(params: {
       | {
           kind: "success";
           data: SetDriverAvailabilityResult & { success: true };
-          eventId: string;
+          eventIds: string[];
         }
       | {
           kind: "replayed";
@@ -247,18 +247,36 @@ export async function setDriverAvailability(params: {
         }
       });
 
-      const eventId = `driver-availability:${driver.id}:${nextPlanVersion}`;
-      await enqueueInternalEvent(tx, {
-        eventId,
-        type: "DRIVER_AVAILABILITY_CHANGED",
-        driverId: driver.id,
-        occurredAt: occurredAt.toISOString(),
-        traceId: params.traceId
-      });
+      const eventIds: string[] = [];
+      if (releasable.length === 0) {
+        const eventId = `driver-availability:${driver.id}:${nextPlanVersion}`;
+        await enqueueInternalEvent(tx, {
+          eventId,
+          type: "DRIVER_AVAILABILITY_CHANGED",
+          driverId: driver.id,
+          occurredAt: occurredAt.toISOString(),
+          traceId: params.traceId
+        });
+        eventIds.push(eventId);
+      } else {
+        for (const assignment of releasable) {
+          const eventId = `driver-availability:${driver.id}:${nextPlanVersion}:${assignment.id}`;
+          await enqueueInternalEvent(tx, {
+            eventId,
+            type: "DRIVER_AVAILABILITY_CHANGED",
+            orderId: assignment.orderId,
+            driverId: driver.id,
+            assignmentId: assignment.id,
+            occurredAt: occurredAt.toISOString(),
+            traceId: params.traceId
+          });
+          eventIds.push(eventId);
+        }
+      }
 
       return {
         kind: "success",
-        eventId,
+        eventIds,
         data: {
           success: true,
           data: {
@@ -278,7 +296,9 @@ export async function setDriverAvailability(params: {
     if (transactionResult.kind === "success") {
       await releaseCommandLocks(locks.heldLocks);
       locks.heldLocks.length = 0;
-      await processEventBestEffort(transactionResult.eventId, params.traceId);
+      for (const eventId of transactionResult.eventIds) {
+        await processEventBestEffort(eventId, params.traceId);
+      }
     }
     return transactionResult.data;
   } catch (error) {

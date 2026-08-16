@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -100,6 +100,10 @@ beforeEach(() => {
   });
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("dispatcher read service", () => {
   it("applies frozen order filters and returns a mapped page", async () => {
     vi.mocked(prisma.order.count).mockResolvedValue(1);
@@ -142,6 +146,8 @@ describe("dispatcher read service", () => {
   });
 
   it("returns map drivers, all order points and the OPEN alert count", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-16T08:01:00.000Z"));
     vi.mocked(prisma.driver.findMany).mockResolvedValue([
       driverRow(),
       {
@@ -162,8 +168,8 @@ describe("dispatcher read service", () => {
             lat: "31.3",
             lng: "121.3",
             accuracy: "10",
-            ts: new Date().toISOString(),
-            server_ts: new Date().toISOString(),
+            ts: "2026-08-16T07:59:00.000Z",
+            server_ts: "2026-08-16T07:59:00.000Z",
             status: "online"
           }
         ]

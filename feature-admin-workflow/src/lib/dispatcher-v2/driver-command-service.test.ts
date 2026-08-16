@@ -59,7 +59,7 @@ beforeEach(() => {
 });
 
 describe("setDriverAvailability", () => {
-  it("releases PLANNED assignments and commits one aggregate version and event", async () => {
+  it("releases a PLANNED assignment and emits an order-scoped event", async () => {
     const tx = transactionMock();
     runTransaction(tx);
     tx.driver.findFirst.mockResolvedValue({
@@ -108,14 +108,100 @@ describe("setDriverAvailability", () => {
     expect(enqueueInternalEvent).toHaveBeenCalledWith(
       tx,
       expect.objectContaining({
-        eventId: "driver-availability:driver-1:7",
+        eventId: "driver-availability:driver-1:7:assignment-1",
         type: "DRIVER_AVAILABILITY_CHANGED",
         driverId: "driver-1",
+        orderId: "order-1",
+        assignmentId: "assignment-1",
         traceId: "trace-availability"
       })
     );
     expect(processInternalEvent).toHaveBeenCalledWith(
-      "driver-availability:driver-1:7"
+      "driver-availability:driver-1:7:assignment-1"
+    );
+  });
+
+  it("emits one scoped event per released cross-store order with one plan version change", async () => {
+    vi.mocked(prisma.driver.findFirst).mockResolvedValue({
+      id: "driver-1",
+      assignments: [{ orderId: "order-1" }, { orderId: "order-2" }]
+    } as never);
+    const tx = transactionMock();
+    runTransaction(tx);
+    tx.driver.findFirst.mockResolvedValue({
+      id: "driver-1",
+      availability: "AVAILABLE",
+      planVersion: 6,
+      assignments: [
+        {
+          id: "assignment-1",
+          orderId: "order-1",
+          order: { currentAssignmentId: "assignment-1" }
+        },
+        {
+          id: "assignment-2",
+          orderId: "order-2",
+          order: { currentAssignmentId: "assignment-2" }
+        }
+      ]
+    });
+
+    const result = await setDriverAvailability({
+      driverId: "driver-1",
+      availability: "UNAVAILABLE",
+      reason: "跨门店停派",
+      operatorUserId: "dispatcher-1",
+      traceId: "trace-cross-store"
+    });
+
+    expect(result).toEqual({
+      success: true,
+      data: {
+        driverId: "driver-1",
+        availability: "UNAVAILABLE",
+        planVersion: 7,
+        releasedAssignmentIds: ["assignment-1", "assignment-2"],
+        replayed: false
+      }
+    });
+    expect(tx.driver.update).toHaveBeenCalledTimes(1);
+    expect(tx.driver.update).toHaveBeenCalledWith({
+      where: { id: "driver-1" },
+      data: { availability: "UNAVAILABLE", planVersion: 7 }
+    });
+    expect(tx.operationLog.create).toHaveBeenCalledTimes(3);
+    expect(
+      tx.operationLog.create.mock.calls.filter(
+        ([input]) => input.data.action === "AVAILABILITY_CHANGE"
+      )
+    ).toHaveLength(1);
+    expect(enqueueInternalEvent).toHaveBeenCalledTimes(2);
+    expect(enqueueInternalEvent).toHaveBeenNthCalledWith(1, tx, {
+      eventId: "driver-availability:driver-1:7:assignment-1",
+      type: "DRIVER_AVAILABILITY_CHANGED",
+      driverId: "driver-1",
+      orderId: "order-1",
+      assignmentId: "assignment-1",
+      occurredAt: expect.any(String),
+      traceId: "trace-cross-store"
+    });
+    expect(enqueueInternalEvent).toHaveBeenNthCalledWith(2, tx, {
+      eventId: "driver-availability:driver-1:7:assignment-2",
+      type: "DRIVER_AVAILABILITY_CHANGED",
+      driverId: "driver-1",
+      orderId: "order-2",
+      assignmentId: "assignment-2",
+      occurredAt: expect.any(String),
+      traceId: "trace-cross-store"
+    });
+    expect(processInternalEvent).toHaveBeenCalledTimes(2);
+    expect(processInternalEvent).toHaveBeenNthCalledWith(
+      1,
+      "driver-availability:driver-1:7:assignment-1"
+    );
+    expect(processInternalEvent).toHaveBeenNthCalledWith(
+      2,
+      "driver-availability:driver-1:7:assignment-2"
     );
   });
 
@@ -174,6 +260,13 @@ describe("setDriverAvailability", () => {
     expect(result.success).toBe(true);
     expect(tx.$queryRaw).toHaveBeenCalled();
     expect(releaseResourceLock).not.toHaveBeenCalled();
+    expect(enqueueInternalEvent).toHaveBeenCalledWith(tx, {
+      eventId: "driver-availability:driver-1:3",
+      type: "DRIVER_AVAILABILITY_CHANGED",
+      driverId: "driver-1",
+      occurredAt: expect.any(String),
+      traceId: "trace-db-fallback"
+    });
   });
 
   it("returns NOT_FOUND before acquiring locks", async () => {
