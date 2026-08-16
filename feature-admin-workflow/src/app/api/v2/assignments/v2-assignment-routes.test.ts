@@ -222,6 +222,36 @@ describe("dispatcher assignment plan-edit routes", () => {
     expect(response.headers.get("X-Trace-Id")).toBe(body.traceId);
   });
 
+  it("returns manual assignment ETA dependency failures as trace-consistent 503 responses", async () => {
+    vi.mocked(assignOrder).mockResolvedValue({
+      success: false,
+      error: {
+        code: "DEPENDENCY_UNAVAILABLE",
+        message: "ETA calculation is unavailable",
+        details: { dependency: "AMAP" }
+      }
+    });
+
+    const response = await assign(
+      commandRequest("http://localhost/api/v2/assignments", {
+        orderId: "order-1",
+        driverId: "driver-1",
+        reason: "人工锁定",
+        expectedPlanVersion: 4
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.error).toEqual({
+      code: "DEPENDENCY_UNAVAILABLE",
+      message: "ETA calculation is unavailable",
+      details: { dependency: "AMAP" }
+    });
+    expect(response.headers.get("X-Trace-Id")).toBe(body.traceId);
+    expect(body.traceId).toBe("trace-assignment-route");
+  });
+
   it("requires expectedPlanVersion for withdrawal", async () => {
     const response = await withdraw(
       commandRequest(

@@ -12,12 +12,14 @@ vi.mock("@/lib/redis", () => ({
 }));
 vi.mock("@/lib/events/store", () => ({ enqueueInternalEvent: vi.fn() }));
 vi.mock("@/lib/events/processor", () => ({ processInternalEvent: vi.fn() }));
+vi.mock("@/lib/import/services/geocode", () => ({ geocodeAddress: vi.fn() }));
 vi.mock("@/lib/logger", () => ({
   createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() })
 }));
 
 import { processInternalEvent } from "@/lib/events/processor";
 import { enqueueInternalEvent } from "@/lib/events/store";
+import { geocodeAddress } from "@/lib/import/services/geocode";
 import { prisma } from "@/lib/prisma";
 import { acquireResourceLocks, releaseResourceLock } from "@/lib/redis";
 
@@ -51,11 +53,19 @@ beforeEach(() => {
     committed: true
   });
   vi.mocked(processInternalEvent).mockResolvedValue("processed");
+  vi.mocked(geocodeAddress).mockResolvedValue({
+    success: true,
+    lat: 31.2304,
+    lng: 121.4737,
+    geocodeStatus: "SUCCESS"
+  });
 });
 
 describe("updateOrder", () => {
-  it("updates facts, clears stale coordinates and commits log plus outbox atomically", async () => {
+  it("geocodes a changed address before atomically committing coordinates, log and outbox", async () => {
     vi.mocked(prisma.order.findUnique).mockResolvedValue({
+      pickupAddress: "旧取车点",
+      deliveryAddress: "旧送达点",
       currentAssignment: { id: "assignment-1", driverId: "driver-1" }
     } as never);
     const tx = transactionMock();
@@ -65,7 +75,11 @@ describe("updateOrder", () => {
       executionStatus: "PLANNED",
       promisedPickupAt: new Date("2026-08-16T08:00:00.000Z"),
       pickupAddress: "旧取车点",
+      pickupLat: 30,
+      pickupLng: 120,
       deliveryAddress: "旧送达点",
+      deliveryLat: 31,
+      deliveryLng: 121,
       currentAssignment: {
         id: "assignment-1",
         driverId: "driver-1",
@@ -91,12 +105,17 @@ describe("updateOrder", () => {
       where: { id: "order-1" },
       data: expect.objectContaining({
         pickupAddress: "新取车点",
-        pickupLat: null,
-        pickupLng: null,
+        pickupLat: 31.2304,
+        pickupLng: 121.4737,
         feasibility: "UNKNOWN",
         slackMinutes: null
       })
     });
+    expect(geocodeAddress).toHaveBeenCalledTimes(1);
+    expect(geocodeAddress).toHaveBeenCalledWith("新取车点", "取车地址");
+    expect(
+      vi.mocked(geocodeAddress).mock.invocationCallOrder[0]
+    ).toBeLessThan(vi.mocked(prisma.$transaction).mock.invocationCallOrder[0]);
     expect(tx.driver.update).toHaveBeenCalledWith({
       where: { id: "driver-1" },
       data: { planVersion: 5 }
@@ -134,6 +153,8 @@ describe("updateOrder", () => {
 
   it("replays an unchanged command without writes or version increments", async () => {
     vi.mocked(prisma.order.findUnique).mockResolvedValue({
+      pickupAddress: "取车点",
+      deliveryAddress: "送达点",
       currentAssignment: null
     } as never);
     const tx = transactionMock();
@@ -162,6 +183,80 @@ describe("updateOrder", () => {
     expect(tx.order.update).not.toHaveBeenCalled();
     expect(tx.operationLog.create).not.toHaveBeenCalled();
     expect(enqueueInternalEvent).not.toHaveBeenCalled();
+    expect(geocodeAddress).not.toHaveBeenCalled();
+  });
+
+  it("does not geocode when only the promised pickup time changes", async () => {
+    vi.mocked(prisma.order.findUnique).mockResolvedValue({
+      pickupAddress: "取车点",
+      deliveryAddress: "送达点",
+      currentAssignment: null
+    } as never);
+    const tx = transactionMock();
+    runTransaction(tx);
+    tx.order.findUnique.mockResolvedValue({
+      id: "order-1",
+      executionStatus: "UNASSIGNED",
+      promisedPickupAt: new Date("2026-08-16T08:00:00.000Z"),
+      pickupAddress: "取车点",
+      pickupLat: 30,
+      pickupLng: 120,
+      deliveryAddress: "送达点",
+      deliveryLat: 31,
+      deliveryLng: 121,
+      currentAssignment: null
+    });
+
+    const result = await updateOrder({
+      orderId: "order-1",
+      promisedPickupAt: "2026-08-16T09:00:00.000Z",
+      reason: "客户改期",
+      operatorUserId: "dispatcher-1",
+      traceId: "trace-time-only"
+    });
+
+    expect(result.success).toBe(true);
+    expect(geocodeAddress).not.toHaveBeenCalled();
+    expect(tx.order.update).toHaveBeenCalledWith({
+      where: { id: "order-1" },
+      data: expect.not.objectContaining({
+        pickupLat: expect.anything(),
+        deliveryLat: expect.anything()
+      })
+    });
+  });
+
+  it("returns dependency unavailable without entering a transaction when geocoding fails", async () => {
+    vi.mocked(prisma.order.findUnique).mockResolvedValue({
+      pickupAddress: "旧取车点",
+      deliveryAddress: "旧送达点",
+      currentAssignment: { id: "assignment-1", driverId: "driver-1" }
+    } as never);
+    vi.mocked(geocodeAddress).mockResolvedValue({
+      success: false,
+      code: "GEOCODE_FAILED",
+      message: "failed",
+      geocodeStatus: "FAILED"
+    });
+
+    const result = await updateOrder({
+      orderId: "order-1",
+      pickupAddress: "新取车点",
+      reason: "客户改址",
+      operatorUserId: "dispatcher-1",
+      traceId: "trace-geocode-fail"
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: expect.objectContaining({
+        code: "DEPENDENCY_UNAVAILABLE",
+        details: { dependency: "AMAP" }
+      })
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(enqueueInternalEvent).not.toHaveBeenCalled();
+    expect(processInternalEvent).not.toHaveBeenCalled();
   });
 });
 

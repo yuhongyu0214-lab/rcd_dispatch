@@ -5,6 +5,7 @@ import type { OrderExecutionStatus, Prisma } from "@prisma/client";
 import { createApiErrorV2 } from "@/lib/contracts/v2";
 import { processInternalEvent } from "@/lib/events/processor";
 import { enqueueInternalEvent } from "@/lib/events/store";
+import { geocodeAddress } from "@/lib/import/services/geocode";
 import { createLogger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { acquireResourceLocks, releaseResourceLock } from "@/lib/redis";
@@ -83,6 +84,93 @@ function illegalTransition(
   });
 }
 
+type GeocodedPoint = { lat: number; lng: number };
+
+async function geocodeChangedOrderAddresses(params: {
+  pickupAddress?: string;
+  deliveryAddress?: string;
+  currentPickupAddress: string;
+  currentDeliveryAddress: string;
+  traceId: string;
+}): Promise<
+  | {
+      success: true;
+      pickupPoint?: GeocodedPoint;
+      deliveryPoint?: GeocodedPoint;
+    }
+  | { success: false; error: ApiErrorV2 }
+> {
+  const pickupChanged =
+    params.pickupAddress !== undefined &&
+    params.pickupAddress !== params.currentPickupAddress;
+  const deliveryChanged =
+    params.deliveryAddress !== undefined &&
+    params.deliveryAddress !== params.currentDeliveryAddress;
+
+  if (!pickupChanged && !deliveryChanged) {
+    return { success: true };
+  }
+
+  try {
+    const [pickupResult, deliveryResult] = await Promise.all([
+      pickupChanged
+        ? geocodeAddress(params.pickupAddress!, "取车地址")
+        : Promise.resolve(undefined),
+      deliveryChanged
+        ? geocodeAddress(params.deliveryAddress!, "还车地址")
+        : Promise.resolve(undefined)
+    ]);
+
+    if (
+      (pickupResult !== undefined && !pickupResult.success) ||
+      (deliveryResult !== undefined && !deliveryResult.success)
+    ) {
+      log.warn("dispatcher_order_geocode_unavailable", {
+        traceId: params.traceId,
+        pickupFailureCode:
+          pickupResult && !pickupResult.success ? pickupResult.code : undefined,
+        deliveryFailureCode:
+          deliveryResult && !deliveryResult.success
+            ? deliveryResult.code
+            : undefined
+      });
+      return {
+        success: false,
+        error: createApiErrorV2(
+          "DEPENDENCY_UNAVAILABLE",
+          "Address geocoding is unavailable",
+          { dependency: "AMAP" }
+        )
+      };
+    }
+
+    return {
+      success: true,
+      pickupPoint:
+        pickupResult?.success === true
+          ? { lat: pickupResult.lat, lng: pickupResult.lng }
+          : undefined,
+      deliveryPoint:
+        deliveryResult?.success === true
+          ? { lat: deliveryResult.lat, lng: deliveryResult.lng }
+          : undefined
+    };
+  } catch (error) {
+    log.warn("dispatcher_order_geocode_unavailable", {
+      traceId: params.traceId,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return {
+      success: false,
+      error: createApiErrorV2(
+        "DEPENDENCY_UNAVAILABLE",
+        "Address geocoding is unavailable",
+        { dependency: "AMAP" }
+      )
+    };
+  }
+}
+
 export async function updateOrder(params: {
   orderId: string;
   promisedPickupAt?: string;
@@ -123,6 +211,31 @@ export async function updateOrder(params: {
   const commandEventId = `order-updated:${params.orderId}:${randomUUID()}`;
 
   try {
+    const geocodePreflight = await prisma.order.findUnique({
+      where: { id: params.orderId },
+      select: {
+        pickupAddress: true,
+        deliveryAddress: true
+      }
+    });
+    if (!geocodePreflight) {
+      return {
+        success: false,
+        error: createApiErrorV2("NOT_FOUND", "Order not found")
+      };
+    }
+
+    const geocoded = await geocodeChangedOrderAddresses({
+      pickupAddress: params.pickupAddress,
+      deliveryAddress: params.deliveryAddress,
+      currentPickupAddress: geocodePreflight.pickupAddress,
+      currentDeliveryAddress: geocodePreflight.deliveryAddress,
+      traceId: params.traceId
+    });
+    if (!geocoded.success) {
+      return geocoded;
+    }
+
     const transactionResult = await prisma.$transaction<
       | { kind: "success"; data: UpdateOrderResult & { success: true }; eventId: string }
       | { kind: "replayed"; data: UpdateOrderResult & { success: true } }
@@ -181,10 +294,16 @@ export async function updateOrder(params: {
       const nextPickupAddress = params.pickupAddress ?? order.pickupAddress;
       const nextDeliveryAddress =
         params.deliveryAddress ?? order.deliveryAddress;
+      const pickupAddressChanged =
+        params.pickupAddress !== undefined &&
+        nextPickupAddress !== order.pickupAddress;
+      const deliveryAddressChanged =
+        params.deliveryAddress !== undefined &&
+        nextDeliveryAddress !== order.deliveryAddress;
       const changed =
         nextPromisedPickupAt.getTime() !== order.promisedPickupAt.getTime() ||
-        nextPickupAddress !== order.pickupAddress ||
-        nextDeliveryAddress !== order.deliveryAddress;
+        pickupAddressChanged ||
+        deliveryAddressChanged;
 
       let currentPlanVersion: number | undefined;
       if (preflightDriverId) {
@@ -222,13 +341,31 @@ export async function updateOrder(params: {
         feasibility: "UNKNOWN",
         slackMinutes: null
       };
-      if (params.pickupAddress !== undefined) {
-        updateData.pickupLat = null;
-        updateData.pickupLng = null;
+      if (pickupAddressChanged) {
+        if (!geocoded.pickupPoint) {
+          return {
+            kind: "rejected",
+            error: createApiErrorV2(
+              "DUPLICATE_OPERATION",
+              "Order changed while geocoding; refresh and retry"
+            )
+          };
+        }
+        updateData.pickupLat = geocoded.pickupPoint.lat;
+        updateData.pickupLng = geocoded.pickupPoint.lng;
       }
-      if (params.deliveryAddress !== undefined) {
-        updateData.deliveryLat = null;
-        updateData.deliveryLng = null;
+      if (deliveryAddressChanged) {
+        if (!geocoded.deliveryPoint) {
+          return {
+            kind: "rejected",
+            error: createApiErrorV2(
+              "DUPLICATE_OPERATION",
+              "Order changed while geocoding; refresh and retry"
+            )
+          };
+        }
+        updateData.deliveryLat = geocoded.deliveryPoint.lat;
+        updateData.deliveryLng = geocoded.deliveryPoint.lng;
       }
       await tx.order.update({ where: { id: order.id }, data: updateData });
 
@@ -256,12 +393,28 @@ export async function updateOrder(params: {
             before: {
               promisedPickupAt: order.promisedPickupAt.toISOString(),
               pickupAddress: order.pickupAddress,
-              deliveryAddress: order.deliveryAddress
+              pickupLat: order.pickupLat,
+              pickupLng: order.pickupLng,
+              deliveryAddress: order.deliveryAddress,
+              deliveryLat: order.deliveryLat,
+              deliveryLng: order.deliveryLng
             },
             after: {
               promisedPickupAt: nextPromisedPickupAt.toISOString(),
               pickupAddress: nextPickupAddress,
-              deliveryAddress: nextDeliveryAddress
+              pickupLat: pickupAddressChanged
+                ? geocoded.pickupPoint!.lat
+                : order.pickupLat,
+              pickupLng: pickupAddressChanged
+                ? geocoded.pickupPoint!.lng
+                : order.pickupLng,
+              deliveryAddress: nextDeliveryAddress,
+              deliveryLat: deliveryAddressChanged
+                ? geocoded.deliveryPoint!.lat
+                : order.deliveryLat,
+              deliveryLng: deliveryAddressChanged
+                ? geocoded.deliveryPoint!.lng
+                : order.deliveryLng
             },
             previousPlanVersion: currentPlanVersion ?? null,
             nextPlanVersion: nextPlanVersion ?? null

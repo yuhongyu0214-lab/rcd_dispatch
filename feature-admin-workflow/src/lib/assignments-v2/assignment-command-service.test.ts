@@ -2,12 +2,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    assignment: { findUnique: vi.fn() },
+    assignment: { findUnique: vi.fn(), findMany: vi.fn() },
     order: { findUnique: vi.fn() },
     driver: { findFirst: vi.fn() },
     $transaction: vi.fn()
   }
 }));
+
+vi.mock("@/lib/dispatch-v2/application/dispatch-snapshot-service", () => ({
+  buildDispatchSnapshot: vi.fn()
+}));
+
+vi.mock("@/lib/dispatch-v2/application/eta-matrix-service", () => ({
+  buildEtaMatrix: vi.fn()
+}));
+
+vi.mock("@/lib/dispatch-v2/core", () => ({ runDispatchV2: vi.fn() }));
 
 vi.mock("@/lib/redis", () => ({
   acquireResourceLocks: vi.fn(),
@@ -38,6 +48,9 @@ vi.mock("@/lib/logger", () => ({
 
 import { enqueueInternalEvent } from "@/lib/events/store";
 import { processInternalEvent } from "@/lib/events/processor";
+import { buildDispatchSnapshot } from "@/lib/dispatch-v2/application/dispatch-snapshot-service";
+import { buildEtaMatrix } from "@/lib/dispatch-v2/application/eta-matrix-service";
+import { runDispatchV2 } from "@/lib/dispatch-v2/core";
 import { prisma } from "@/lib/prisma";
 import {
   acquireResourceLocks,
@@ -65,6 +78,7 @@ function createTransactionMock() {
     $queryRaw: vi.fn(),
     assignment: {
       findUnique: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
       update: vi.fn(),
       create: vi.fn()
     },
@@ -77,6 +91,190 @@ function createTransactionMock() {
     user: { findUnique: vi.fn() },
     operationLog: { create: vi.fn(), findFirst: vi.fn() }
   };
+}
+
+const calculatedAt = "2026-08-16T08:00:00.000Z";
+
+function completePlan(orderId: string, sequenceNo: 1 | 2 | 3) {
+  return {
+    assignmentId: null,
+    orderId,
+    sequenceNo,
+    slot: sequenceNo === 1 ? "A" : sequenceNo === 2 ? "B" : "C",
+    plannedDepartAt: "2026-08-16T08:00:00.000Z",
+    plannedPickupAt: "2026-08-16T08:12:00.000Z",
+    plannedCompleteAt: "2026-08-16T08:52:00.000Z",
+    deadheadEtaMinutes: 12,
+    serviceEtaMinutes: 40,
+    etaAvailable: true as const
+  };
+}
+
+function orderInput(executionStatus: "UNASSIGNED" | "PLANNED" | "EN_ROUTE") {
+  return {
+    orderId: "order-1",
+    orderNo: "ORDER-1",
+    businessType: "STORE_PICKUP" as const,
+    executionStatus,
+    feasibility: "UNKNOWN" as const,
+    slackMinutes: null,
+    promisedPickupAt: "2026-08-16T09:00:00.000Z",
+    pickupAddress: "取车点",
+    pickupLocation: { lat: 31.2, lng: 121.4 },
+    deliveryAddress: "送达点",
+    deliveryLocation: { lat: 31.3, lng: 121.5 },
+    storeCode: "STORE-1",
+    currentAssignmentId:
+      executionStatus === "UNASSIGNED" ? undefined : "assignment-1",
+    serviceModuleMinutes: 0
+  };
+}
+
+function driverInput(
+  driverId: string,
+  planVersion: number,
+  assignments: Array<Record<string, unknown>> = []
+) {
+  return {
+    driverId,
+    storeCode: "STORE-1",
+    onShift: true,
+    availability: "AVAILABLE" as const,
+    planVersion,
+    locationFreshness: "FRESH" as const,
+    lastLocation: {
+      lat: 31.1,
+      lng: 121.3,
+      accuracyMeters: 10,
+      capturedAt: "2026-08-16T07:59:30.000Z"
+    },
+    assignments
+  };
+}
+
+function mockManualPlan() {
+  vi.mocked(buildDispatchSnapshot).mockResolvedValue({
+    event: {
+      type: "ASSIGNMENT_EXECUTION_CHANGED",
+      occurredAt: calculatedAt,
+      orderId: "order-1",
+      driverId: "driver-1"
+    },
+    orders: [orderInput("UNASSIGNED")],
+    drivers: [driverInput("driver-1", 4)]
+  } as never);
+  vi.mocked(runDispatchV2).mockReturnValue({
+    proposals: [
+      {
+        driverId: "driver-1",
+        expectedPlanVersion: 4,
+        assignments: [completePlan("order-1", 2)]
+      }
+    ],
+    evaluations: [
+      {
+        orderId: "order-1",
+        result: "PLANNED",
+        bestSlackMinutes: 48,
+        reason: "PLANNED"
+      }
+    ],
+    calculatedAt
+  });
+}
+
+function mockReassignPlans(includeRemainingAssignment = false) {
+  const remainingOrder = {
+    ...orderInput("PLANNED"),
+    orderId: "order-2",
+    orderNo: "ORDER-2",
+    currentAssignmentId: "assignment-remaining",
+    promisedPickupAt: "2026-08-16T10:00:00.000Z"
+  };
+  const remainingAssignment = {
+    assignmentId: "assignment-remaining",
+    orderId: "order-2",
+    sequenceNo: 2,
+    lockType: "NONE",
+    executionStatus: "PLANNED",
+    pickupLocation: { lat: 31.2, lng: 121.4 },
+    deliveryLocation: { lat: 31.3, lng: 121.5 },
+    serviceModuleMinutes: 0
+  };
+  vi.mocked(buildDispatchSnapshot).mockResolvedValue({
+    event: {
+      type: "ASSIGNMENT_EXECUTION_CHANGED",
+      occurredAt: calculatedAt,
+      orderId: "order-1",
+      driverId: "driver-2",
+      assignmentId: "assignment-1"
+    },
+    orders: [
+      orderInput("EN_ROUTE"),
+      ...(includeRemainingAssignment ? [remainingOrder] : [])
+    ],
+    drivers: [
+      driverInput("driver-1", 7, [
+        {
+          assignmentId: "assignment-1",
+          orderId: "order-1",
+          sequenceNo: 1,
+          lockType: "AUTO_FROZEN",
+          executionStatus: "EN_ROUTE",
+          pickupLocation: { lat: 31.2, lng: 121.4 },
+          deliveryLocation: { lat: 31.3, lng: 121.5 },
+          serviceModuleMinutes: 0
+        },
+        ...(includeRemainingAssignment ? [remainingAssignment] : [])
+      ]),
+      driverInput("driver-2", 3)
+    ]
+  } as never);
+  vi.mocked(runDispatchV2).mockImplementation((input) => {
+    const driver = input.drivers[0];
+    if (driver.driverId === "driver-1") {
+      return {
+        proposals: [
+          {
+            driverId: "driver-1",
+            expectedPlanVersion: 7,
+            assignments: includeRemainingAssignment
+              ? [completePlan("order-2", 1)]
+              : []
+          }
+        ],
+        evaluations: includeRemainingAssignment
+          ? [
+              {
+                orderId: "order-2",
+                result: "PLANNED" as const,
+                bestSlackMinutes: 60,
+                reason: "PLANNED" as const
+              }
+            ]
+          : [],
+        calculatedAt
+      };
+    }
+    return {
+      proposals: [
+        {
+          driverId: "driver-2",
+          expectedPlanVersion: 3,
+          assignments: [completePlan("order-1", 1)]
+        }
+      ],
+      evaluations: [
+        {
+          orderId: "order-1",
+          result: "PLANNED",
+          bestSlackMinutes: 48,
+          reason: "PLANNED"
+        }
+      ],
+      calculatedAt
+    };
+  });
 }
 
 function runTransaction(tx: TransactionMock) {
@@ -121,11 +319,74 @@ beforeEach(() => {
   vi.mocked(triggerAssignmentAssigned).mockResolvedValue();
   vi.mocked(triggerAssignmentReassigned).mockResolvedValue();
   vi.mocked(triggerAssignmentWithdrawn).mockResolvedValue();
+  vi.mocked(buildEtaMatrix).mockResolvedValue(() => 10);
+  vi.mocked(prisma.assignment.findMany).mockResolvedValue([]);
+  vi.mocked(prisma.driver.findFirst).mockResolvedValue({
+    id: "driver-2",
+    planVersion: 3
+  } as never);
   vi.mocked(prisma.assignment.findUnique).mockResolvedValue({
     driverId: "driver-1",
-    orderId: "order-1"
+    orderId: "order-1",
+    driver: { planVersion: 7 }
   } as never);
 });
+
+function planReassignCommand() {
+  return {
+    assignmentId: "assignment-1",
+    toDriverId: "driver-2",
+    reason: "G3E2E manual reroute",
+    expectedFromPlanVersion: 7,
+    expectedToPlanVersion: 3,
+    operatorUserId: "dispatcher-1",
+    traceId: "trace-reassign"
+  };
+}
+
+function setupPlanReassignTx(includeRemainingAssignment = false) {
+  mockReassignPlans(includeRemainingAssignment);
+  const tx = createTransactionMock();
+  runTransaction(tx);
+  tx.assignment.findMany
+    .mockResolvedValueOnce([
+      { id: "assignment-1", orderId: "order-1" },
+      ...(includeRemainingAssignment
+        ? [{ id: "assignment-remaining", orderId: "order-2" }]
+        : [])
+    ])
+    .mockResolvedValueOnce([]);
+  tx.assignment.findUnique.mockResolvedValue({
+    id: "assignment-1",
+    orderId: "order-1",
+    driverId: "driver-1",
+    status: "ACTIVE",
+    driver: { id: "driver-1", name: "原司机", planVersion: 7 },
+    order: {
+      id: "order-1",
+      orderNo: "G3E2E-001",
+      currentAssignmentId: "assignment-1",
+      executionStatus: "EN_ROUTE",
+      promisedPickupAt: new Date("2026-08-16T09:00:00.000Z"),
+      pickupAddress: "取车点",
+      pickupLat: 31.2,
+      pickupLng: 121.4,
+      deliveryAddress: "送达点",
+      deliveryLat: 31.3,
+      deliveryLng: 121.5
+    }
+  });
+  tx.driver.findUnique.mockResolvedValue({
+    id: "driver-2",
+    name: "目标司机",
+    isActive: true,
+    onShift: true,
+    availability: "AVAILABLE",
+    planVersion: 3
+  });
+  tx.assignment.create.mockResolvedValue({ id: "assignment-2" });
+  return tx;
+}
 
 describe("executeDriverAssignmentAction", () => {
   it.each([
@@ -293,10 +554,20 @@ describe("executeDriverAssignmentAction", () => {
 
 describe("reassignAssignment", () => {
   function setupReassignTx(
-    executionStatus: "PLANNED" | "EN_ROUTE" | "IN_SERVICE" = "PLANNED"
+    executionStatus: "PLANNED" | "EN_ROUTE" | "IN_SERVICE" = "PLANNED",
+    includeRemainingAssignment = false
   ) {
+    mockReassignPlans(includeRemainingAssignment);
     const tx = createTransactionMock();
     runTransaction(tx);
+    tx.assignment.findMany
+      .mockResolvedValueOnce([
+        { id: "assignment-1", orderId: "order-1" },
+        ...(includeRemainingAssignment
+          ? [{ id: "assignment-remaining", orderId: "order-2" }]
+          : [])
+      ])
+      .mockResolvedValueOnce([]);
     tx.assignment.findUnique.mockResolvedValue({
       id: "assignment-1",
       orderId: "order-1",
@@ -307,7 +578,14 @@ describe("reassignAssignment", () => {
         id: "order-1",
         orderNo: "G3E2E-001",
         currentAssignmentId: "assignment-1",
-        executionStatus
+        executionStatus,
+        promisedPickupAt: new Date("2026-08-16T09:00:00.000Z"),
+        pickupAddress: "取车点",
+        pickupLat: 31.2,
+        pickupLng: 121.4,
+        deliveryAddress: "送达点",
+        deliveryLat: 31.3,
+        deliveryLng: 121.5
       }
     });
     tx.driver.findUnique.mockResolvedValue({
@@ -361,7 +639,15 @@ describe("reassignAssignment", () => {
         driverId: "driver-2",
         previousAssignmentId: "assignment-1",
         lockType: "MANUAL_LOCKED",
-        type: "REASSIGN"
+        type: "REASSIGN",
+        sequenceNo: 1,
+        plannedDepartAt: new Date("2026-08-16T08:00:00.000Z"),
+        plannedPickupAt: new Date("2026-08-16T08:12:00.000Z"),
+        plannedCompleteAt: new Date("2026-08-16T08:52:00.000Z"),
+        deadheadEtaMinutes: 12,
+        serviceEtaMinutes: 40,
+        etaUnavailableReason: null,
+        lastEtaCalculatedAt: new Date(calculatedAt)
       }),
       select: { id: true }
     });
@@ -423,9 +709,13 @@ describe("reassignAssignment", () => {
 });
 
 describe("dispatcher plan edit commands", () => {
-  it("manually assigns the first free slot and commits audit plus outbox atomically", async () => {
+  it("manually assigns the core-selected complete slot and commits audit plus outbox atomically", async () => {
+    mockManualPlan();
     vi.mocked(prisma.order.findUnique).mockResolvedValue({ id: "order-1" } as never);
-    vi.mocked(prisma.driver.findFirst).mockResolvedValue({ id: "driver-1" } as never);
+    vi.mocked(prisma.driver.findFirst).mockResolvedValue({
+      id: "driver-1",
+      planVersion: 4
+    } as never);
     const tx = createTransactionMock();
     runTransaction(tx);
     tx.driver.findFirst.mockResolvedValue({
@@ -433,13 +723,19 @@ describe("dispatcher plan edit commands", () => {
       name: "司机一",
       onShift: true,
       availability: "AVAILABLE",
-      planVersion: 4,
-      assignments: [{ sequenceNo: 1 }]
+      planVersion: 4
     });
     tx.order.findUnique.mockResolvedValue({
       id: "order-1",
       orderNo: "ORDER-1",
       executionStatus: "UNASSIGNED",
+      promisedPickupAt: new Date("2026-08-16T09:00:00.000Z"),
+      pickupAddress: "取车点",
+      pickupLat: 31.2,
+      pickupLng: 121.4,
+      deliveryAddress: "送达点",
+      deliveryLat: 31.3,
+      deliveryLng: 121.5,
       currentAssignment: null
     });
     tx.assignment.create.mockResolvedValue({ id: "assignment-new" });
@@ -465,7 +761,14 @@ describe("dispatcher plan edit commands", () => {
       data: expect.objectContaining({
         sequenceNo: 2,
         lockType: "MANUAL_LOCKED",
-        type: "MANUAL_ASSIGN"
+        type: "MANUAL_ASSIGN",
+        plannedDepartAt: new Date("2026-08-16T08:00:00.000Z"),
+        plannedPickupAt: new Date("2026-08-16T08:12:00.000Z"),
+        plannedCompleteAt: new Date("2026-08-16T08:52:00.000Z"),
+        deadheadEtaMinutes: 12,
+        serviceEtaMinutes: 40,
+        etaUnavailableReason: null,
+        lastEtaCalculatedAt: new Date(calculatedAt)
       }),
       select: { id: true }
     });
@@ -476,11 +779,179 @@ describe("dispatcher plan edit commands", () => {
         eventId: "assignment-assigned:order-1:driver-1:5"
       })
     );
+    expect(
+      vi.mocked(buildEtaMatrix).mock.invocationCallOrder[0]
+    ).toBeLessThan(vi.mocked(prisma.$transaction).mock.invocationCallOrder[0]);
+  });
+
+  it("replans the source driver's remaining work and the target assignment in one transaction", async () => {
+    const tx = setupPlanReassignTx(true);
+
+    const result = await reassignAssignment(planReassignCommand());
+
+    expect(result.success).toBe(true);
+    expect(tx.assignment.update).toHaveBeenCalledWith({
+      where: { id: "assignment-remaining" },
+      data: {
+        sequenceNo: 1,
+        plannedDepartAt: new Date("2026-08-16T08:00:00.000Z"),
+        plannedPickupAt: new Date("2026-08-16T08:12:00.000Z"),
+        plannedCompleteAt: new Date("2026-08-16T08:52:00.000Z"),
+        deadheadEtaMinutes: 12,
+        serviceEtaMinutes: 40,
+        etaUnavailableReason: null,
+        lastEtaCalculatedAt: new Date(calculatedAt)
+      }
+    });
+    expect(tx.assignment.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        driverId: "driver-2",
+        sequenceNo: 1,
+        lastEtaCalculatedAt: new Date(calculatedAt)
+      }),
+      select: { id: true }
+    });
+  });
+
+  it("returns dependency unavailable without writes when target ETA cannot be resolved", async () => {
+    const tx = setupPlanReassignTx();
+    vi.mocked(buildEtaMatrix).mockRejectedValue(
+      new Error("ETA_MATRIX_RETRYABLE_FAILURE")
+    );
+
+    const result = await reassignAssignment(planReassignCommand());
+
+    expect(result).toEqual({
+      success: false,
+      error: expect.objectContaining({
+        code: "DEPENDENCY_UNAVAILABLE",
+        details: { dependency: "AMAP" }
+      })
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(tx.assignment.update).not.toHaveBeenCalled();
+    expect(triggerAssignmentReassigned).not.toHaveBeenCalled();
+  });
+
+  it("returns validation failed without writes when the target driver has no feasible slot", async () => {
+    const tx = setupPlanReassignTx();
+    vi.mocked(runDispatchV2).mockImplementation((input) => {
+      const driver = input.drivers[0];
+      if (driver.driverId === "driver-1") {
+        return {
+          proposals: [
+            { driverId: "driver-1", expectedPlanVersion: 7, assignments: [] }
+          ],
+          evaluations: [],
+          calculatedAt
+        };
+      }
+      return {
+        proposals: [
+          { driverId: "driver-2", expectedPlanVersion: 3, assignments: [] }
+        ],
+        evaluations: [
+          {
+            orderId: "order-1",
+            result: "UNPLANNED",
+            bestSlackMinutes: null,
+            reason: "NO_AVAILABLE_SLOT"
+          }
+        ],
+        calculatedAt
+      };
+    });
+
+    const result = await reassignAssignment(planReassignCommand());
+
+    expect(result).toEqual({
+      success: false,
+      error: expect.objectContaining({
+        code: "VALIDATION_FAILED",
+        details: { fields: { toDriverId: ["Driver has no feasible A/B/C plan"] } }
+      })
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(tx.assignment.create).not.toHaveBeenCalled();
+  });
+
+  it("returns dependency unavailable without facts when manual assignment ETA is unavailable", async () => {
+    mockManualPlan();
+    vi.mocked(prisma.order.findUnique).mockResolvedValue({ id: "order-1" } as never);
+    vi.mocked(prisma.driver.findFirst).mockResolvedValue({
+      id: "driver-1",
+      planVersion: 4
+    } as never);
+    vi.mocked(buildEtaMatrix).mockRejectedValue(new Error("AMAP_TIMEOUT"));
+
+    const result = await assignOrder({
+      orderId: "order-1",
+      driverId: "driver-1",
+      reason: "人工锁定",
+      expectedPlanVersion: 4,
+      operatorUserId: "dispatcher-1",
+      traceId: "trace-assign-eta-fail"
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: expect.objectContaining({
+        code: "DEPENDENCY_UNAVAILABLE",
+        details: { dependency: "AMAP" }
+      })
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(triggerAssignmentAssigned).not.toHaveBeenCalled();
+  });
+
+  it("returns validation failed without facts when the selected driver has no feasible slot", async () => {
+    mockManualPlan();
+    vi.mocked(prisma.order.findUnique).mockResolvedValue({ id: "order-1" } as never);
+    vi.mocked(prisma.driver.findFirst).mockResolvedValue({
+      id: "driver-1",
+      planVersion: 4
+    } as never);
+    vi.mocked(runDispatchV2).mockReturnValue({
+      proposals: [
+        { driverId: "driver-1", expectedPlanVersion: 4, assignments: [] }
+      ],
+      evaluations: [
+        {
+          orderId: "order-1",
+          result: "UNPLANNED",
+          bestSlackMinutes: null,
+          reason: "NO_AVAILABLE_SLOT"
+        }
+      ],
+      calculatedAt
+    });
+
+    const result = await assignOrder({
+      orderId: "order-1",
+      driverId: "driver-1",
+      reason: "人工锁定",
+      expectedPlanVersion: 4,
+      operatorUserId: "dispatcher-1",
+      traceId: "trace-no-slot"
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: expect.objectContaining({
+        code: "VALIDATION_FAILED",
+        details: { fields: { driverId: ["Driver has no feasible A/B/C plan"] } }
+      })
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(triggerAssignmentAssigned).not.toHaveBeenCalled();
   });
 
   it("rejects a stale manual assignment version before creating facts", async () => {
     vi.mocked(prisma.order.findUnique).mockResolvedValue({ id: "order-1" } as never);
-    vi.mocked(prisma.driver.findFirst).mockResolvedValue({ id: "driver-1" } as never);
+    vi.mocked(prisma.driver.findFirst).mockResolvedValue({
+      id: "driver-1",
+      planVersion: 5
+    } as never);
     const tx = createTransactionMock();
     runTransaction(tx);
     tx.driver.findFirst.mockResolvedValue({
@@ -629,5 +1100,66 @@ describe("dispatcher plan edit commands", () => {
         eventId: "assignment-unlocked:assignment-1:10"
       })
     );
+  });
+
+  it("rejects repeated plan edits by stale version instead of inferring replay", async () => {
+    const tx = createTransactionMock();
+    runTransaction(tx);
+    tx.assignment.findUnique
+      .mockResolvedValueOnce({
+        id: "assignment-1",
+        orderId: "order-1",
+        driverId: "driver-1",
+        status: "WITHDRAWN",
+        driver: { planVersion: 8 },
+        order: {
+          currentAssignmentId: null,
+          executionStatus: "UNASSIGNED"
+        }
+      })
+      .mockResolvedValueOnce({
+        id: "assignment-1",
+        orderId: "order-1",
+        driverId: "driver-1",
+        status: "ACTIVE",
+        lockType: "NONE",
+        driver: { planVersion: 10 },
+        order: {
+          currentAssignmentId: "assignment-1",
+          executionStatus: "PLANNED"
+        }
+      });
+
+    const withdrawResult = await withdrawAssignment({
+      assignmentId: "assignment-1",
+      reason: "重复撤回",
+      expectedPlanVersion: 7,
+      operatorUserId: "dispatcher-1",
+      traceId: "trace-repeat-withdraw"
+    });
+    const unlockResult = await unlockAssignment({
+      assignmentId: "assignment-1",
+      reason: "重复解锁",
+      expectedPlanVersion: 9,
+      operatorUserId: "dispatcher-1",
+      traceId: "trace-repeat-unlock"
+    });
+
+    expect(withdrawResult).toEqual({
+      success: false,
+      error: expect.objectContaining({
+        code: "PLAN_VERSION_CONFLICT",
+        details: { currentPlanVersion: 8 }
+      })
+    });
+    expect(unlockResult).toEqual({
+      success: false,
+      error: expect.objectContaining({
+        code: "PLAN_VERSION_CONFLICT",
+        details: { currentPlanVersion: 10 }
+      })
+    });
+    expect(tx.assignment.update).not.toHaveBeenCalled();
+    expect(enqueueInternalEvent).not.toHaveBeenCalled();
   });
 });

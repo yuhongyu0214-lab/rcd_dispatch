@@ -147,6 +147,35 @@ describe("dispatcher order routes", () => {
     expect(response.headers.get("X-Trace-Id")).toBe(body.traceId);
   });
 
+  it("returns address geocoding failures as trace-consistent 503 responses", async () => {
+    vi.mocked(updateOrder).mockResolvedValue({
+      success: false,
+      error: {
+        code: "DEPENDENCY_UNAVAILABLE",
+        message: "Address geocoding is unavailable",
+        details: { dependency: "AMAP" }
+      }
+    });
+
+    const response = await update(
+      request("http://localhost/api/v2/orders/order-1", "PATCH", {
+        pickupAddress: "新取车点",
+        reason: "客户改址"
+      }),
+      context
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.error).toEqual({
+      code: "DEPENDENCY_UNAVAILABLE",
+      message: "Address geocoding is unavailable",
+      details: { dependency: "AMAP" }
+    });
+    expect(response.headers.get("X-Trace-Id")).toBe(body.traceId);
+    expect(body.traceId).toBe("trace-order-route");
+  });
+
   it("cancels without requiring a client plan version", async () => {
     const response = await cancel(
       request("http://localhost/api/v2/orders/order-1/cancel", "POST", {

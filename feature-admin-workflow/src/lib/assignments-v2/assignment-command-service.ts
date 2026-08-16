@@ -3,6 +3,9 @@ import { randomUUID } from "node:crypto";
 import type { OrderExecutionStatus, Prisma } from "@prisma/client";
 
 import { createApiErrorV2 } from "@/lib/contracts/v2";
+import { buildDispatchSnapshot } from "@/lib/dispatch-v2/application/dispatch-snapshot-service";
+import { buildEtaMatrix } from "@/lib/dispatch-v2/application/eta-matrix-service";
+import { runDispatchV2 } from "@/lib/dispatch-v2/core";
 import { enqueueInternalEvent } from "@/lib/events/store";
 import { processInternalEvent } from "@/lib/events/processor";
 import { createLogger } from "@/lib/logger";
@@ -17,7 +20,13 @@ import {
   triggerAssignmentWithdrawn
 } from "@/lib/triggers/gate3-triggers";
 
-import type { ApiErrorV2 } from "@/types/v2";
+import type {
+  ApiErrorV2,
+  DispatchDriverPlanProposalV2,
+  DispatchInputV2,
+  DispatchPlannedAssignmentV2,
+  IsoDateTimeStringV2
+} from "@/types/v2";
 
 export type DriverExecutionAction = "DEPART" | "ARRIVE" | "COMPLETE";
 
@@ -425,15 +434,49 @@ export async function reassignAssignment(params: {
   operatorUserId: string;
   traceId: string;
 }): Promise<ReassignResult> {
-  const preflight = await prisma.assignment.findUnique({
-    where: { id: params.assignmentId },
-    select: { driverId: true, orderId: true }
-  });
+  const [preflight, targetPreflight] = await Promise.all([
+    prisma.assignment.findUnique({
+      where: { id: params.assignmentId },
+      select: {
+        driverId: true,
+        orderId: true,
+        driver: { select: { planVersion: true } }
+      }
+    }),
+    prisma.driver.findFirst({
+      where: { id: params.toDriverId, isActive: true },
+      select: { id: true, planVersion: true }
+    })
+  ]);
 
   if (!preflight) {
     return {
       success: false,
       error: createApiErrorV2("NOT_FOUND", "Assignment not found")
+    };
+  }
+
+  if (!targetPreflight) {
+    return {
+      success: false,
+      error: createApiErrorV2("NOT_FOUND", "Target driver not found")
+    };
+  }
+
+  if (
+    preflight.driver.planVersion !== params.expectedFromPlanVersion ||
+    targetPreflight.planVersion !== params.expectedToPlanVersion
+  ) {
+    return {
+      success: false,
+      error: createApiErrorV2(
+        "PLAN_VERSION_CONFLICT",
+        "One or both driver plan versions are stale",
+        {
+          currentFromPlanVersion: preflight.driver.planVersion,
+          currentToPlanVersion: targetPreflight.planVersion
+        }
+      )
     };
   }
 
@@ -465,6 +508,47 @@ export async function reassignAssignment(params: {
   }
 
   try {
+    const occurredAt = new Date();
+    const snapshot = await buildDispatchSnapshot({
+      type: "ASSIGNMENT_EXECUTION_CHANGED",
+      occurredAt: occurredAt.toISOString(),
+      orderId: preflight.orderId,
+      driverId: params.toDriverId,
+      assignmentId: params.assignmentId
+    });
+    const sourcePlan = await prepareScopedDriverPlan({
+      snapshot,
+      driverId: preflight.driverId,
+      traceId: params.traceId,
+      excludedAssignmentId: params.assignmentId,
+      validationField: "toDriverId"
+    });
+    if (!sourcePlan.success) return sourcePlan;
+
+    const targetPlan = await prepareScopedDriverPlan({
+      snapshot,
+      driverId: params.toDriverId,
+      traceId: params.traceId,
+      insertedOrderId: preflight.orderId,
+      validationField: "toDriverId"
+    });
+    if (!targetPlan.success) return targetPlan;
+
+    const plannedAssignment = targetPlan.plan.assignments.find(
+      (assignment) =>
+        assignment.assignmentId === null &&
+        assignment.orderId === preflight.orderId
+    );
+    if (!plannedAssignment || !isCompletePlan(plannedAssignment)) {
+      return {
+        success: false,
+        error: dependencyUnavailable("ETA calculation is unavailable")
+      };
+    }
+    const plannedOrder = snapshot.orders.find(
+      (order) => order.orderId === preflight.orderId
+    );
+
     const transactionResult = await prisma.$transaction<
       | { kind: "success"; data: ReassignResult & { success: true }; eventId: string }
       | { kind: "rejected"; error: ApiErrorV2 }
@@ -498,7 +582,14 @@ export async function reassignAssignment(params: {
               id: true,
               orderNo: true,
               currentAssignmentId: true,
-              executionStatus: true
+              executionStatus: true,
+              promisedPickupAt: true,
+              pickupAddress: true,
+              pickupLat: true,
+              pickupLng: true,
+              deliveryAddress: true,
+              deliveryLat: true,
+              deliveryLng: true
             }
           }
         }
@@ -530,6 +621,25 @@ export async function reassignAssignment(params: {
       }
 
       if (
+        assignment.driver.planVersion !== params.expectedFromPlanVersion ||
+        targetDriver.planVersion !== params.expectedToPlanVersion ||
+        sourcePlan.plan.expectedPlanVersion !== assignment.driver.planVersion ||
+        targetPlan.plan.expectedPlanVersion !== targetDriver.planVersion
+      ) {
+        return {
+          kind: "rejected",
+          error: createApiErrorV2(
+            "PLAN_VERSION_CONFLICT",
+            "One or both driver plan versions are stale",
+            {
+              currentFromPlanVersion: assignment.driver.planVersion,
+              currentToPlanVersion: targetDriver.planVersion
+            }
+          )
+        };
+      }
+
+      if (
         assignment.order.currentAssignmentId !== assignment.id ||
         !["ACTIVE", "ACCEPTED"].includes(assignment.status)
       ) {
@@ -556,18 +666,23 @@ export async function reassignAssignment(params: {
       }
 
       if (
-        assignment.driver.planVersion !== params.expectedFromPlanVersion ||
-        targetDriver.planVersion !== params.expectedToPlanVersion
+        !plannedOrder ||
+        assignment.order.promisedPickupAt.getTime() !==
+          new Date(plannedOrder.promisedPickupAt).getTime() ||
+        assignment.order.pickupAddress !== plannedOrder.pickupAddress ||
+        assignment.order.pickupLat !== (plannedOrder.pickupLocation?.lat ?? null) ||
+        assignment.order.pickupLng !== (plannedOrder.pickupLocation?.lng ?? null) ||
+        assignment.order.deliveryAddress !== plannedOrder.deliveryAddress ||
+        assignment.order.deliveryLat !==
+          (plannedOrder.deliveryLocation?.lat ?? null) ||
+        assignment.order.deliveryLng !==
+          (plannedOrder.deliveryLocation?.lng ?? null)
       ) {
         return {
           kind: "rejected",
           error: createApiErrorV2(
-            "PLAN_VERSION_CONFLICT",
-            "One or both driver plan versions are stale",
-            {
-              currentFromPlanVersion: assignment.driver.planVersion,
-              currentToPlanVersion: targetDriver.planVersion
-            }
+            "DUPLICATE_OPERATION",
+            "Order changed while planning; refresh and retry"
           )
         };
       }
@@ -587,7 +702,26 @@ export async function reassignAssignment(params: {
         };
       }
 
-      const occurredAt = new Date();
+      const sourcePlanApplied = await applyPreparedDriverPlan({
+        tx,
+        plan: sourcePlan.plan,
+        excludedAssignmentId: assignment.id
+      });
+      const targetPlanApplied = await applyPreparedDriverPlan({
+        tx,
+        plan: targetPlan.plan,
+        insertedOrderId: assignment.orderId
+      });
+      if (!sourcePlanApplied || !targetPlanApplied) {
+        return {
+          kind: "rejected",
+          error: createApiErrorV2(
+            "DUPLICATE_OPERATION",
+            "Driver plan changed; refresh and retry"
+          )
+        };
+      }
+
       await tx.assignment.update({
         where: { id: assignment.id },
         data: {
@@ -606,7 +740,8 @@ export async function reassignAssignment(params: {
           status: "ACTIVE",
           previousAssignmentId: assignment.id,
           createdByUserId: params.operatorUserId,
-          lockType: "MANUAL_LOCKED"
+          lockType: "MANUAL_LOCKED",
+          ...toPlanWriteData(plannedAssignment, targetPlan.plan.calculatedAt)
         },
         select: { id: true }
       });
@@ -655,7 +790,17 @@ export async function reassignAssignment(params: {
             expectedFromPlanVersion: params.expectedFromPlanVersion,
             expectedToPlanVersion: params.expectedToPlanVersion,
             nextFromPlanVersion,
-            nextToPlanVersion
+            nextToPlanVersion,
+            sourcePlan: sourcePlan.plan.assignments.map((planned) => ({
+              assignmentId: planned.assignmentId,
+              orderId: planned.orderId,
+              sequenceNo: planned.sequenceNo
+            })),
+            targetPlan: targetPlan.plan.assignments.map((planned) => ({
+              assignmentId: planned.assignmentId,
+              orderId: planned.orderId,
+              sequenceNo: planned.sequenceNo
+            }))
           }
         }
       });
@@ -717,6 +862,312 @@ export async function reassignAssignment(params: {
   }
 }
 
+type CompletePlannedAssignment = DispatchPlannedAssignmentV2 & {
+  etaAvailable: true;
+  plannedDepartAt: IsoDateTimeStringV2;
+  plannedPickupAt: IsoDateTimeStringV2;
+  plannedCompleteAt: IsoDateTimeStringV2;
+  deadheadEtaMinutes: number;
+  serviceEtaMinutes: number;
+};
+
+type PreparedDriverPlan = {
+  driverId: string;
+  expectedPlanVersion: number;
+  calculatedAt: Date;
+  assignments: DispatchDriverPlanProposalV2["assignments"];
+};
+
+type PreparePlanResult =
+  | { success: true; plan: PreparedDriverPlan }
+  | { success: false; error: ApiErrorV2 };
+
+type PlanWriteData = {
+  sequenceNo: number;
+  plannedDepartAt: Date;
+  plannedPickupAt: Date;
+  plannedCompleteAt: Date;
+  deadheadEtaMinutes: number;
+  serviceEtaMinutes: number;
+  etaUnavailableReason: null;
+  lastEtaCalculatedAt: Date;
+};
+
+function dependencyUnavailable(message: string) {
+  return createApiErrorV2("DEPENDENCY_UNAVAILABLE", message, {
+    dependency: "AMAP"
+  });
+}
+
+function noFeasiblePlan(field: "driverId" | "toDriverId", message: string) {
+  return createApiErrorV2("VALIDATION_FAILED", message, {
+    fields: { [field]: [message] }
+  });
+}
+
+function isCompletePlan(
+  assignment: DispatchPlannedAssignmentV2
+): assignment is CompletePlannedAssignment {
+  return (
+    assignment.etaAvailable === true &&
+    assignment.plannedDepartAt !== undefined &&
+    assignment.plannedPickupAt !== undefined &&
+    assignment.plannedCompleteAt !== undefined &&
+    assignment.deadheadEtaMinutes !== undefined &&
+    assignment.serviceEtaMinutes !== undefined
+  );
+}
+
+function toPlanWriteData(
+  assignment: CompletePlannedAssignment,
+  calculatedAt: Date
+): PlanWriteData {
+  return {
+    sequenceNo: assignment.sequenceNo,
+    plannedDepartAt: new Date(assignment.plannedDepartAt),
+    plannedPickupAt: new Date(assignment.plannedPickupAt),
+    plannedCompleteAt: new Date(assignment.plannedCompleteAt),
+    deadheadEtaMinutes: assignment.deadheadEtaMinutes,
+    serviceEtaMinutes: assignment.serviceEtaMinutes,
+    etaUnavailableReason: null,
+    lastEtaCalculatedAt: calculatedAt
+  };
+}
+
+async function prepareScopedDriverPlan(params: {
+  snapshot: DispatchInputV2;
+  driverId: string;
+  traceId: string;
+  insertedOrderId?: string;
+  excludedAssignmentId?: string;
+  validationField: "driverId" | "toDriverId";
+}): Promise<PreparePlanResult> {
+  const driver = params.snapshot.drivers.find(
+    (candidate) => candidate.driverId === params.driverId
+  );
+  if (!driver) {
+    return {
+      success: false,
+      error: createApiErrorV2("NOT_FOUND", "Driver not found")
+    };
+  }
+
+  const assignments = driver.assignments.filter(
+    (assignment) =>
+      assignment.assignmentId !== params.excludedAssignmentId &&
+      assignment.orderId !== params.insertedOrderId
+  );
+  const scopedOrderIds = new Set(assignments.map((assignment) => assignment.orderId));
+  if (params.insertedOrderId) scopedOrderIds.add(params.insertedOrderId);
+
+  const scopedOrders = params.snapshot.orders
+    .filter((order) => scopedOrderIds.has(order.orderId))
+    .map((order) =>
+      order.orderId === params.insertedOrderId
+        ? {
+            ...order,
+            executionStatus: "UNASSIGNED" as const,
+            currentAssignmentId: undefined
+          }
+        : order
+    );
+
+  if (
+    params.insertedOrderId &&
+    !scopedOrders.some((order) => order.orderId === params.insertedOrderId)
+  ) {
+    return {
+      success: false,
+      error: createApiErrorV2("NOT_FOUND", "Order not found")
+    };
+  }
+
+  const scopedInput: DispatchInputV2 = {
+    event: params.snapshot.event,
+    orders: scopedOrders,
+    drivers: [{ ...driver, assignments }]
+  };
+
+  let etaResolver: Awaited<ReturnType<typeof buildEtaMatrix>>;
+  try {
+    etaResolver = await buildEtaMatrix(scopedInput, params.traceId);
+  } catch (error) {
+    log.warn("assignment_plan_eta_unavailable", {
+      driverId: params.driverId,
+      traceId: params.traceId,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return {
+      success: false,
+      error: dependencyUnavailable("ETA calculation is unavailable")
+    };
+  }
+  const output = runDispatchV2(scopedInput, etaResolver);
+
+  const proposal = output.proposals.find(
+    (candidate) => candidate.driverId === params.driverId
+  );
+  if (!proposal) {
+    return {
+      success: false,
+      error: noFeasiblePlan(
+        params.validationField,
+        "Driver has no feasible A/B/C plan"
+      )
+    };
+  }
+
+  const incompleteEvaluation = output.evaluations.find(
+    (evaluation) => evaluation.result === "ETA_UNAVAILABLE"
+  );
+  if (incompleteEvaluation) {
+    return {
+      success: false,
+      error: dependencyUnavailable("ETA calculation is unavailable")
+    };
+  }
+
+  const unplannedEvaluation = output.evaluations.find(
+    (evaluation) => evaluation.result !== "PLANNED"
+  );
+  if (unplannedEvaluation) {
+    return {
+      success: false,
+      error: noFeasiblePlan(
+        params.validationField,
+        "Driver has no feasible A/B/C plan"
+      )
+    };
+  }
+
+  if (params.insertedOrderId) {
+    const inserted = proposal.assignments.find(
+      (assignment) =>
+        assignment.orderId === params.insertedOrderId &&
+        assignment.assignmentId === null
+    );
+    if (!inserted) {
+      return {
+        success: false,
+        error: noFeasiblePlan(
+          params.validationField,
+          "Driver has no feasible A/B/C plan"
+        )
+      };
+    }
+    if (!isCompletePlan(inserted)) {
+      return {
+        success: false,
+        error: dependencyUnavailable("ETA calculation is unavailable")
+      };
+    }
+  }
+
+  for (const assignment of proposal.assignments) {
+    if (assignment.assignmentId === null && !isCompletePlan(assignment)) {
+      return {
+        success: false,
+        error: dependencyUnavailable("ETA calculation is unavailable")
+      };
+    }
+  }
+
+  const persistedIds = proposal.assignments
+    .map((assignment) => assignment.assignmentId)
+    .filter((assignmentId): assignmentId is string => assignmentId !== null);
+  if (persistedIds.length > 0) {
+    const persisted = await prisma.assignment.findMany({
+      where: { id: { in: persistedIds } },
+      select: {
+        id: true,
+        plannedDepartAt: true,
+        plannedPickupAt: true,
+        plannedCompleteAt: true,
+        deadheadEtaMinutes: true,
+        serviceEtaMinutes: true,
+        etaUnavailableReason: true,
+        lastEtaCalculatedAt: true
+      }
+    });
+    const persistedMap = new Map(persisted.map((assignment) => [assignment.id, assignment]));
+    const incompletePersisted = persistedIds.some((assignmentId) => {
+      const assignment = persistedMap.get(assignmentId);
+      return (
+        !assignment ||
+        assignment.plannedDepartAt === null ||
+        assignment.plannedPickupAt === null ||
+        assignment.plannedCompleteAt === null ||
+        assignment.deadheadEtaMinutes === null ||
+        assignment.serviceEtaMinutes === null ||
+        assignment.etaUnavailableReason !== null ||
+        assignment.lastEtaCalculatedAt === null
+      );
+    });
+    if (incompletePersisted) {
+      return {
+        success: false,
+        error: dependencyUnavailable("Existing locked plan is incomplete")
+      };
+    }
+  }
+
+  return {
+    success: true,
+    plan: {
+      driverId: params.driverId,
+      expectedPlanVersion: proposal.expectedPlanVersion,
+      calculatedAt: new Date(output.calculatedAt),
+      assignments: proposal.assignments
+    }
+  };
+}
+
+async function applyPreparedDriverPlan(params: {
+  tx: Prisma.TransactionClient;
+  plan: PreparedDriverPlan;
+  insertedOrderId?: string;
+  excludedAssignmentId?: string;
+}): Promise<boolean> {
+  const activeAssignments = await params.tx.assignment.findMany({
+    where: {
+      driverId: params.plan.driverId,
+      status: { in: ["ACTIVE", "ACCEPTED"] },
+      order: { executionStatus: { notIn: ["COMPLETED", "CANCELLED"] } }
+    },
+    select: { id: true, orderId: true }
+  });
+  const activeById = new Map(
+    activeAssignments.map((assignment) => [assignment.id, assignment])
+  );
+  const activeByOrderId = new Map(
+    activeAssignments.map((assignment) => [assignment.orderId, assignment])
+  );
+  const coveredIds = new Set<string>();
+
+  for (const planned of params.plan.assignments) {
+    if (planned.assignmentId !== null) {
+      const current = activeById.get(planned.assignmentId);
+      if (!current || current.orderId !== planned.orderId) return false;
+      coveredIds.add(current.id);
+      continue;
+    }
+    if (planned.orderId === params.insertedOrderId) continue;
+    if (!isCompletePlan(planned)) return false;
+    const current = activeByOrderId.get(planned.orderId);
+    if (!current || current.id === params.excludedAssignmentId) return false;
+    coveredIds.add(current.id);
+    await params.tx.assignment.update({
+      where: { id: current.id },
+      data: toPlanWriteData(planned, params.plan.calculatedAt)
+    });
+  }
+
+  return activeAssignments.every(
+    (assignment) =>
+      assignment.id === params.excludedAssignmentId || coveredIds.has(assignment.id)
+  );
+}
+
 export async function assignOrder(params: {
   orderId: string;
   driverId: string;
@@ -729,7 +1180,7 @@ export async function assignOrder(params: {
     prisma.order.findUnique({ where: { id: params.orderId }, select: { id: true } }),
     prisma.driver.findFirst({
       where: { id: params.driverId, isActive: true },
-      select: { id: true }
+      select: { id: true, planVersion: true }
     })
   ]);
   if (!orderExists) {
@@ -742,6 +1193,16 @@ export async function assignOrder(params: {
     return {
       success: false,
       error: createApiErrorV2("NOT_FOUND", "Driver not found")
+    };
+  }
+  if (driverExists.planVersion !== params.expectedPlanVersion) {
+    return {
+      success: false,
+      error: createApiErrorV2(
+        "PLAN_VERSION_CONFLICT",
+        "Driver plan version is stale",
+        { currentPlanVersion: driverExists.planVersion }
+      )
     };
   }
 
@@ -760,9 +1221,37 @@ export async function assignOrder(params: {
   }
 
   try {
+    const occurredAt = new Date();
+    const snapshot = await buildDispatchSnapshot({
+      type: "ASSIGNMENT_EXECUTION_CHANGED",
+      occurredAt: occurredAt.toISOString(),
+      orderId: params.orderId,
+      driverId: params.driverId
+    });
+    const preparedPlan = await prepareScopedDriverPlan({
+      snapshot,
+      driverId: params.driverId,
+      traceId: params.traceId,
+      insertedOrderId: params.orderId,
+      validationField: "driverId"
+    });
+    if (!preparedPlan.success) return preparedPlan;
+    const plannedAssignment = preparedPlan.plan.assignments.find(
+      (assignment) =>
+        assignment.assignmentId === null && assignment.orderId === params.orderId
+    );
+    if (!plannedAssignment || !isCompletePlan(plannedAssignment)) {
+      return {
+        success: false,
+        error: dependencyUnavailable("ETA calculation is unavailable")
+      };
+    }
+    const plannedOrder = snapshot.orders.find(
+      (order) => order.orderId === params.orderId
+    );
+
     const transactionResult = await prisma.$transaction<
       | { kind: "success"; data: AssignResult & { success: true }; eventId: string }
-      | { kind: "replayed"; data: AssignResult & { success: true } }
       | { kind: "rejected"; error: ApiErrorV2 }
     >(async (tx) => {
       await tx.$queryRaw`
@@ -784,16 +1273,7 @@ export async function assignOrder(params: {
             name: true,
             onShift: true,
             availability: true,
-            planVersion: true,
-            assignments: {
-              where: {
-                status: { in: ["ACTIVE", "ACCEPTED"] },
-                order: {
-                  executionStatus: { notIn: ["COMPLETED", "CANCELLED"] }
-                }
-              },
-              select: { sequenceNo: true }
-            }
+            planVersion: true
           }
         }),
         tx.order.findUnique({
@@ -802,6 +1282,13 @@ export async function assignOrder(params: {
             id: true,
             orderNo: true,
             executionStatus: true,
+            promisedPickupAt: true,
+            pickupAddress: true,
+            pickupLat: true,
+            pickupLng: true,
+            deliveryAddress: true,
+            deliveryLat: true,
+            deliveryLng: true,
             currentAssignment: {
               select: {
                 id: true,
@@ -826,23 +1313,16 @@ export async function assignOrder(params: {
         };
       }
       if (
-        order.executionStatus === "PLANNED" &&
-        order.currentAssignment?.driverId === driver.id &&
-        order.currentAssignment.lockType === "MANUAL_LOCKED" &&
-        ["ACTIVE", "ACCEPTED"].includes(order.currentAssignment.status)
+        driver.planVersion !== params.expectedPlanVersion ||
+        preparedPlan.plan.expectedPlanVersion !== driver.planVersion
       ) {
         return {
-          kind: "replayed",
-          data: {
-            success: true,
-            data: {
-              assignmentId: order.currentAssignment.id,
-              orderId: order.id,
-              driverId: driver.id,
-              planVersion: driver.planVersion,
-              replayed: true
-            }
-          }
+          kind: "rejected",
+          error: createApiErrorV2(
+            "PLAN_VERSION_CONFLICT",
+            "Driver plan version is stale",
+            { currentPlanVersion: driver.planVersion }
+          )
         };
       }
       if (order.executionStatus !== "UNASSIGNED") {
@@ -851,13 +1331,22 @@ export async function assignOrder(params: {
           error: illegalTransition(order.executionStatus, "PLANNED")
         };
       }
-      if (driver.planVersion !== params.expectedPlanVersion) {
+      if (
+        !plannedOrder ||
+        order.promisedPickupAt.getTime() !==
+          new Date(plannedOrder.promisedPickupAt).getTime() ||
+        order.pickupAddress !== plannedOrder.pickupAddress ||
+        order.pickupLat !== (plannedOrder.pickupLocation?.lat ?? null) ||
+        order.pickupLng !== (plannedOrder.pickupLocation?.lng ?? null) ||
+        order.deliveryAddress !== plannedOrder.deliveryAddress ||
+        order.deliveryLat !== (plannedOrder.deliveryLocation?.lat ?? null) ||
+        order.deliveryLng !== (plannedOrder.deliveryLocation?.lng ?? null)
+      ) {
         return {
           kind: "rejected",
           error: createApiErrorV2(
-            "PLAN_VERSION_CONFLICT",
-            "Driver plan version is stale",
-            { currentPlanVersion: driver.planVersion }
+            "DUPLICATE_OPERATION",
+            "Order changed while planning; refresh and retry"
           )
         };
       }
@@ -872,24 +1361,21 @@ export async function assignOrder(params: {
         };
       }
 
-      const occupied = new Set(
-        driver.assignments
-          .map((assignment) => assignment.sequenceNo)
-          .filter((sequenceNo): sequenceNo is number => sequenceNo !== null)
-      );
-      const sequenceNo = [1, 2, 3].find((candidate) => !occupied.has(candidate));
-      if (!sequenceNo) {
+      const planApplied = await applyPreparedDriverPlan({
+        tx,
+        plan: preparedPlan.plan,
+        insertedOrderId: order.id
+      });
+      if (!planApplied) {
         return {
           kind: "rejected",
           error: createApiErrorV2(
-            "VALIDATION_FAILED",
-            "Driver has no available A/B/C slot",
-            { fields: { driverId: ["No available plan slot"] } }
+            "DUPLICATE_OPERATION",
+            "Driver plan changed; refresh and retry"
           )
         };
       }
 
-      const occurredAt = new Date();
       const assignment = await tx.assignment.create({
         data: {
           orderId: order.id,
@@ -897,8 +1383,8 @@ export async function assignOrder(params: {
           type: "MANUAL_ASSIGN",
           status: "ACTIVE",
           createdByUserId: params.operatorUserId,
-          sequenceNo,
-          lockType: "MANUAL_LOCKED"
+          lockType: "MANUAL_LOCKED",
+          ...toPlanWriteData(plannedAssignment, preparedPlan.plan.calculatedAt)
         },
         select: { id: true }
       });
@@ -929,10 +1415,15 @@ export async function assignOrder(params: {
           reason: params.reason,
           metadataJson: {
             orderNo: order.orderNo,
-            sequenceNo,
+            sequenceNo: plannedAssignment.sequenceNo,
             lockType: "MANUAL_LOCKED",
             expectedPlanVersion: params.expectedPlanVersion,
-            nextPlanVersion
+            nextPlanVersion,
+            plan: preparedPlan.plan.assignments.map((planned) => ({
+              assignmentId: planned.assignmentId,
+              orderId: planned.orderId,
+              sequenceNo: planned.sequenceNo
+            }))
           }
         }
       });
@@ -1025,7 +1516,6 @@ export async function withdrawAssignment(params: {
   try {
     const transactionResult = await prisma.$transaction<
       | { kind: "success"; data: WithdrawResult & { success: true }; eventId: string }
-      | { kind: "replayed"; data: WithdrawResult & { success: true } }
       | { kind: "rejected"; error: ApiErrorV2 }
     >(async (tx) => {
       await tx.$queryRaw`
@@ -1050,24 +1540,6 @@ export async function withdrawAssignment(params: {
         return {
           kind: "rejected",
           error: createApiErrorV2("NOT_FOUND", "Assignment not found")
-        };
-      }
-      if (
-        assignment.status === "WITHDRAWN" &&
-        assignment.order.executionStatus === "UNASSIGNED"
-      ) {
-        return {
-          kind: "replayed",
-          data: {
-            success: true,
-            data: {
-              assignmentId: assignment.id,
-              orderId: assignment.orderId,
-              driverId: assignment.driverId,
-              planVersion: assignment.driver.planVersion,
-              replayed: true
-            }
-          }
         };
       }
       if (assignment.driver.planVersion !== params.expectedPlanVersion) {
@@ -1223,7 +1695,6 @@ export async function unlockAssignment(params: {
   try {
     const transactionResult = await prisma.$transaction<
       | { kind: "success"; data: UnlockResult & { success: true }; eventId: string }
-      | { kind: "replayed"; data: UnlockResult & { success: true } }
       | { kind: "rejected"; error: ApiErrorV2 }
     >(async (tx) => {
       await tx.$queryRaw`
@@ -1249,31 +1720,6 @@ export async function unlockAssignment(params: {
           kind: "rejected",
           error: createApiErrorV2("NOT_FOUND", "Assignment not found")
         };
-      }
-      if (
-        assignment.lockType === "NONE" &&
-        assignment.order.currentAssignmentId === assignment.id &&
-        assignment.order.executionStatus === "PLANNED"
-      ) {
-        const priorUnlock = await tx.operationLog.findFirst({
-          where: { assignmentId: assignment.id, action: "UNLOCK" },
-          select: { id: true }
-        });
-        if (priorUnlock) {
-          return {
-            kind: "replayed",
-            data: {
-              success: true,
-              data: {
-                assignmentId: assignment.id,
-                orderId: assignment.orderId,
-                driverId: assignment.driverId,
-                planVersion: assignment.driver.planVersion,
-                replayed: true
-              }
-            }
-          };
-        }
       }
       if (assignment.driver.planVersion !== params.expectedPlanVersion) {
         return {
