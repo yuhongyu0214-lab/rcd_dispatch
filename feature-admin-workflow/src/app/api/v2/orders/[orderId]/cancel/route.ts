@@ -35,7 +35,9 @@ export async function POST(
     );
   }
 
-  let body: Partial<CancelOrderCommandV2>;
+  let body: Partial<CancelOrderCommandV2> & {
+    expectedPlanVersion?: unknown;
+  };
   try {
     const parsed: unknown = await request.json();
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -48,7 +50,9 @@ export async function POST(
         { traceId }
       );
     }
-    body = parsed as Partial<CancelOrderCommandV2>;
+    body = parsed as Partial<CancelOrderCommandV2> & {
+      expectedPlanVersion?: unknown;
+    };
   } catch {
     return failV2(
       createApiErrorV2(
@@ -56,6 +60,14 @@ export async function POST(
         "Request body must be a JSON object",
         { fields: { body: ["Expected valid JSON object"] } }
       ),
+      { traceId }
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "expectedPlanVersion")) {
+    return failV2(
+      createApiErrorV2("VALIDATION_FAILED", "Invalid cancellation command", {
+        fields: { expectedPlanVersion: ["Must not be provided"] }
+      }),
       { traceId }
     );
   }

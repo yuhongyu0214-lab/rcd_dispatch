@@ -16,6 +16,10 @@ function request() {
   });
 }
 
+function requestWithoutTrace() {
+  return new Request("http://localhost/api/v2/map/snapshot");
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getCurrentUser).mockResolvedValue({
@@ -56,8 +60,13 @@ describe("GET /api/v2/map/snapshot", () => {
     });
 
     const response = await GET(request());
+    const body = await response.json();
+
     expect(response.status).toBe(403);
-    expect((await response.json()).error.code).toBe("FORBIDDEN");
+    expect(body.error.code).toBe("FORBIDDEN");
+    expect(body.traceId).toBe("trace-map");
+    expect(response.headers.get("X-Trace-Id")).toBe(body.traceId);
+    expect(getMapSnapshot).not.toHaveBeenCalled();
   });
 
   it("returns the dispatcher snapshot in the unified envelope", async () => {
@@ -71,6 +80,16 @@ describe("GET /api/v2/map/snapshot", () => {
       error: null,
       traceId: "trace-map"
     });
+    expect(response.headers.get("X-Trace-Id")).toBe(body.traceId);
+  });
+
+  it("generates a default UUID trace ID for a representative read route", async () => {
+    const response = await GET(requestWithoutTrace());
+    const body = await response.json();
+
+    expect(body.traceId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
     expect(response.headers.get("X-Trace-Id")).toBe(body.traceId);
   });
 });

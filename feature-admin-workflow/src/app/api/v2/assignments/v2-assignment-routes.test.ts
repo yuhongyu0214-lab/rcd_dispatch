@@ -62,6 +62,62 @@ function command() {
   };
 }
 
+const assignmentOperations = [
+  {
+    name: "POST /api/v2/assignments",
+    traceId: "trace-assignment-route",
+    invoke: () =>
+      assign(
+        commandRequest("http://localhost/api/v2/assignments", {
+          orderId: "order-1",
+          driverId: "driver-1",
+          reason: "人工锁定",
+          expectedPlanVersion: 4
+        })
+      ),
+    service: assignOrder
+  },
+  {
+    name: "POST /api/v2/assignments/{assignmentId}/reassign",
+    traceId: "trace-reassign-route",
+    invoke: () => reassign(request(command()), context),
+    service: reassignAssignment
+  },
+  {
+    name: "POST /api/v2/assignments/{assignmentId}/withdraw",
+    traceId: "trace-assignment-route",
+    invoke: () =>
+      withdraw(
+        commandRequest(
+          "http://localhost/api/v2/assignments/assignment-1/withdraw",
+          { reason: "撤回", expectedPlanVersion: 7 }
+        ),
+        context
+      ),
+    service: withdrawAssignment
+  },
+  {
+    name: "POST /api/v2/assignments/{assignmentId}/unlock",
+    traceId: "trace-assignment-route",
+    invoke: () =>
+      unlock(
+        commandRequest(
+          "http://localhost/api/v2/assignments/assignment-1/unlock",
+          { reason: "解除锁定", expectedPlanVersion: 7 }
+        ),
+        context
+      ),
+    service: unlockAssignment
+  }
+] as const;
+
+async function expectTrace(response: Response, expectedTraceId: string) {
+  const body = await response.json();
+  expect(body.traceId).toBe(expectedTraceId);
+  expect(response.headers.get("X-Trace-Id")).toBe(body.traceId);
+  return body;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getCurrentUser).mockResolvedValue({
@@ -117,32 +173,46 @@ beforeEach(() => {
 });
 
 describe("POST /api/v2/assignments/{assignmentId}/reassign", () => {
-  it("rejects an anonymous caller", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValue(null);
+  it.each(assignmentOperations)(
+    "returns 401 with a matching trace ID for $name",
+    async ({ invoke, service, traceId }) => {
+      vi.mocked(getCurrentUser).mockResolvedValue(null);
 
-    const response = await reassign(request(command()), context);
-    const body = await response.json();
+      const response = await invoke();
+      const body = await expectTrace(response, traceId);
 
-    expect(response.status).toBe(401);
-    expect(body.error.code).toBe("UNAUTHORIZED");
-    expect(reassignAssignment).not.toHaveBeenCalled();
-  });
+      expect(response.status).toBe(401);
+      expect(body.error.code).toBe("UNAUTHORIZED");
+      expect(service).not.toHaveBeenCalled();
+    }
+  );
 
-  it("rejects a driver caller", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValue({
-      id: "driver-user-1",
-      email: "driver@example.test",
-      name: "司机",
-      role: "driver",
-      driverId: "driver-1"
-    });
+  it.each(assignmentOperations)(
+    "returns 403 with a matching trace ID for $name",
+    async ({ invoke, service, traceId }) => {
+      vi.mocked(getCurrentUser).mockResolvedValue({
+        id: "driver-user-1",
+        email: "driver@example.test",
+        name: "司机",
+        role: "driver",
+        driverId: "driver-1"
+      });
 
-    const response = await reassign(request(command()), context);
-    const body = await response.json();
+      const response = await invoke();
+      const body = await expectTrace(response, traceId);
 
-    expect(response.status).toBe(403);
-    expect(body.error.code).toBe("FORBIDDEN");
-  });
+      expect(response.status).toBe(403);
+      expect(body.error.code).toBe("FORBIDDEN");
+      expect(service).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(assignmentOperations)(
+    "preserves the supplied trace ID for $name",
+    async ({ invoke, traceId }) => {
+      await expectTrace(await invoke(), traceId);
+    }
+  );
 
   it("rejects missing dual plan versions before calling the service", async () => {
     const response = await reassign(

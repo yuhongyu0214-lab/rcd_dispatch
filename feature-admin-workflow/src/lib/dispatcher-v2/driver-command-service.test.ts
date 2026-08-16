@@ -269,6 +269,44 @@ describe("setDriverAvailability", () => {
     });
   });
 
+  it.each(["operation log", "outbox"] as const)(
+    "returns an internal error when the %s write aborts the availability transaction",
+    async (failurePoint) => {
+      const tx = transactionMock();
+      runTransaction(tx);
+      tx.driver.findFirst.mockResolvedValue({
+        id: "driver-1",
+        availability: "AVAILABLE",
+        planVersion: 6,
+        assignments: []
+      });
+      if (failurePoint === "operation log") {
+        tx.operationLog.create.mockRejectedValue(new Error("log down"));
+      } else {
+        vi.mocked(enqueueInternalEvent).mockRejectedValue(
+          new Error("outbox down")
+        );
+      }
+
+      const result = await setDriverAvailability({
+        driverId: "driver-1",
+        availability: "UNAVAILABLE",
+        reason: "事务失败验证",
+        operatorUserId: "dispatcher-1",
+        traceId: `trace-${failurePoint}-fail`
+      });
+
+      expect(result).toEqual({
+        success: false,
+        error: expect.objectContaining({ code: "INTERNAL_ERROR" })
+      });
+      expect(processInternalEvent).not.toHaveBeenCalled();
+      if (failurePoint === "operation log") {
+        expect(enqueueInternalEvent).not.toHaveBeenCalled();
+      }
+    }
+  );
+
   it("returns NOT_FOUND before acquiring locks", async () => {
     vi.mocked(prisma.driver.findFirst).mockResolvedValue(null);
 

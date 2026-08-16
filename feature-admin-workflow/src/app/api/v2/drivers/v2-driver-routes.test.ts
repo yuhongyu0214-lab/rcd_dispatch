@@ -30,6 +30,40 @@ function request(url: string, method = "GET", body?: unknown) {
   });
 }
 
+const driverOperations = [
+  {
+    name: "GET /api/v2/drivers",
+    invoke: () => list(request("http://localhost/api/v2/drivers")),
+    service: listDrivers
+  },
+  {
+    name: "GET /api/v2/drivers/{driverId}/plan",
+    invoke: () =>
+      plan(request("http://localhost/api/v2/drivers/driver-1/plan"), context),
+    service: getDriverPlan
+  },
+  {
+    name: "PATCH /api/v2/drivers/{driverId}/availability",
+    invoke: () =>
+      availability(
+        request(
+          "http://localhost/api/v2/drivers/driver-1/availability",
+          "PATCH",
+          { availability: "UNAVAILABLE", reason: "停派" }
+        ),
+        context
+      ),
+    service: setDriverAvailability
+  }
+] as const;
+
+async function expectTrace(response: Response) {
+  const body = await response.json();
+  expect(body.traceId).toBe("trace-driver-route");
+  expect(response.headers.get("X-Trace-Id")).toBe(body.traceId);
+  return body;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getCurrentUser).mockResolvedValue({
@@ -59,6 +93,47 @@ beforeEach(() => {
 });
 
 describe("dispatcher driver routes", () => {
+  it.each(driverOperations)(
+    "returns 401 with a matching trace ID for $name",
+    async ({ invoke, service }) => {
+      vi.mocked(getCurrentUser).mockResolvedValue(null);
+
+      const response = await invoke();
+      const body = await expectTrace(response);
+
+      expect(response.status).toBe(401);
+      expect(body.error.code).toBe("UNAUTHORIZED");
+      expect(service).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(driverOperations)(
+    "returns 403 with a matching trace ID for $name",
+    async ({ invoke, service }) => {
+      vi.mocked(getCurrentUser).mockResolvedValue({
+        id: "driver-user-1",
+        email: "driver@example.test",
+        name: "司机",
+        role: "driver",
+        driverId: "driver-1"
+      });
+
+      const response = await invoke();
+      const body = await expectTrace(response);
+
+      expect(response.status).toBe(403);
+      expect(body.error.code).toBe("FORBIDDEN");
+      expect(service).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(driverOperations)(
+    "preserves the supplied trace ID for $name",
+    async ({ invoke }) => {
+      await expectTrace(await invoke());
+    }
+  );
+
   it("clamps driver pageSize to 100", async () => {
     const response = await list(
       request("http://localhost/api/v2/drivers?page=3&pageSize=101")
@@ -141,5 +216,28 @@ describe("dispatcher driver routes", () => {
       traceId: "trace-driver-route"
     });
     expect(response.headers.get("X-Trace-Id")).toBe(body.traceId);
+  });
+
+  it("rejects expectedPlanVersion on availability before calling the service", async () => {
+    const response = await availability(
+      request(
+        "http://localhost/api/v2/drivers/driver-1/availability",
+        "PATCH",
+        {
+          availability: "UNAVAILABLE",
+          reason: "停派",
+          expectedPlanVersion: 4
+        }
+      ),
+      context
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error.code).toBe("VALIDATION_FAILED");
+    expect(body.error.details.fields.expectedPlanVersion).toEqual([
+      "Must not be provided"
+    ]);
+    expect(setDriverAvailability).not.toHaveBeenCalled();
   });
 });

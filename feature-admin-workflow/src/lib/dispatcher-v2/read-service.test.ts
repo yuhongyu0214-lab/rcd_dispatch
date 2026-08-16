@@ -16,6 +16,7 @@ import {
   getDriverPlan,
   getMapSnapshot,
   getOrderDetail,
+  listDrivers,
   listOrders
 } from "./read-service";
 
@@ -204,6 +205,70 @@ describe("dispatcher read service", () => {
       })
     );
     expect(JSON.stringify(result)).not.toContain("etaMinutes");
+  });
+
+  it("returns the frozen paginated driver envelope and applies database pagination", async () => {
+    vi.mocked(prisma.driver.count).mockResolvedValue(5);
+    vi.mocked(prisma.driver.findMany).mockResolvedValue([driverRow()] as never);
+
+    const result = await listDrivers({ page: 3, pageSize: 2 });
+
+    expect(result).toEqual({
+      items: [expect.objectContaining({ id: "driver-1", planVersion: 3 })],
+      total: 5,
+      page: 3,
+      pageSize: 2
+    });
+    expect(prisma.driver.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { isActive: true },
+        skip: 4,
+        take: 2
+      })
+    );
+  });
+
+  it("returns the frozen order modification history summary", async () => {
+    vi.mocked(prisma.order.findUnique).mockResolvedValue({
+      ...orderRow(),
+      currentAssignment: null,
+      dispatchAlerts: [],
+      operationLogs: [
+        {
+          id: "log-2",
+          action: "ORDER_MODIFY",
+          reason: "客户改址",
+          createdAt: new Date("2026-08-16T08:30:00.000Z"),
+          operatorUser: { id: "dispatcher-1", name: "调度员" }
+        }
+      ],
+      _count: { operationLogs: 3 }
+    } as never);
+
+    const result = await getOrderDetail("order-1");
+
+    expect(result?.modificationHistory).toEqual({
+      total: 3,
+      latest: [
+        {
+          id: "log-2",
+          action: "ORDER_MODIFY",
+          reason: "客户改址",
+          createdAt: "2026-08-16T08:30:00.000Z",
+          operator: { id: "dispatcher-1", name: "调度员" }
+        }
+      ]
+    });
+    expect(prisma.order.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          operationLogs: expect.objectContaining({
+            where: { action: "ORDER_MODIFY" },
+            take: 20
+          })
+        })
+      })
+    );
   });
 
   it("returns null for an unknown order detail", async () => {

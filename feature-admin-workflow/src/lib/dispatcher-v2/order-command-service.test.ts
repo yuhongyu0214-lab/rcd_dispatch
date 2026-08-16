@@ -301,6 +301,36 @@ describe("cancelOrder", () => {
     );
   });
 
+  it("replays an already-cancelled order without duplicate side effects", async () => {
+    vi.mocked(prisma.order.findUnique).mockResolvedValue({
+      currentAssignment: null
+    } as never);
+    const tx = transactionMock();
+    runTransaction(tx);
+    tx.order.findUnique.mockResolvedValue({
+      id: "order-1",
+      executionStatus: "CANCELLED",
+      currentAssignment: null
+    });
+
+    const result = await cancelOrder({
+      orderId: "order-1",
+      reason: "重复取消",
+      operatorUserId: "dispatcher-1",
+      traceId: "trace-cancel-replay"
+    });
+
+    expect(result).toEqual({
+      success: true,
+      data: { orderId: "order-1", replayed: true }
+    });
+    expect(tx.order.update).not.toHaveBeenCalled();
+    expect(tx.driver.update).not.toHaveBeenCalled();
+    expect(tx.operationLog.create).not.toHaveBeenCalled();
+    expect(enqueueInternalEvent).not.toHaveBeenCalled();
+    expect(processInternalEvent).not.toHaveBeenCalled();
+  });
+
   it("rejects cancellation after service starts without side effects", async () => {
     vi.mocked(prisma.order.findUnique).mockResolvedValue({
       currentAssignment: { id: "assignment-1", driverId: "driver-1" }
@@ -335,29 +365,42 @@ describe("cancelOrder", () => {
     expect(enqueueInternalEvent).not.toHaveBeenCalled();
   });
 
-  it("returns an internal error when the outbox write aborts the transaction", async () => {
-    vi.mocked(prisma.order.findUnique).mockResolvedValue({
-      currentAssignment: null
-    } as never);
-    const tx = transactionMock();
-    runTransaction(tx);
-    tx.order.findUnique.mockResolvedValue({
-      id: "order-1",
-      executionStatus: "UNASSIGNED",
-      currentAssignment: null
-    });
-    vi.mocked(enqueueInternalEvent).mockRejectedValue(new Error("outbox down"));
+  it.each(["operation log", "outbox"] as const)(
+    "returns an internal error when the %s write aborts the order transaction",
+    async (failurePoint) => {
+      vi.mocked(prisma.order.findUnique).mockResolvedValue({
+        currentAssignment: null
+      } as never);
+      const tx = transactionMock();
+      runTransaction(tx);
+      tx.order.findUnique.mockResolvedValue({
+        id: "order-1",
+        executionStatus: "UNASSIGNED",
+        currentAssignment: null
+      });
+      if (failurePoint === "operation log") {
+        tx.operationLog.create.mockRejectedValue(new Error("log down"));
+      } else {
+        vi.mocked(enqueueInternalEvent).mockRejectedValue(
+          new Error("outbox down")
+        );
+      }
 
-    const result = await cancelOrder({
-      orderId: "order-1",
-      reason: "客户取消",
-      operatorUserId: "dispatcher-1",
-      traceId: "trace-outbox-fail"
-    });
+      const result = await cancelOrder({
+        orderId: "order-1",
+        reason: "客户取消",
+        operatorUserId: "dispatcher-1",
+        traceId: `trace-${failurePoint}-fail`
+      });
 
-    expect(result).toEqual({
-      success: false,
-      error: expect.objectContaining({ code: "INTERNAL_ERROR" })
-    });
-  });
+      expect(result).toEqual({
+        success: false,
+        error: expect.objectContaining({ code: "INTERNAL_ERROR" })
+      });
+      expect(processInternalEvent).not.toHaveBeenCalled();
+      if (failurePoint === "operation log") {
+        expect(enqueueInternalEvent).not.toHaveBeenCalled();
+      }
+    }
+  );
 });

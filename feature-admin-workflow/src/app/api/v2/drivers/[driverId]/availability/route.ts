@@ -35,7 +35,9 @@ export async function PATCH(
     );
   }
 
-  let body: Partial<SetDriverAvailabilityCommandV2>;
+  let body: Partial<SetDriverAvailabilityCommandV2> & {
+    expectedPlanVersion?: unknown;
+  };
   try {
     const parsed: unknown = await request.json();
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -48,7 +50,9 @@ export async function PATCH(
         { traceId }
       );
     }
-    body = parsed as Partial<SetDriverAvailabilityCommandV2>;
+    body = parsed as Partial<SetDriverAvailabilityCommandV2> & {
+      expectedPlanVersion?: unknown;
+    };
   } catch {
     return failV2(
       createApiErrorV2(
@@ -56,6 +60,14 @@ export async function PATCH(
         "Request body must be a JSON object",
         { fields: { body: ["Expected valid JSON object"] } }
       ),
+      { traceId }
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "expectedPlanVersion")) {
+    return failV2(
+      createApiErrorV2("VALIDATION_FAILED", "Invalid availability command", {
+        fields: { expectedPlanVersion: ["Must not be provided"] }
+      }),
       { traceId }
     );
   }

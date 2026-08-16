@@ -31,6 +31,58 @@ function request(url: string, method = "GET", body?: unknown) {
   });
 }
 
+function requestWithoutTrace(url: string, method = "GET", body?: unknown) {
+  return new Request(url, {
+    method,
+    headers: { "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
+}
+
+const orderOperations = [
+  {
+    name: "GET /api/v2/orders",
+    invoke: () => list(request("http://localhost/api/v2/orders")),
+    service: listOrders
+  },
+  {
+    name: "GET /api/v2/orders/{orderId}",
+    invoke: () =>
+      detail(request("http://localhost/api/v2/orders/order-1"), context),
+    service: getOrderDetail
+  },
+  {
+    name: "PATCH /api/v2/orders/{orderId}",
+    invoke: () =>
+      update(
+        request("http://localhost/api/v2/orders/order-1", "PATCH", {
+          promisedPickupAt: "2026-08-16T16:00:00+08:00",
+          reason: "客户改期"
+        }),
+        context
+      ),
+    service: updateOrder
+  },
+  {
+    name: "POST /api/v2/orders/{orderId}/cancel",
+    invoke: () =>
+      cancel(
+        request("http://localhost/api/v2/orders/order-1/cancel", "POST", {
+          reason: "客户取消"
+        }),
+        context
+      ),
+    service: cancelOrder
+  }
+] as const;
+
+async function expectTrace(response: Response, expectedTraceId: string) {
+  const body = await response.json();
+  expect(body.traceId).toBe(expectedTraceId);
+  expect(response.headers.get("X-Trace-Id")).toBe(expectedTraceId);
+  return body;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getCurrentUser).mockResolvedValue({
@@ -58,6 +110,47 @@ beforeEach(() => {
 });
 
 describe("dispatcher order routes", () => {
+  it.each(orderOperations)(
+    "returns 401 with a matching trace ID for $name",
+    async ({ invoke, service }) => {
+      vi.mocked(getCurrentUser).mockResolvedValue(null);
+
+      const response = await invoke();
+      const body = await expectTrace(response, "trace-order-route");
+
+      expect(response.status).toBe(401);
+      expect(body.error.code).toBe("UNAUTHORIZED");
+      expect(service).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(orderOperations)(
+    "returns 403 with a matching trace ID for $name",
+    async ({ invoke, service }) => {
+      vi.mocked(getCurrentUser).mockResolvedValue({
+        id: "driver-user-1",
+        email: "driver@example.test",
+        name: "司机",
+        role: "driver",
+        driverId: "driver-1"
+      });
+
+      const response = await invoke();
+      const body = await expectTrace(response, "trace-order-route");
+
+      expect(response.status).toBe(403);
+      expect(body.error.code).toBe("FORBIDDEN");
+      expect(service).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(orderOperations)(
+    "preserves the supplied trace ID for $name",
+    async ({ invoke }) => {
+      await expectTrace(await invoke(), "trace-order-route");
+    }
+  );
+
   it("uses pagination defaults and clamps pageSize to 100", async () => {
     await list(request("http://localhost/api/v2/orders"));
     expect(listOrders).toHaveBeenLastCalledWith({
@@ -191,5 +284,40 @@ describe("dispatcher order routes", () => {
       operatorUserId: "dispatcher-1",
       traceId: "trace-order-route"
     });
+  });
+
+  it("rejects expectedPlanVersion on cancellation before calling the service", async () => {
+    const response = await cancel(
+      request("http://localhost/api/v2/orders/order-1/cancel", "POST", {
+        reason: "客户取消",
+        expectedPlanVersion: 4
+      }),
+      context
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error.code).toBe("VALIDATION_FAILED");
+    expect(body.error.details.fields.expectedPlanVersion).toEqual([
+      "Must not be provided"
+    ]);
+    expect(cancelOrder).not.toHaveBeenCalled();
+  });
+
+  it("generates a default UUID trace ID for a representative write route", async () => {
+    const response = await cancel(
+      requestWithoutTrace(
+        "http://localhost/api/v2/orders/order-1/cancel",
+        "POST",
+        { reason: "客户取消" }
+      ),
+      context
+    );
+    const body = await response.json();
+
+    expect(body.traceId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
+    expect(response.headers.get("X-Trace-Id")).toBe(body.traceId);
   });
 });

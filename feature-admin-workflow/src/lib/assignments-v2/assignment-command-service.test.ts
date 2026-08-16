@@ -985,7 +985,17 @@ describe("dispatcher plan edit commands", () => {
         details: { currentPlanVersion: 5 }
       })
     });
+    expect(acquireResourceLocks).not.toHaveBeenCalled();
+    expect(buildDispatchSnapshot).not.toHaveBeenCalled();
+    expect(buildEtaMatrix).not.toHaveBeenCalled();
+    expect(runDispatchV2).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(tx.assignment.create).not.toHaveBeenCalled();
+    expect(tx.order.update).not.toHaveBeenCalled();
+    expect(tx.driver.update).not.toHaveBeenCalled();
+    expect(tx.operationLog.create).not.toHaveBeenCalled();
+    expect(triggerAssignmentAssigned).not.toHaveBeenCalled();
+    expect(processInternalEvent).not.toHaveBeenCalled();
   });
 
   it("withdraws only PLANNED assignments with one version increment", async () => {
@@ -1030,6 +1040,49 @@ describe("dispatcher plan edit commands", () => {
       })
     );
   });
+
+  it.each(["operation log", "outbox"] as const)(
+    "returns an internal error when the %s write aborts the Assignment transaction",
+    async (failurePoint) => {
+      const tx = createTransactionMock();
+      runTransaction(tx);
+      tx.assignment.findUnique.mockResolvedValue({
+        id: "assignment-1",
+        orderId: "order-1",
+        driverId: "driver-1",
+        status: "ACTIVE",
+        driver: { planVersion: 7 },
+        order: {
+          currentAssignmentId: "assignment-1",
+          executionStatus: "PLANNED"
+        }
+      });
+      if (failurePoint === "operation log") {
+        tx.operationLog.create.mockRejectedValue(new Error("log down"));
+      } else {
+        vi.mocked(triggerAssignmentWithdrawn).mockRejectedValue(
+          new Error("outbox down")
+        );
+      }
+
+      const result = await withdrawAssignment({
+        assignmentId: "assignment-1",
+        reason: "事务失败验证",
+        expectedPlanVersion: 7,
+        operatorUserId: "dispatcher-1",
+        traceId: `trace-${failurePoint}-fail`
+      });
+
+      expect(result).toEqual({
+        success: false,
+        error: expect.objectContaining({ code: "INTERNAL_ERROR" })
+      });
+      expect(processInternalEvent).not.toHaveBeenCalled();
+      if (failurePoint === "operation log") {
+        expect(triggerAssignmentWithdrawn).not.toHaveBeenCalled();
+      }
+    }
+  );
 
   it("rejects withdrawal after service starts", async () => {
     const tx = createTransactionMock();
