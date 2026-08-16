@@ -6,13 +6,13 @@
 
 ## 一句话结论
 
-Gate 3 保持 `PASS`，运行候选与预生产证据不变。串行 API 候选 `feature/v2-dispatcher-api-wiring @ 152f7c5142131a030be560a863285eb6d32d0a2f` 已完成 T1-A、T1-B，并以 `--no-ff` 合入本地 `develop @ 8cfed6ad9464cc89acca69bbbae42af5d66b01c6`；合并后 `623 passed / 7 expected skipped`，lint、29/29 页面 build、diff check 和干净工作区全部通过。预生产仍为 9 个 migration，远程仍为 `ae471484…` 且未推送；2A/2B/2C 为 `AUTHORIZED / NOT_STARTED`，上下文已就绪，等待主控下发本次文档提交 SHA 和任务白名单。
+Gate 3 保持 `PASS`，运行候选与预生产证据不变。串行 API 已通过 T1 并合入；第二轮契约前置 `f591aca69e9f6e4a20061c94ea564b053abe7be0` 已冻结 `OperationLogV2` 和 metadata 输出边界，通过 `624 passed / 7 expected skipped`、lint、29/29 页面 build、diff check。2A/2B/2C 三个本地分支与 worktree 已创建，开发尚未启动；预生产仍为 9 个 migration，远程仍为 `ae471484…` 且未推送。
 
 ## 当前工作流状态
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
-| 文档治理 | `ROUND2_UNIFIED_BASELINE_CONTEXT_READY_LOCAL` | 统一代码基线 `8cfed6ad…`、T1、合并后回归与角色入口已同步 | 主控下发本次文档提交 SHA；未推送远程 |
+| 文档治理 | `ROUND2_CONTRACT_AND_WORKTREES_READY_LOCAL` | 契约代码锚点 `f591aca…`、API r17、角色入口与三 worktree 已同步 | 主控下发本次文档提交 SHA；未推送远程 |
 | 应用候选 | `958AFCA_GATE3_ACCEPTED_DEVELOP_HANDOFF_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变运行身份；代码历史交接点为 `develop @ 51ddb5f…`，最终状态激活 HEAD 为 `ae471484…` |
 | 依赖安全 | `COMPLETED` | [依赖安全返修](2026-08-01-gate3-dependency-security-remediation.md) | 依赖变化时重跑全套审计 |
 | migration 指纹 | `PREPROD_9_APPLIED_LOCAL_10_PASS` | 第 10 个 migration 提交 `c6850df0a85aab601c3034e542a0f0b575c9053e` | 隔离 PostgreSQL 已通过；预生产 9 个保持不变，未经授权不实施第 10 个 |
@@ -26,7 +26,7 @@ Gate 3 保持 `PASS`，运行候选与预生产证据不变。串行 API 候选 
 | 真实 10 单 | `REAL10_PASS_9_COMPLETED_1_INFEASIBLE_ALERT` | [真实 E2E 重验进度](2026-08-10-gate3r-real-e2e-retest-progress.md) | 保留全部成功与失败现场，不清理 |
 | Gate 3 总闸门 | `PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变候选与证据，进入受控阶段交接 |
 | 串行调度员 V2 API 接线 | `T1_PASS / MERGED_LOCAL / POST_MERGE_PASS` | 候选 `152f7c5…` 已合入 `develop @ 8cfed6ad…`；T1 与合并后全量回归通过 | 串行前置退出；保持本地合并且暂不推送 |
-| 第二轮并行 | `AUTHORIZED_NOT_STARTED / CONTEXT_READY_LOCAL` | [并行开发主计划](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md) §7.0 | 从主控下发的当前本地 `develop` HEAD 创建；其代码树锚点为 `8cfed6ad…` |
+| 第二轮并行 | `BRANCHES_CREATED / DEVELOPMENT_NOT_STARTED` | `feature/v2-admin-console`、`feature/v2-driver-workflow`、`feature/v2-observability` | 三分支统一对齐主控下发的当前本地 `develop` HEAD 后执行 T0 |
 
 ## 唯一代码、文档与迁移基线
 
@@ -59,7 +59,7 @@ gate3 code handoff develop merge: 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e
 round2 freeze source: local develop @ f90bac6ec5f80abff33635cab4b23c0f86795086
 round2 frozen contract source: local develop @ 117653e55ac69a8e0d20dbf9e9904fc874707f81
 formal serial API code baseline: local develop @ 0e8ea7fc70d523de2cfa81173f1a421cad16ade7
-round2 unified local develop baseline: 8cfed6ad9464cc89acca69bbbae42af5d66b01c6
+round2 contract code tree anchor: f591aca69e9f6e4a20061c94ea564b053abe7be0
 round2 merge first parent: b807b45bbd892745e42bcd8d1cd3e00f77ad12ed
 rejected dispatcher API candidate: feature/v2-dispatcher-api-wiring @ 319f73401359ef4a232a2217afaaef2ef4212af2
 superseded unaligned API remediation candidate: feature/v2-dispatcher-api-wiring @ 5b84ab4881e1a8da12672c19d87098674798e60c
@@ -70,8 +70,9 @@ data-model remediation branch: feature/v2-dispatch-event-constraint
 data-model remediation worktree: .worktrees/dispatch-event-constraint
 data-model remediation whitelist: prisma/migrations/20260816120000_extend_dispatch_event_outbox_types/{migration.sql,rollback.sql}
 remote tracking reference: origin/develop @ ae4714849fa965940b0df1c6766638cf398ac0ce (稍后处理)
-parallel branch code tree anchor: 8cfed6ad9464cc89acca69bbbae42af5d66b01c6
+parallel branch code tree anchor: f591aca69e9f6e4a20061c94ea564b053abe7be0
 parallel branch start and document baseline: 主控下发的当前本地 develop HEAD（同时包含上述代码树与本次治理文档）
+parallel worktrees: .worktrees/round2-admin-console | .worktrees/round2-driver-workflow | .worktrees/round2-observability
 ```
 
 中间提交、来源分支和主工作区未提交代码不属于 Gate 3 当前验收对象。当前 HEAD、Git 远程、ACR 与预生产 app/worker 均为 `958afca…@sha256:13e0…5bff`；Nginx 沿用原镜像、配置、证书和端口，只把运行 revision 刷新为 `958afca…`。`7595a649…`、`4eb3b485…`、`084649f4…` 与迁移期候选继续保留，运行不得混用；`08d84cfc…` 是被后续限流返修取代、未进入预生产运行的候选。app、worker、Nginx、本机结构化日志、轮转和 SLS 集中观测仍健康；G3E2E R2.2 基础资料禁止重复整批写入，所有失败证据继续保留。
@@ -91,6 +92,8 @@ parallel branch start and document baseline: 主控下发的当前本地 develop
   30 秒位置上报、120 秒过期；Gate 3 的单一导航、测试标记过滤和位置同源读取不得回退。
 - 调度员 13 个唯一 V2 URL 中，串行接线负责除 `/alerts`、`/logs` 外的 11 个；这两个路径
   继续由 2C 独占。V1 暂不删除，按兼容矩阵的切换与窗口关闭两个时点退出。
+- API r17 已把 `/logs` 冻结为 `PageResultV2<OperationLogV2>`；前后值只允许共享 DTO
+  白名单，原始 `metadataJson` 不得暴露。该契约提交为 `f591aca…`。
 - 串行 API 审计缺口已分层闭合：数据模型提交 `c6850df…` 位于祖先链；候选 `152f7c5…`
   已补齐人工计划、地址重编码、严格版本冲突、跨门店释放、完整 `modificationHistory`、
   12 操作鉴权/traceId、分页及事务测试。T1-A、T1-B 和合并后回归全部通过，并已
