@@ -1,7 +1,7 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`。第二轮为 `PREFLIGHT / DATA_MODEL_REMEDIATION_READY`：串行 API 候选 `319f734…` 审计 `FAIL`，API r15 已冻结返修口径；先独立完成 outbox CHECK migration，再返修 API 候选。两项复审、测试并形成新的批准 `develop` SHA 前不得启动 2A/2B/2C，远程同步稍后处理。
+> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`。第二轮为 `PREFLIGHT / API_REMEDIATION_REBASE_READY`：第 10 个 outbox CHECK migration `c6850df…` 已通过并进入本地 `develop`，API r16 统一 `AMAP` 枚举；应用候选 `5b84ab4…` 待重放新基线并补跨门店释放。复审、测试并形成新的批准 `develop` SHA 前不得启动 2A/2B/2C，远程同步稍后处理。
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
@@ -403,6 +403,8 @@ Gate 3 若因事务 outbox 必须修改上游业务写入点，仍由同一实�
 
 **2026-08-16 审计返修前置**：`feature/v2-dispatcher-api-wiring @ 319f73401359ef4a232a2217afaaef2ef4212af2` 因 outbox CHECK、人工计划完整性、地址重编码、跨门店释放和严格版本冲突缺口判定 `FAIL`，不得合入或进入正式测试。API r15 先冻结完整人工计划与三项读 DTO；数据模型唯一所有者随后从主控登记的新基线创建 `feature/v2-dispatch-event-constraint`，只新增 `20260816120000_extend_dispatch_event_outbox_types/migration.sql` 与同目录 `rollback.sql`。独立 migration 通过后合入 `develop`，API 返修分支再基于新 SHA 继续；审计 Agent 只复审，测试 Agent 在二审通过前保持等待。
 
+**2026-08-16 数据模型退出与 API 重放闸门**：`feature/v2-dispatch-event-constraint @ c6850df0a85aab601c3034e542a0f0b575c9053e` 已完成隔离 PostgreSQL 的 Forward → Rollback 阻断 → 安全 Rollback → Forward、Prisma 零漂移和全量回归，并快进进入本地 `develop`；预生产保持 9 个 migration。API r16 把依赖枚举笔误统一为共享 DTO 的 `AMAP`。应用返修候选 `5b84ab4881e1a8da12672c19d87098674798e60c` 必须从主控登记的新代码/文档基线重放 `319f734…` 与 `5b84ab4…`，随后只新增 `driver-command-service.ts` 及其测试的跨门店释放返修；禁止直接把 migration cherry-pick 到旧候选。
+
 ### 7.1 并行线 2A：调度员 Web
 
 建议分支：`feature/v2-admin-console`
@@ -672,7 +674,7 @@ Gate 3 若因事务 outbox 必须修改上游业务写入点，仍由同一实�
 - 后续追加发现 ETA Top-8 仍会裁掉本轮 A 槽新生成的 delivery cursor，导致可连续进入 B 的订单误报 `ETA_UNAVAILABLE`；已恢复计划池全部 delivery→pickup 必要组合，并补 `buildEtaMatrix()` → `runDispatchV2()` A/B 串联回归。
 - G3-3 本地开发已闭环：司机类事件按受影响门店加载全部活动司机参与比较；相同逻辑计划重试不回收/重建 Assignment 或递增 `planVersion`；outbox 只有持有当前租约的 worker 才计为处理成功；锁忙、Redis 不可用降级、过期快照重算均有独立编排测试。
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
-- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 与 Gate 3 `PASS` 证据保持不变；第二轮串行 API 候选 `319f734…` 审计 `FAIL`，API r15 返修契约已冻结，当前停在数据模型 outbox CHECK 返修前置，2A/2B/2C 未启动。
+- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 与 Gate 3 `PASS` 证据保持不变；数据模型补丁 `c6850df…` 已进入本地 `develop`，API r16 已冻结，当前停在 API 候选 `5b84ab4…` 重放新基线与跨门店释放返修，2A/2B/2C 未启动。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
 - 当前执行限制：不得再次变更 app、worker 或 Nginx，不得执行 migration、重复基础资料、清理任何失败样本或直接写业务数据库。错误 helper 产生的独立 `G3FAULT` 订单必须保留并与冻结 10 单分开统计。
-- 下一动作：数据模型 Agent 从主控登记的新代码/文档基线执行 `feature/v2-dispatch-event-constraint`，仅新增一对 forward/rollback SQL，并在获准的隔离 PostgreSQL 完成 Forward → Rollback → Forward；通过、合入 `develop` 后再返修 `319f734…`。远程同步稍后单独处理；新统一 `develop` SHA 形成前不得启动 2A/2B/2C。
+- 下一动作：API Agent 备份当前 `5b84ab4…` 指针，从主控登记的新代码/文档基线重放自共同祖先 `24ad517…` 以来的 `319f734…` 与 `5b84ab4…`，再只修改获批的两份司机命令文件补跨门店释放；二审和全量验收通过后方可合入。远程同步稍后单独处理；新统一 `develop` SHA 形成前不得启动 2A/2B/2C。

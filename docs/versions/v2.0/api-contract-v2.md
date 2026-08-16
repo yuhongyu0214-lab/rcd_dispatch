@@ -1,7 +1,7 @@
 # 人车单 V2 API 契约
 
-> 契约版本：`RCD-API-V2.0-R15-20260816`
-> 状态：第二轮串行 API 审计返修契约已冻结；数据模型约束返修先行
+> 契约版本：`RCD-API-V2.0-R16-20260816`
+> 状态：第二轮串行 API 审计返修契约已冻结；数据模型约束返修已通过，应用返修待对齐新基线
 > 实施约束：本文件只冻结契约，不含任何代码；TypeScript DTO、错误类型和契约测试在 Gate 2 落地
 > 上游依据：[PRD V2](prd-v2.md) · [数据架构 V2](data-architecture-v2.md) · [项目规则 V2](project-rules-v2.md)
 > 代码事实：`codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`
@@ -135,13 +135,13 @@ PageResultV2<T> = { items: T[], total: number, page: number, pageSize: number }
 - 新建 `MANUAL_LOCKED` Assignment 前必须得到非空 `sequenceNo`、`plannedDepartAt`、`plannedPickupAt`、`plannedCompleteAt`、`deadheadEtaMinutes`、`serviceEtaMinutes` 与 `lastEtaCalculatedAt`；`etaAvailable = true`。禁止先写不完整锁定工单再等待后续重排补算。
 - 快照和 ETA 在数据库事务外计算；写事务内重新锁定受影响订单与司机、再次校验单/双 `planVersion`，再原子提交 Assignment、订单、受影响司机版本、日志和 outbox。改派必须同时保持原司机与目标司机的剩余计划完整。
 - 指定司机没有可行 A/B/C 槽位时返回 400 `VALIDATION_FAILED`，`details.fields.driverId`（改派为 `toDriverId`）说明无可行计划，且不得写入任何事实。
-- 没有可用的真实或有效缓存 ETA 时返回 503 `DEPENDENCY_UNAVAILABLE`，`details.dependency = "amap"`，且不得写入 Assignment、订单状态、版本、日志或 outbox。
+- 没有可用的真实或有效缓存 ETA 时返回 503 `DEPENDENCY_UNAVAILABLE`，`details.dependency = "AMAP"`，且不得写入 Assignment、订单状态、版本、日志或 outbox。
 
 **订单地址修改与地理编码语义（冻结）**：
 
 - `pickupAddress` 或 `deliveryAddress` 实际变化时，服务端先在数据库事务外完成对应地址的高德地理编码；仅修改 `promisedPickupAt` 不调用地理编码。
 - 全部所需地理编码成功后，在同一数据库事务内原子提交地址与对应坐标，再写版本、日志和 outbox；不得提交“新地址 + 空坐标”的中间事实。
-- 高德失败、超时或返回空结果时返回 503 `DEPENDENCY_UNAVAILABLE`，`details.dependency = "amap"`；订单、坐标、`planVersion`、日志和 outbox 保持原状。
+- 高德失败、超时或返回空结果时返回 503 `DEPENDENCY_UNAVAILABLE`，`details.dependency = "AMAP"`；订单、坐标、`planVersion`、日志和 outbox 保持原状。
 
 **取消语义（冻结）**：
 
@@ -374,3 +374,4 @@ MapSnapshotV2 = {
 | V2.0-r13 | 2026-08-10 | 对齐当前候选 `958afca537b412fb972b6e180561a9b37022834d`：Gate 3 最小 E2E、ETA 重试、司机地图读取、H5 显示和全实例高德 3 QPS 限流返修均保持既有 HTTP 方法、路径、鉴权、DTO、状态码、错误码与 traceId 语义 |
 | V2.0-r14 | 2026-08-13 | 第二轮司机 H5 再冻结：不新增地图聚合路径，固定组合 `/driver/map`、`/driver/tasks`、`/driver/orders/unassigned`；保持 `DriverV2[]` 向后兼容并新增 `DriverOrderMarkerV2`/本人任务地图字段、15 秒读取和身份边界；同时明确调度员 V2 API 接线不授权提前删除 V1 |
 | V2.0-r15 | 2026-08-16 | 串行 API 审计返修冻结：计划编辑命令严格先校验版本且不推测 replay；手动分配/改派必须在提交前形成指定司机的完整 A/B/C 锁定计划；地址变化先地理编码再原子提交；冻结 `MapSnapshotV2` 顶层、订单修改历史摘要和 `/drivers` 分页 DTO |
+| V2.0-r16 | 2026-08-16 | 统一 `DEPENDENCY_UNAVAILABLE.details.dependency` 为共享 DTO 已冻结的大写枚举 `AMAP`；修正 r15 两处小写笔误，不改变错误码、状态码或实现范围 |
