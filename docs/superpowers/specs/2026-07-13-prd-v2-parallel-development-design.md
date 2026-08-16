@@ -1,7 +1,7 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`。第二轮为 `PREFLIGHT / SERIAL_API_WIRING_READY`；本轮状态同步提交作为正式代码/文档基线，完整 SHA 由主控任务卡登记，串行分支 `feature/v2-dispatcher-api-wiring` 必须对齐同一 SHA 且工作区干净后实施，远程同步稍后处理。完成本节串行前置并形成新的批准 `develop` SHA 前不得创建并行分支。
+> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`。第二轮为 `PREFLIGHT / DATA_MODEL_REMEDIATION_READY`：串行 API 候选 `319f734…` 审计 `FAIL`，API r15 已冻结返修口径；先独立完成 outbox CHECK migration，再返修 API 候选。两项复审、测试并形成新的批准 `develop` SHA 前不得启动 2A/2B/2C，远程同步稍后处理。
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
@@ -401,6 +401,8 @@ Gate 3 若因事务 outbox 必须修改上游业务写入点，仍由同一实�
 
 串行分支：`feature/v2-dispatcher-api-wiring`，worktree 为 `.worktrees/dispatcher-api-wiring`；正式基线为本轮状态同步提交，完整 SHA 由主控任务卡登记。该分支对齐基线后实施；合入并完成全量 test/lint/build 后，主控记录新的本地 `develop` 完整 SHA，才允许创建三条并行分支。
 
+**2026-08-16 审计返修前置**：`feature/v2-dispatcher-api-wiring @ 319f73401359ef4a232a2217afaaef2ef4212af2` 因 outbox CHECK、人工计划完整性、地址重编码、跨门店释放和严格版本冲突缺口判定 `FAIL`，不得合入或进入正式测试。API r15 先冻结完整人工计划与三项读 DTO；数据模型唯一所有者随后从主控登记的新基线创建 `feature/v2-dispatch-event-constraint`，只新增 `20260816120000_extend_dispatch_event_outbox_types/migration.sql` 与同目录 `rollback.sql`。独立 migration 通过后合入 `develop`，API 返修分支再基于新 SHA 继续；审计 Agent 只复审，测试 Agent 在二审通过前保持等待。
+
 ### 7.1 并行线 2A：调度员 Web
 
 建议分支：`feature/v2-admin-console`
@@ -670,7 +672,7 @@ Gate 3 若因事务 outbox 必须修改上游业务写入点，仍由同一实�
 - 后续追加发现 ETA Top-8 仍会裁掉本轮 A 槽新生成的 delivery cursor，导致可连续进入 B 的订单误报 `ETA_UNAVAILABLE`；已恢复计划池全部 delivery→pickup 必要组合，并补 `buildEtaMatrix()` → `runDispatchV2()` A/B 串联回归。
 - G3-3 本地开发已闭环：司机类事件按受影响门店加载全部活动司机参与比较；相同逻辑计划重试不回收/重建 Assignment 或递增 `planVersion`；outbox 只有持有当前租约的 worker 才计为处理成功；锁忙、Redis 不可用降级、过期快照重算均有独立编排测试。
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
-- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 已完成 Git、回归、ACR、预生产、真实 10 单、worker 积压恢复与应用回退。`084649f4…` 回退 30 秒、当前候选恢复 31 秒，最终 HTTPS、真实依赖、三容器 revision、单 worker 和 outbox 通过。最终一致性审查、文档追溯与主控裁决全部完成，Gate 3 为 `PASS`；第二轮已获准准备但尚未启动。
+- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 与 Gate 3 `PASS` 证据保持不变；第二轮串行 API 候选 `319f734…` 审计 `FAIL`，API r15 返修契约已冻结，当前停在数据模型 outbox CHECK 返修前置，2A/2B/2C 未启动。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
 - 当前执行限制：不得再次变更 app、worker 或 Nginx，不得执行 migration、重复基础资料、清理任何失败样本或直接写业务数据库。错误 helper 产生的独立 `G3FAULT` 订单必须保留并与冻结 10 单分开统计。
-- 下一动作：新 Agent 从主控任务卡登记的正式代码/文档基线执行 `feature/v2-dispatcher-api-wiring` §7.0 后端串行接线；远程同步稍后单独处理。串行任务通过、合入并形成新的批准 `develop` SHA 后，才从同一 SHA 创建 2A/2B/2C 分支。司机 H5 契约已按 PRD §9.2.2 与 API §2.2/§3.7 再冻结，不反向修改 Gate 3 验收范围。
+- 下一动作：数据模型 Agent 从主控登记的新代码/文档基线执行 `feature/v2-dispatch-event-constraint`，仅新增一对 forward/rollback SQL，并在获准的隔离 PostgreSQL 完成 Forward → Rollback → Forward；通过、合入 `develop` 后再返修 `319f734…`。远程同步稍后单独处理；新统一 `develop` SHA 形成前不得启动 2A/2B/2C。

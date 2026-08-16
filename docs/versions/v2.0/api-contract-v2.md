@@ -1,7 +1,7 @@
 # 人车单 V2 API 契约
 
-> 契约版本：`RCD-API-V2.0-R14-20260813`
-> 状态：Gate 3 应用候选复核通过；第二轮司机 H5 读取组合与字段边界已再冻结
+> 契约版本：`RCD-API-V2.0-R15-20260816`
+> 状态：第二轮串行 API 审计返修契约已冻结；数据模型约束返修先行
 > 实施约束：本文件只冻结契约，不含任何代码；TypeScript DTO、错误类型和契约测试在 Gate 2 落地
 > 上游依据：[PRD V2](prd-v2.md) · [数据架构 V2](data-architecture-v2.md) · [项目规则 V2](project-rules-v2.md)
 > 代码事实：`codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`
@@ -40,6 +40,10 @@
 - 响应结构：`data: { items: [...], total, page, pageSize }`。
 - 超出范围的 `pageSize` 按 100 截断；`page < 1` 返回 400。
 
+```text
+PageResultV2<T> = { items: T[], total: number, page: number, pageSize: number }
+```
+
 ### 1.5 错误码（冻结）
 
 | HTTP | code | 语义 | details 必含 |
@@ -56,7 +60,7 @@
 | 500 | `INTERNAL_ERROR` | 未分类服务端错误 | — |
 | 503 | `DEPENDENCY_UNAVAILABLE` | 高德 / Redis / 外部订单源不可用 | `dependency` |
 
-- ETA 不可用不是 503：调度接口正常返回，DTO 内 `etaAvailable: false` 并附 `etaUnavailableReason`；禁止假 ETA。
+- 自动重排与只读调度结果中的 ETA 不可用不是 503：正常返回，DTO 内 `etaAvailable: false` 并附 `etaUnavailableReason`；禁止假 ETA。手动分配/改派要创建 `MANUAL_LOCKED` 完整计划，适用 §2.1 的计划编辑例外：没有可用的真实或有效缓存 ETA 时不写入任何计划事实，返回 503 `DEPENDENCY_UNAVAILABLE`。
 
 ### 1.6 幂等与版本携带（冻结）
 
@@ -85,6 +89,8 @@
 | 可用性设置 | 幂等：重复设置为当前相同值返回 200 且 `data.replayed = true`，无任何副作用（不重复释放工单、不触发重排） |
 | 位置上报 | 按 `(driverId, capturedAt)` 去重，重复样本静默忽略并计入 `skipped` |
 
+分配、改派、撤回、解锁四类计划编辑命令没有独立幂等键，必须先在事务内校验客户端携带的 `expected*PlanVersion`，再判断状态与业务前置条件。版本不匹配一律返回 409 `PLAN_VERSION_CONFLICT`；不得仅凭当前状态相同、已有同类日志或已有 Assignment 推测为同一请求并返回 `replayed: true`。并发重复请求由调度短锁或版本冲突拒绝。
+
 `planVersion` 归属司机计划聚合（每名司机一个计数器），不属于单个 Assignment；定义见词汇表 §6 与数据架构 §6。
 
 ### 1.7 角色（冻结）
@@ -111,17 +117,31 @@
 | GET | `/api/v2/map/snapshot` | 全局快照：上班司机位置 + 全部可见订单点位 + OPEN 预警计数 |
 | GET | `/api/v2/orders` | 订单池分页；过滤：`executionStatus`、`feasibility`、`slot`、`storeCode`、`keyword` |
 | GET | `/api/v2/orders/{orderId}` | 订单详情（含当前 Assignment、可行性、预警、修改历史摘要） |
-| PATCH | `/api/v2/orders/{orderId}` | 修改 `promisedPickupAt` / `pickupAddress` / `deliveryAddress`；`reason` 必填；立即重算 |
+| PATCH | `/api/v2/orders/{orderId}` | 修改 `promisedPickupAt` / `pickupAddress` / `deliveryAddress`；`reason` 必填；地址变化按下方地理编码语义提交，成功后立即重算 |
 | POST | `/api/v2/orders/{orderId}/cancel` | 取消订单 `{ reason }`；合法前置状态 `UNASSIGNED / PLANNED / EN_ROUTE`；副作用见下方“取消语义” |
-| GET | `/api/v2/drivers` | 司机列表；含班次状态、可用性、位置新鲜度、A/B/C 摘要 |
+| GET | `/api/v2/drivers` | 司机列表；返回 `PageResultV2<DriverV2>`，含班次状态、可用性、位置新鲜度、A/B/C 摘要 |
 | PATCH | `/api/v2/drivers/{driverId}/availability` | 设置 `{ availability: AVAILABLE 或 UNAVAILABLE, reason }`；设为 `UNAVAILABLE` 时未出发工单全部释放并触发重排，执行中（`EN_ROUTE`/`IN_SERVICE`）工单继续执行到完成；重复设置相同值返回 200 且 `data.replayed = true`，无副作用（§1.6） |
 | GET | `/api/v2/drivers/{driverId}/plan` | 该司机 A/B/C 时间轴（含 `planVersion`、衔接 ETA、模块时长、迟到风险） |
-| POST | `/api/v2/assignments` | 手动分配 `{ orderId, driverId, reason, expectedPlanVersion }` → `MANUAL_LOCKED`；`expectedPlanVersion` 为目标司机计划版本 |
-| POST | `/api/v2/assignments/{assignmentId}/reassign` | 改派 `{ toDriverId, reason, expectedFromPlanVersion, expectedToPlanVersion }`；`toDriverId` 等于当前司机返回 400；`IN_SERVICE` 服务端拒绝 |
+| POST | `/api/v2/assignments` | 手动分配 `{ orderId, driverId, reason, expectedPlanVersion }` → 完整 `MANUAL_LOCKED` 计划；`expectedPlanVersion` 为目标司机计划版本；客户端不指定槽位 |
+| POST | `/api/v2/assignments/{assignmentId}/reassign` | 改派 `{ toDriverId, reason, expectedFromPlanVersion, expectedToPlanVersion }` → 原/目标司机完整计划；`toDriverId` 等于当前司机返回 400；`IN_SERVICE` 服务端拒绝 |
 | POST | `/api/v2/assignments/{assignmentId}/withdraw` | 撤回 → `UNASSIGNED`，`{ reason, expectedPlanVersion }`（该工单所属司机计划版本） |
 | POST | `/api/v2/assignments/{assignmentId}/unlock` | 解除 `MANUAL_LOCKED`，`{ reason, expectedPlanVersion }`（同上） |
 | GET | `/api/v2/alerts` | 预警分页；过滤 `status=OPEN/RESOLVED`；预警解决由系统在重算后自动执行，无手工 resolve 接口 |
 | GET | `/api/v2/logs` | 操作日志分页；过滤 `orderId` / `driverId` / `traceId` / `action` |
+
+**手动分配/改派完整计划语义（冻结）**：
+
+- 客户端只指定目标司机，不新增槽位字段；服务端使用 V2 调度核心，在指定目标司机范围内按既有可行性与择优规则选择 A/B/C 槽位。
+- 新建 `MANUAL_LOCKED` Assignment 前必须得到非空 `sequenceNo`、`plannedDepartAt`、`plannedPickupAt`、`plannedCompleteAt`、`deadheadEtaMinutes`、`serviceEtaMinutes` 与 `lastEtaCalculatedAt`；`etaAvailable = true`。禁止先写不完整锁定工单再等待后续重排补算。
+- 快照和 ETA 在数据库事务外计算；写事务内重新锁定受影响订单与司机、再次校验单/双 `planVersion`，再原子提交 Assignment、订单、受影响司机版本、日志和 outbox。改派必须同时保持原司机与目标司机的剩余计划完整。
+- 指定司机没有可行 A/B/C 槽位时返回 400 `VALIDATION_FAILED`，`details.fields.driverId`（改派为 `toDriverId`）说明无可行计划，且不得写入任何事实。
+- 没有可用的真实或有效缓存 ETA 时返回 503 `DEPENDENCY_UNAVAILABLE`，`details.dependency = "amap"`，且不得写入 Assignment、订单状态、版本、日志或 outbox。
+
+**订单地址修改与地理编码语义（冻结）**：
+
+- `pickupAddress` 或 `deliveryAddress` 实际变化时，服务端先在数据库事务外完成对应地址的高德地理编码；仅修改 `promisedPickupAt` 不调用地理编码。
+- 全部所需地理编码成功后，在同一数据库事务内原子提交地址与对应坐标，再写版本、日志和 outbox；不得提交“新地址 + 空坐标”的中间事实。
+- 高德失败、超时或返回空结果时返回 503 `DEPENDENCY_UNAVAILABLE`，`details.dependency = "amap"`；订单、坐标、`planVersion`、日志和 outbox 保持原状。
 
 **取消语义（冻结）**：
 
@@ -213,6 +233,28 @@ remark?, cancelledAt?,
 currentAssignmentId?, createdAt, updatedAt
 ```
 
+`GET /api/v2/orders/{orderId}` 的 `data.modificationHistory` 固定为 `OrderModificationSummaryV2[]`：
+
+```text
+OrderModificationScalarV2 = string | number | boolean | null
+
+OrderModificationSummaryV2 = {
+  id: string,
+  operator: { id: string, name: string },
+  reason: string | null,
+  changes: Array<{
+    field: string,
+    before: OrderModificationScalarV2,
+    after: OrderModificationScalarV2
+  }>,
+  traceId: string | null,
+  createdAt: ISO 8601 with timezone
+}
+```
+
+- 只包含 `ORDER_MODIFY` 日志，按 `createdAt` 新到旧排序；同一摘要的 `changes` 按 `field` 稳定排序。
+- 不向前端暴露原始 `metadataJson`；本段只冻结修改历史字段，不扩展其他订单详情字段。
+
 ### 3.2 AssignmentV2
 
 ```text
@@ -240,6 +282,8 @@ slots: { A?: AssignmentSummary, B?: AssignmentSummary, C?: AssignmentSummary }
 ```
 
 候选司机 = `onShift = true` 且 `availability = AVAILABLE` 且 `locationFreshness = FRESH`（PRD §6.1）。
+
+`GET /api/v2/drivers` 的 `data` 固定为 `PageResultV2<DriverV2>`；`GET /api/v2/driver/map` 继续返回 `DriverV2[]`，两者不得混用。
 
 ### 3.4 ServicePlanV2
 
@@ -289,6 +333,21 @@ pickupAddress?, deliveryAddress?
 - 坐标或展示地址缺失时整体省略对应可选字段，禁止填充 `0`、空字符串或假坐标。
 - 该 DTO 不含客户、手机号、来源原文、其他司机身份或车辆匹配字段。
 
+### 3.8 MapSnapshotV2（调度员地图）
+
+`GET /api/v2/map/snapshot` 的统一 V2 响应包装内，`data` 顶层字段精确为：
+
+```text
+MapSnapshotV2 = {
+  drivers: DriverV2[],
+  orders: OrderV2[],
+  openAlertCount: number
+}
+```
+
+- `openAlertCount` 是非负整数，只统计 `OPEN` 预警。
+- 顶层不增加 `generatedAt`、`stores` 或 `alerts`；如未来需要，必须先修订契约。
+
 ## 4. 与调度核心的关系
 
 - 本契约的 DTO 是页面与 API 的边界；调度核心只接收内部输入类型（Gate 2 定义），不直接消费 HTTP DTO。
@@ -314,3 +373,4 @@ pickupAddress?, deliveryAddress?
 | V2.0-r12 | 2026-08-08 | 对齐可观测性候选 `4eb3b4857caae9730eb70dd9f2fb152bd8972ca0`：发布 revision、日志字段、Nginx 访问日志与轮转返修不改变 HTTP 方法、路径、鉴权、DTO、状态码、错误码或 traceId 语义 |
 | V2.0-r13 | 2026-08-10 | 对齐当前候选 `958afca537b412fb972b6e180561a9b37022834d`：Gate 3 最小 E2E、ETA 重试、司机地图读取、H5 显示和全实例高德 3 QPS 限流返修均保持既有 HTTP 方法、路径、鉴权、DTO、状态码、错误码与 traceId 语义 |
 | V2.0-r14 | 2026-08-13 | 第二轮司机 H5 再冻结：不新增地图聚合路径，固定组合 `/driver/map`、`/driver/tasks`、`/driver/orders/unassigned`；保持 `DriverV2[]` 向后兼容并新增 `DriverOrderMarkerV2`/本人任务地图字段、15 秒读取和身份边界；同时明确调度员 V2 API 接线不授权提前删除 V1 |
+| V2.0-r15 | 2026-08-16 | 串行 API 审计返修冻结：计划编辑命令严格先校验版本且不推测 replay；手动分配/改派必须在提交前形成指定司机的完整 A/B/C 锁定计划；地址变化先地理编码再原子提交；冻结 `MapSnapshotV2` 顶层、订单修改历史摘要和 `/drivers` 分页 DTO |

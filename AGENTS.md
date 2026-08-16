@@ -59,7 +59,7 @@ Gate -1 基线整理（已通过，develop @ 37ee8a3）
 
 - 每个 Gate 通过验收后才能创建下一阶段分支；不得提前建分支。
 - Gate 3 当前唯一代码/ACR/预生产运行候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`；app、worker 与 Nginx release revision 已对齐，Nginx 原镜像、配置、证书和端口未变。更早运行/回退候选继续保留，不得使用 `latest` 或混用候选。
-- Gate 3-R 生产主线为阿里云；Railway 只保留历史 Demo 证据。预生产备份、9 个 migration、最小权限、app/worker/Nginx/HTTPS/SLS、冻结真实 10 单、worker 积压恢复和应用回退均通过；`084649f4…` 回退 30 秒、`958afca…` 恢复 31 秒。2026-08-11 主控最终裁决 Gate 3 `PASS`。第二轮当前为 `PREFLIGHT / SERIAL_API_WIRING_READY`：司机 H5 与调度员 V2 API 接线契约已冻结，本轮状态同步提交作为正式代码/文档基线，完整 SHA 由主控任务卡登记；`feature/v2-dispatcher-api-wiring` 必须快进到同一 SHA 且保持干净后方可实施。该任务通过、合入并形成新的批准 `develop` SHA 前，不得创建或启动 2A/2B/2C 分支；远程同步稍后处理。禁止重复部署、migration、基础资料写入或证据清理。
+- Gate 3-R 生产主线为阿里云；Railway 只保留历史 Demo 证据。预生产备份、9 个 migration、最小权限、app/worker/Nginx/HTTPS/SLS、冻结真实 10 单、worker 积压恢复和应用回退均通过；`084649f4…` 回退 30 秒、`958afca…` 恢复 31 秒。2026-08-11 主控最终裁决 Gate 3 `PASS`。第二轮当前为 `PREFLIGHT / DATA_MODEL_REMEDIATION_READY`：串行 API 候选 `319f734…` 审计 `FAIL`，API r15 返修契约已冻结；必须先从主控登记的新代码/文档基线创建 `feature/v2-dispatch-event-constraint`，只新增 outbox CHECK forward/rollback migration，再返修 API 候选。两项通过、合入并形成新的批准 `develop` SHA 前，不得启动 2A/2B/2C；远程同步稍后处理。禁止未经授权执行预生产 migration、部署、基础资料写入或证据清理。
 - V2 分支命名 `feature/v2-*`；合并路径仍为 `feature/* → develop → main`。
 - 每个分支只能修改自己的独占文件范围；Schema、公共 DTO、共享样式、logger、调度事务各有唯一所有者线。
 

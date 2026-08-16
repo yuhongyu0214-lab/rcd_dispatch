@@ -1,7 +1,7 @@
 # 人车单 V2 Agent 公共上下文（Layer 0）
 
 > 文档类型：`DERIVED / LAYER_0`
-> 上下文版本：`RCD-AGENT-CONTEXT-20260813-R27`
+> 上下文版本：`RCD-AGENT-CONTEXT-20260816-R28`
 > 适用范围：所有新建或重新启动的 Agent
 > 权威范围：仅提供项目目标、当前阶段、公共纪律、模块边界和命令入口
 > 非权威范围：产品行为、Schema、HTTP DTO、枚举、基础设施细节和任务验收标准
@@ -12,7 +12,7 @@
 
 人车单调度系统 V2 面向汽车租赁调度，主线是订单接入、实时位置、司机班次、A/B/C 工单时间轴、真实 ETA、调度事务和执行闭环。
 
-Gate 3 已于 2026-08-11 最终裁决 `PASS`。第二轮处于 `PREFLIGHT / SERIAL_API_WIRING_READY`：司机 H5 产品/API 已按当前已验收行为再冻结；本轮状态同步提交是串行接线的正式代码/文档基线，完整 SHA 由主控任务卡登记。`feature/v2-dispatcher-api-wiring` 必须快进到该 SHA 且工作区干净后方可实施；该任务通过、合入并形成新的批准 `develop` SHA 前，不得创建或启动 2A/2B/2C 分支。远程同步稍后处理。
+Gate 3 已于 2026-08-11 最终裁决 `PASS`。第二轮处于 `PREFLIGHT / DATA_MODEL_REMEDIATION_READY`：串行 API 候选 `319f73401359ef4a232a2217afaaef2ef4212af2` 经代码审计判定 `FAIL`，不得合入或进入正式测试；API 审计返修契约已冻结，本轮同步提交是数据模型返修的新代码/文档基线，完整 SHA 由主控任务卡登记。必须先完成独立 outbox CHECK migration，再返修 API 候选；两者通过并形成新的批准 `develop` SHA 前，不得启动 2A/2B/2C。远程同步稍后处理。
 
 ## 2. 当前版本与闸门
 
@@ -23,18 +23,18 @@ Gate 3 已于 2026-08-11 最终裁决 `PASS`。第二轮处于 `PREFLIGHT / SERI
 | 远程代码 SHA | `958afca537b412fb972b6e180561a9b37022834d`，已完成普通快进推送与远端核验 |
 | 文档基线 | Gate 3 `PASS` 内容基线 `feature/v2-gate3-review-remediation @ 464ee5d6ffdb435d76b65f9814d82e4666fd84a9`，本地/upstream/GitHub 远程一致 |
 | Gate 3→develop | 交接分支 `b853a7af245942758de1cd46c9a25c384c08ec62`；代码交接合并点 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`，本地/upstream/GitHub 远程一致 |
-| 第二轮冻结与串行基线 | 本轮状态同步提交为正式代码/文档基线，完整 SHA 由主控任务卡登记；`feature/v2-dispatcher-api-wiring` 与 `.worktrees/dispatcher-api-wiring` 必须对齐同一 SHA 且保持干净；远程同步稍后处理 |
+| 第二轮返修基线 | 本轮 API 契约/状态同步提交为数据模型返修的正式代码/文档基线，完整 SHA 由主控任务卡登记；`feature/v2-dispatch-event-constraint` 从该 SHA 创建；远程同步稍后处理 |
 | 数据库实施 | 空 PostgreSQL 演练已验证 9 个 migration、最终 Schema、8 个 rollback 和 5 类护栏；真实预生产已完成备份、9 个 migration、最小权限和 G3E2E R2.2 基础资料 `3/6/5/8` 核验，owner 已关闭；首轮失败样本与本轮通过/失败事实均保留，禁止重复 bootstrap 或清理 |
 | 候选状态 | `DEPLOYED / REAL_E2E_PASS / FAULT_ROLLBACK_PASS / FINAL_CONSISTENCY_RUNTIME_PASS`：代码、镜像、运行资源、真实 10 单和故障/回退证据一致 |
 | 镜像 | app/worker 运行 `958afca…` → `sha256:13e0…5bff`；Nginx 原镜像/配置/证书/端口不变且 release revision 对齐；更早运行/回退候选继续保留，不得混用 |
 | 基础设施 | 阿里云主线；ECS 上 app/worker/Nginx、自签名 HTTPS、结构化日志、`json-file` 轮转与 LoongCollector `3.2.6` 已验收；SLS 运行/安全日志、查询、脱敏、30/180 天留存、告警、通知和预算通过；正式域名/备案/可信证书延后 |
 | Gate 3 | `PASS`（2026-08-11 最终裁决） |
-| 第二轮并行 | `PREFLIGHT / SERIAL_API_WIRING_READY`；H5 再冻结已完成，串行接线分支完成正式基线对齐后实施；2A/2B/2C 尚未创建 |
+| 第二轮并行 | `PREFLIGHT / DATA_MODEL_REMEDIATION_READY`；API 候选审计 `FAIL`，先修 outbox 数据库约束，再做应用返修；2A/2B/2C 尚未启动 |
 | Railway | 仅历史 Demo 证据，不是生产基线 |
 
 状态变化只认 [项目状态总览](../status/README.md)；文档入口只认 [文档版本总入口](../versions/README.md)。
 
-当前 Gate 3 运行候选仍为 `958afca…@sha256:13e0…5bff`，预生产、真实 10 单、故障恢复和回退证据保持不可变。第二轮 H5 复用 `/api/v2/driver/map`、`/api/v2/driver/tasks`、`/api/v2/driver/orders/unassigned`，15 秒读取、30 秒位置上报、120 秒过期；已验收的单一导航入口、`[G3E2E]` 展示过滤、位置同源读取和身份解析不得回退。调度员 13 个唯一 V2 URL 中，串行接线拥有除 `/alerts`、`/logs` 外的 11 个；后两者由 2C 独占。V1 暂不删除，退出只按兼容矩阵 §7。不得重复部署、migration、基础资料或证据清理；服务端高德 Key 只能交给 app。
+当前 Gate 3 运行候选仍为 `958afca…@sha256:13e0…5bff`，预生产、真实 10 单、故障恢复和回退证据保持不可变。第二轮 H5 契约与调度员路径所有权不变；`319f734…` 只作为审计失败候选保留。数据模型返修只允许新增 `20260816120000_extend_dispatch_event_outbox_types` 下的 forward/rollback SQL，不修改既有 migration、Schema 或业务代码；隔离 PostgreSQL 验收须获单独授权，禁止连接预生产 RDS。其后 API 返修必须覆盖完整人工计划、地址地理编码、跨门店释放和严格版本冲突。不得重复部署、基础资料或证据清理；服务端高德 Key 只能交给 app。
 
 ## 3. 公共模块边界
 
