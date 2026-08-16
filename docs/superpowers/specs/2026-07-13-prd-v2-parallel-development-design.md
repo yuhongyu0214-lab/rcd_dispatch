@@ -1,7 +1,7 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`。第二轮为 `PREFLIGHT / API_REMEDIATION_REBASE_READY`：第 10 个 outbox CHECK migration `c6850df…` 已通过并进入本地 `develop`，API r16 统一 `AMAP` 枚举；应用候选 `5b84ab4…` 待重放新基线并补跨门店释放。复审、测试并形成新的批准 `develop` SHA 前不得启动 2A/2B/2C，远程同步稍后处理。
+> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`。第二轮串行 API 最终候选为 `76cd536defe21c900af774d142854e22cf9fb86c`，代码审计状态 `PASS / TEST_PENDING`；正式测试和合并后回归通过前不得启动 2A/2B/2C，远程同步稍后处理。
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
@@ -405,6 +405,17 @@ Gate 3 若因事务 outbox 必须修改上游业务写入点，仍由同一实�
 
 **2026-08-16 数据模型退出与 API 重放闸门**：`feature/v2-dispatch-event-constraint @ c6850df0a85aab601c3034e542a0f0b575c9053e` 已完成隔离 PostgreSQL 的 Forward → Rollback 阻断 → 安全 Rollback → Forward、Prisma 零漂移和全量回归，并快进进入本地 `develop`；预生产保持 9 个 migration。API r16 把依赖枚举笔误统一为共享 DTO 的 `AMAP`。应用返修候选 `5b84ab4881e1a8da12672c19d87098674798e60c` 必须从主控登记的新代码/文档基线重放 `319f734…` 与 `5b84ab4…`，随后只新增 `driver-command-service.ts` 及其测试的跨门店释放返修；禁止直接把 migration cherry-pick 到旧候选。
 
+**2026-08-16 正式测试闸门（冻结）**：最终候选 `feature/v2-dispatcher-api-wiring @ 76cd536defe21c900af774d142854e22cf9fb86c` 已通过代码审计，正式基线为 `0e8ea7fc70d523de2cfa81173f1a421cad16ade7`，相对基线严格为 26 个批准文件，数据补丁 `c6850df…` 位于祖先链。测试 Agent 必须依次完成：
+
+1. 重核分支、HEAD、祖先链、26 文件边界与干净工作区；执行全量 `pnpm test`、`pnpm lint`、`pnpm build` 和 `git diff --check`。
+2. 在隔离 PostgreSQL 验证第 10 个 migration 后 `DispatchEventOutbox_type_check` 精确允许 17 种事件；禁止连接预生产 RDS/Tair。
+3. 建立一名司机与两个不同门店的 `PLANNED` 工单，执行停派并验证：两个 Assignment 均为 `RECYCLED`、两个订单均回到 `UNASSIGNED`、司机 `planVersion` 只递增一次、可用性日志一条、回收日志两条、outbox 两条且 `driverId/orderId/assignmentId/traceId` 完整；消费后两个订单门店均进入重排范围。
+4. 重复提交相同 availability 时，不新增日志、事件或版本变化；注入 outbox 写入失败时事务整体回滚，不得出现半完成状态。
+5. 覆盖 Redis `acquired/busy/unavailable`，以及高德成功、超时、空结果；高德失败返回 503 且零业务写入。
+6. 验证手动分配/改派的旧版本冲突、到达后拒绝、完整计划字段和双司机版本原子性。本阶段无 UI 变化，浏览器矩阵不适用。
+
+正式测试通过后，由主控裁决是否 `--no-ff` 合入 `develop`；合并后必须再跑一次全量验证并记录新的 `develop` SHA，之后才能授权 2A/2B/2C。
+
 ### 7.1 并行线 2A：调度员 Web
 
 建议分支：`feature/v2-admin-console`
@@ -674,7 +685,7 @@ Gate 3 若因事务 outbox 必须修改上游业务写入点，仍由同一实�
 - 后续追加发现 ETA Top-8 仍会裁掉本轮 A 槽新生成的 delivery cursor，导致可连续进入 B 的订单误报 `ETA_UNAVAILABLE`；已恢复计划池全部 delivery→pickup 必要组合，并补 `buildEtaMatrix()` → `runDispatchV2()` A/B 串联回归。
 - G3-3 本地开发已闭环：司机类事件按受影响门店加载全部活动司机参与比较；相同逻辑计划重试不回收/重建 Assignment 或递增 `planVersion`；outbox 只有持有当前租约的 worker 才计为处理成功；锁忙、Redis 不可用降级、过期快照重算均有独立编排测试。
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
-- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 与 Gate 3 `PASS` 证据保持不变；数据模型补丁 `c6850df…` 已进入本地 `develop`，API r16 已冻结，当前停在 API 候选 `5b84ab4…` 重放新基线与跨门店释放返修，2A/2B/2C 未启动。
+- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 与 Gate 3 `PASS` 证据保持不变；串行 API 最终候选 `76cd536…` 代码审计 `PASS / TEST_PENDING`，当前停在冻结正式测试，2A/2B/2C 未启动。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
 - 当前执行限制：不得再次变更 app、worker 或 Nginx，不得执行 migration、重复基础资料、清理任何失败样本或直接写业务数据库。错误 helper 产生的独立 `G3FAULT` 订单必须保留并与冻结 10 单分开统计。
-- 下一动作：API Agent 备份当前 `5b84ab4…` 指针，从主控登记的新代码/文档基线重放自共同祖先 `24ad517…` 以来的 `319f734…` 与 `5b84ab4…`，再只修改获批的两份司机命令文件补跨门店释放；二审和全量验收通过后方可合入。远程同步稍后单独处理；新统一 `develop` SHA 形成前不得启动 2A/2B/2C。
+- 下一动作：测试 Agent 以 `76cd536…` 为候选、`0e8ea7f…` 为正式基线执行 §7.0 冻结测试；通过后由主控裁决 `--no-ff` 合入，并在合并后的 `develop` 再跑全量验证。远程同步稍后单独处理；新统一 `develop` SHA 形成前不得启动 2A/2B/2C。

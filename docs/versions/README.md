@@ -1,6 +1,6 @@
 # 人车单项目文档版本总入口
 
-> 版本戳：`RCD-DOC-REGISTRY-20260816-R30`
+> 版本戳：`RCD-DOC-REGISTRY-20260816-R31`
 > 建立日期：2026-07-13
 > 治理更新时间：2026-08-16
 > 归档方式：现行权威集中到 `v2.0/`；已融合或冲突的旧方案从工作树清场，历史由 Git 追溯
@@ -30,8 +30,8 @@
 | 构建、部署与回退 | V2.0-r13 | Gate 3 `PASS` 文档基线 `464ee5d…` 已远程核验；分阶段和禁止重复 migration 规则不变 | [部署指南 V2](v2.0/deployment-guide-v2.md) |
 | 生产运行与恢复 | V2.0-r6 | 最终运行资源、健康、10 单、outbox 和证据一致性通过；整机/RDS 灾备仍为独立演练 | [运维指南 V2](v2.0/operations-guide-v2.md) |
 | 基础设施决策与替代历史 | V2.0-r3 | INFRA-001～023 已登记；公网 IP 预生产演示获准，正式上线条件不变 | [基础设施决策日志](v2.0/infrastructure-decision-log.md) |
-| 项目当前状态 | 2026-08-16 | Gate 3 `PASS`；第 10 个 outbox migration 已通过并进入本地 `develop`，API 返修待重放新基线 | [状态总览](../status/README.md) |
-| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260816-R29 | Layer 0；所有 Agent 必读；不超过 150 行；API 返修正式基线完整 SHA 由主控任务卡登记 | [Agent 公共上下文](../context/agent-common-context.md) |
+| 项目当前状态 | 2026-08-16 | Gate 3 `PASS`；串行 API 候选 `76cd536…` 代码审计 `PASS / TEST_PENDING`，2A/2B/2C 未启动 | [状态总览](../status/README.md) |
+| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260816-R30 | Layer 0；所有 Agent 必读；不超过 150 行；正式测试候选与基线已登记 | [Agent 公共上下文](../context/agent-common-context.md) |
 | V1 产品与开发主线 | V1.x | 历史只读 | [V1 历史索引](v1/README.md) |
 
 ## 文档权威顺序（按领域拆分，唯一权威口径）
@@ -169,7 +169,7 @@ remote commit: 958afca537b412fb972b6e180561a9b37022834d
 2. 新候选的 Schema/migration tree 与完成一次性空 PostgreSQL 演练的旧冻结候选完全相同；原有 9 个正向 migration、最终 Schema、8 个 rollback 和五类安全护栏结论继续有效。
 3. 冻结真实 10 单已完成：订单 1～6、8～10 共 9 单完成，订单 7 按预期为 `INFEASIBLE` 且保留 1 条开放预警；并发、旧版本、到达后改排拒绝与订单 10 幂等重放均通过。首轮失败、旧映射、边界抖动和错误 helper 现场继续保留，不得清理。
 4. 最终一致性审查确认本地/远程代码、ACR digest、ECS 运行身份、真实依赖、10 单结果和故障/回退证据一致；文档口径已返修，并以 `feature/v2-gate3-review-remediation @ 57ef86c43bf220f48774e130575c40b8c94a83d5` 形成可追溯基线，本地、upstream 与 GitHub 远程核验一致。
-5. 主控已于 2026-08-11 最终裁决 Gate 3 `PASS`。2026-08-16 数据模型返修 `c6850df0a85aab601c3034e542a0f0b575c9053e` 已在隔离 PostgreSQL 完成 Forward → Rollback 阻断 → 安全 Rollback → Forward、零漂移与全量回归，并快进进入本地 `develop`；预生产仍保持 9 个 migration。API 返修候选 `5b84ab4881e1a8da12672c19d87098674798e60c` 尚非该提交后继，必须基于本轮新基线重放，再补跨门店释放、复审和全量验收。Web、司机端和观测三分支仍不得启动；远程仍为 `ae471484…`，稍后处理，且不得执行预生产 migration、部署、基础资料或证据清理。
+5. 主控已于 2026-08-11 最终裁决 Gate 3 `PASS`。2026-08-16 串行 API 最终候选 `76cd536defe21c900af774d142854e22cf9fb86c` 已基于正式基线 `0e8ea7fc70d523de2cfa81173f1a421cad16ade7` 完成代码审计，数据补丁 `c6850df…` 位于祖先链，状态为 `PASS / TEST_PENDING`。正式测试、主控合并裁决和合并后全量回归完成前，Web、司机端和观测三分支不得启动；远程仍为 `ae471484…`，稍后处理，且不得执行预生产 migration、部署、基础资料或证据清理。
 
 状态事实和阻断项统一在[状态总览](../status/README.md)维护；状态文档不得修改领域契约。
 
