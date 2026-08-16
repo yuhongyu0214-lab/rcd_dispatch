@@ -5,4 +5,5 @@ export * from "./dispatch";
 export * from "./domain";
 export * from "./driver";
 export * from "./eta";
+export * from "./operation-log";
 export * from "./order";

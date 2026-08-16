@@ -1,7 +1,7 @@
 # 人车单 V2 API 契约
 
-> 契约版本：`RCD-API-V2.0-R16-20260816`
-> 状态：第二轮串行 API 审计返修契约已冻结；数据模型约束返修已通过，应用返修待对齐新基线
+> 契约版本：`RCD-API-V2.0-R17-20260816`
+> 状态：第二轮并行前置契约已冻结；`OperationLogV2` 响应与 metadata 边界已收口
 > 实施约束：本文件只冻结契约，不含任何代码；TypeScript DTO、错误类型和契约测试在 Gate 2 落地
 > 上游依据：[PRD V2](prd-v2.md) · [数据架构 V2](data-architecture-v2.md) · [项目规则 V2](project-rules-v2.md)
 > 代码事实：`codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`
@@ -127,7 +127,7 @@ PageResultV2<T> = { items: T[], total: number, page: number, pageSize: number }
 | POST | `/api/v2/assignments/{assignmentId}/withdraw` | 撤回 → `UNASSIGNED`，`{ reason, expectedPlanVersion }`（该工单所属司机计划版本） |
 | POST | `/api/v2/assignments/{assignmentId}/unlock` | 解除 `MANUAL_LOCKED`，`{ reason, expectedPlanVersion }`（同上） |
 | GET | `/api/v2/alerts` | 预警分页；过滤 `status=OPEN/RESOLVED`；预警解决由系统在重算后自动执行，无手工 resolve 接口 |
-| GET | `/api/v2/logs` | 操作日志分页；过滤 `orderId` / `driverId` / `traceId` / `action` |
+| GET | `/api/v2/logs` | 操作日志分页，返回 `PageResultV2<OperationLogV2>`；过滤 `orderId` / `driverId` / `traceId` / `action` |
 
 **手动分配/改派完整计划语义（冻结）**：
 
@@ -304,6 +304,53 @@ resolvedAt?, resolvedBy?: SYSTEM_RECALC | ORDER_MODIFIED | ORDER_CANCELLED,
 historyRetained: true                          // 解决后记录保留
 ```
 
+### 3.5.1 OperationLogV2
+
+```text
+OperationLogScalarV2 = string | number | boolean | null
+OperationLogValueV2 = OperationLogScalarV2 | OperationLogScalarV2[]
+
+OperationLogV2 = {
+  id: string,
+  entityType: ORDER | ASSIGNMENT | DRIVER | VEHICLE | IMPORT_BATCH |
+              ORDER_SOURCE_EVENT | DRIVER_SHIFT | SERVICE_PLAN |
+              DISPATCH_ALERT | LOCATION_SAMPLE,
+  entityId: string,
+  action: ASSIGN | REASSIGN | WITHDRAW | RECYCLE | CANCEL | ACCEPT |
+          START | COMPLETE | IMPORT | AUTO_DISPATCH | DEPART | ARRIVE |
+          MODULE_CHANGE | ORDER_MODIFY | ALERT_RESOLVE | SHIFT_START |
+          SHIFT_END | UNLOCK | AVAILABILITY_CHANGE,
+  operator: { id: string, name: string },
+  reason: string | null,
+  traceId: string | null,
+  orderId?: string,
+  driverId?: string,
+  assignmentId?: string,
+  changes: Array<{
+    field: OperationLogChangeFieldV2,
+    before: OperationLogValueV2,
+    after: OperationLogValueV2
+  }>,
+  createdAt: ISO 8601 with timezone
+}
+```
+
+`OperationLogChangeFieldV2` 只允许：`alertStatus`、`arrivedAt`、`availability`、
+`cancelledAt`、`completedAt`、`deliveryAddress`、`deliveryLat`、`deliveryLng`、
+`departedAt`、`driverId`、`executionStatus`、`feasibility`、`lockType`、`modules`、
+`onShift`、`pickupAddress`、`pickupLat`、`pickupLng`、`planVersion`、
+`promisedPickupAt`、`resolvedBy`、`sequenceNo`、`shiftStartedAt`、`slackMinutes`、
+`slot`、`sourceVersion`。
+
+- `GET /api/v2/logs` 按 `createdAt` 新到旧排序，响应固定为
+  `PageResultV2<OperationLogV2>`；空筛选结果返回空 `items`，不返回 404。
+- `changes` 必须由服务端按上述字段白名单从内部日志生成，并按 `field` 稳定排序；
+  不在白名单中的键直接丢弃。没有可公开前后值时返回空数组。
+- 原始 `metadataJson`、未知嵌套对象、内部密钥、外部来源原文和未登记字段一律不得
+  进入响应；禁止通过类型断言或展开对象绕过白名单。
+- `reason` / `traceId` 为 `null` 时如实返回 `null`，不得伪造；三个关联 ID
+  不存在时整体省略对应字段。
+
 ### 3.6 LocationSampleV2（上报）
 
 ```text
@@ -375,3 +422,4 @@ MapSnapshotV2 = {
 | V2.0-r14 | 2026-08-13 | 第二轮司机 H5 再冻结：不新增地图聚合路径，固定组合 `/driver/map`、`/driver/tasks`、`/driver/orders/unassigned`；保持 `DriverV2[]` 向后兼容并新增 `DriverOrderMarkerV2`/本人任务地图字段、15 秒读取和身份边界；同时明确调度员 V2 API 接线不授权提前删除 V1 |
 | V2.0-r15 | 2026-08-16 | 串行 API 审计返修冻结：计划编辑命令严格先校验版本且不推测 replay；手动分配/改派必须在提交前形成指定司机的完整 A/B/C 锁定计划；地址变化先地理编码再原子提交；冻结 `MapSnapshotV2` 顶层、订单修改历史摘要和 `/drivers` 分页 DTO |
 | V2.0-r16 | 2026-08-16 | 统一 `DEPENDENCY_UNAVAILABLE.details.dependency` 为共享 DTO 已冻结的大写枚举 `AMAP`；修正 r15 两处小写笔误，不改变错误码、状态码或实现范围 |
+| V2.0-r17 | 2026-08-16 | 第二轮并行前置补丁：冻结 `/api/v2/logs` 为 `PageResultV2<OperationLogV2>`，明确日志身份、实体、动作、操作人、关联 ID、结构化前后值白名单与 `metadataJson` 禁止暴露边界 |

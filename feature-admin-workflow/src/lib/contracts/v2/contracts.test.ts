@@ -6,7 +6,13 @@ import type {
   CanonicalOrderV2,
   DispatchInputV2,
   DispatchOrderInputV2,
+  OperationLogV2,
   OrderV2
+} from "@/types/v2";
+import {
+  OPERATION_ACTIONS_V2,
+  OPERATION_ENTITY_TYPES_V2,
+  OPERATION_LOG_CHANGE_FIELDS_V2
 } from "@/types/v2";
 
 import {
@@ -34,6 +40,20 @@ describe("V2 public contracts", () => {
 
   it("keeps planVersion on the driver plan rather than assignment", () => {
     expectTypeOf<AssignmentV2>().not.toHaveProperty("planVersion");
+  });
+
+  it("freezes the public operation log shape without raw metadata", () => {
+    expectTypeOf<OperationLogV2>().toHaveProperty("id");
+    expectTypeOf<OperationLogV2>().toHaveProperty("entityType");
+    expectTypeOf<OperationLogV2>().toHaveProperty("action");
+    expectTypeOf<OperationLogV2>().toHaveProperty("operator");
+    expectTypeOf<OperationLogV2>().toHaveProperty("changes");
+    expectTypeOf<OperationLogV2>().not.toHaveProperty("metadataJson");
+
+    expect(OPERATION_ENTITY_TYPES_V2).toContain("DISPATCH_ALERT");
+    expect(OPERATION_ACTIONS_V2).toContain("MODULE_CHANGE");
+    expect(OPERATION_LOG_CHANGE_FIELDS_V2).toContain("modules");
+    expect(OPERATION_LOG_CHANGE_FIELDS_V2).toContain("promisedPickupAt");
   });
 
   it("provides a stable dispatch fixture without adapter or vehicle fields", () => {
