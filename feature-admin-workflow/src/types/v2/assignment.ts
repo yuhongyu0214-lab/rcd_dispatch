@@ -1,9 +1,12 @@
 import type {
   AssignmentLockTypeV2,
   AssignmentSlotV2,
+  BusinessTypeV2,
   EtaAvailabilityV2,
   ExecutionStatusV2,
+  GeoPointV2,
   IsoDateTimeStringV2,
+  OrderFeasibilityV2,
   PlannedAssignmentSlotV2,
   PlanSequenceV2,
   ServiceModuleV2
@@ -47,4 +50,19 @@ export type ServicePlanV2 = {
   revision: number;
   updatedAt: IsoDateTimeStringV2;
   updatedBy: string;
+};
+
+export type DriverTaskV2 = Omit<AssignmentSummaryV2, "executionStatus"> & {
+  businessType: BusinessTypeV2;
+  executionStatus: Extract<
+    ExecutionStatusV2,
+    "PLANNED" | "EN_ROUTE" | "IN_SERVICE"
+  >;
+  feasibility: OrderFeasibilityV2;
+  promisedPickupAt: IsoDateTimeStringV2;
+  pickupPoint?: GeoPointV2;
+  deliveryPoint?: GeoPointV2;
+  pickupAddress?: string;
+  deliveryAddress?: string;
+  servicePlan: ServicePlanV2 | null;
 };
