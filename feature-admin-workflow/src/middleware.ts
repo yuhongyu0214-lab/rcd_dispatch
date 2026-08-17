@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { getOrCreateTraceId } from "@/lib/observability-v2/trace";
+
 /**
  * 全链路 Trace ID 中间件
  *
@@ -15,15 +17,14 @@ import type { NextRequest } from "next/server";
  * - api-response 保证响应体 JSON 内也包含 traceId
  */
 export function middleware(request: NextRequest) {
-  const traceId =
-    request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
+  const traceId = getOrCreateTraceId(request.headers);
 
   // 构造新 Headers，注入 X-Trace-Id 供下游路由读取
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("X-Trace-Id", traceId);
 
   const response = NextResponse.next({
-    request: { headers: requestHeaders },
+    request: { headers: requestHeaders }
   });
 
   // 设置响应头（与 api-response.ts 的 withTraceIdHeaders 互补）
@@ -36,5 +37,5 @@ export function middleware(request: NextRequest) {
  * 仅拦截 API 路由，避免影响静态资源、NextAuth 页面等。
  */
 export const config = {
-  matcher: "/api/:path*",
+  matcher: "/api/:path*"
 };
