@@ -1524,6 +1524,9 @@ export function MapBoard({ amapKey, amapSecurityCode }: MapBoardProps) {
       <section className={styles.boardShell}>
       <aside className={styles.navRail} aria-label="调度模块">
         <div className={styles.railBrand}>RCD</div>
+        <Link className={styles.railItem} href="/admin/map/v2" title="V2 调度工作台">
+          V2
+        </Link>
         <Link className={styles.railItemActive} href="/admin/map" title="地图看板">
           图
         </Link>
