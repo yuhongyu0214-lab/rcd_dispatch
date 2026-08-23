@@ -30,8 +30,10 @@ import {
   isLatestSnapshotRequest,
   ORDER_BUSINESS_META,
   orderMatchesKeyword,
+  resolveDriverPlanStatus,
   resolveAssignedDriverId,
-  sortOrdersForDispatchList
+  sortOrdersForDispatchList,
+  type DriverPlanStatus
 } from "./dispatcher-console-model";
 import {
   apiErrorMessage,
@@ -53,6 +55,16 @@ type PanelMode = "ORDERS" | "DRIVERS";
 
 const EMPTY_ORDERS: readonly OrderV2[] = [];
 const EMPTY_DRIVERS: readonly DriverV2[] = [];
+const EMPTY_TIMELINE_DETAILS: Partial<
+  Record<"A" | "B" | "C", OrderDetailData>
+> = {};
+
+type DriverPlanLoadState = {
+  driverId: string | null;
+  status: DriverPlanStatus;
+  plan: DriverPlanV2 | null;
+  details: Partial<Record<"A" | "B" | "C", OrderDetailData>>;
+};
 
 export function DispatcherConsole({
   entry,
@@ -68,10 +80,12 @@ export function DispatcherConsole({
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [mapSelection, setMapSelection] =
     useState<DispatcherMapSelection | null>(null);
-  const [driverPlan, setDriverPlan] = useState<DriverPlanV2 | null>(null);
-  const [timelineDetails, setTimelineDetails] = useState<
-    Partial<Record<"A" | "B" | "C", OrderDetailData>>
-  >({});
+  const [driverPlanState, setDriverPlanState] = useState<DriverPlanLoadState>({
+    driverId: null,
+    status: "UNSELECTED",
+    plan: null,
+    details: {}
+  });
   const [selectedOrderDetail, setSelectedOrderDetail] =
     useState<OrderDetailData | null>(null);
   const [orderFilter, setOrderFilter] = useState<OrderFilter>(
@@ -83,7 +97,6 @@ export function DispatcherConsole({
   const deferredKeyword = useDeferredValue(keyword.trim().toLowerCase());
   const deferredDriverKeyword = useDeferredValue(driverKeyword);
   const [loading, setLoading] = useState(true);
-  const [planLoading, setPlanLoading] = useState(false);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<number | null>(null);
   const [revision, setRevision] = useState(0);
@@ -93,6 +106,7 @@ export function DispatcherConsole({
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const latestSnapshotRequestIdRef = useRef(0);
+  const latestDriverPlanRequestIdRef = useRef(0);
 
   const loadSnapshot = useCallback(async (showLoading = false) => {
     const requestId = ++latestSnapshotRequestIdRef.current;
@@ -165,24 +179,34 @@ export function DispatcherConsole({
   )?.planVersion;
 
   useEffect(() => {
-    setDriverPlan(null);
-    setTimelineDetails({});
-  }, [selectedDriverId]);
-
-  useEffect(() => {
     if (!selectedDriverId) {
-      setDriverPlan(null);
-      setTimelineDetails({});
+      latestDriverPlanRequestIdRef.current += 1;
+      setDriverPlanState({
+        driverId: null,
+        status: "UNSELECTED",
+        plan: null,
+        details: {}
+      });
       return;
     }
+    const requestDriverId = selectedDriverId;
+    const requestId = ++latestDriverPlanRequestIdRef.current;
     const controller = new AbortController();
     let active = true;
-    setPlanLoading(true);
+    setDriverPlanState({
+      driverId: requestDriverId,
+      status: "LOADING",
+      plan: null,
+      details: {}
+    });
     void requestV2<DriverPlanV2>(
-      `/api/v2/drivers/${encodeURIComponent(selectedDriverId)}/plan`,
+      `/api/v2/drivers/${encodeURIComponent(requestDriverId)}/plan`,
       { signal: controller.signal }
     )
       .then(async (plan) => {
+        if (plan.id !== requestDriverId) {
+          throw new Error("司机计划响应与当前司机不一致");
+        }
         const slots = (["A", "B", "C"] as const).filter(
           (slot) => plan.slots[slot]
         );
@@ -196,21 +220,40 @@ export function DispatcherConsole({
             return [slot, detail] as const;
           })
         );
-        if (!active) return;
-        setDriverPlan(plan);
-        setTimelineDetails(Object.fromEntries(details));
+        if (
+          !active ||
+          !isLatestSnapshotRequest(
+            requestId,
+            latestDriverPlanRequestIdRef.current
+          )
+        ) {
+          return;
+        }
+        setDriverPlanState({
+          driverId: requestDriverId,
+          status: "READY",
+          plan,
+          details: Object.fromEntries(details)
+        });
       })
       .catch((error: unknown) => {
         if (
           !active ||
+          !isLatestSnapshotRequest(
+            requestId,
+            latestDriverPlanRequestIdRef.current
+          ) ||
           (error instanceof DOMException && error.name === "AbortError")
         ) {
           return;
         }
+        setDriverPlanState({
+          driverId: requestDriverId,
+          status: "ERROR",
+          plan: null,
+          details: {}
+        });
         setWorkspaceError(apiErrorMessage(error));
-      })
-      .finally(() => {
-        if (active) setPlanLoading(false);
       });
     return () => {
       active = false;
@@ -257,6 +300,15 @@ export function DispatcherConsole({
     orders.find((order) => order.id === selectedOrderId) ?? null;
   const selectedDriver =
     drivers.find((driver) => driver.id === selectedDriverId) ?? null;
+  const planStatus = resolveDriverPlanStatus({
+    selectedDriverId,
+    stateDriverId: driverPlanState.driverId,
+    stateStatus: driverPlanState.status,
+    responseDriverId: driverPlanState.plan?.id
+  });
+  const driverPlan = planStatus === "READY" ? driverPlanState.plan : null;
+  const timelineDetails =
+    planStatus === "READY" ? driverPlanState.details : EMPTY_TIMELINE_DETAILS;
 
   const { orderById, storeNameByCode } = useMemo(() => {
     const stores = new Map<string, string>();
@@ -939,7 +991,7 @@ export function DispatcherConsole({
 
           <DispatcherConsoleTimeline
             driverName={selectedDriver?.name}
-            loading={planLoading}
+            planStatus={planStatus}
             nowMs={nowMs}
             rows={timelineRows}
             onSelectOrder={selectOrder}

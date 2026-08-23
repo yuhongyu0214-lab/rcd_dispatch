@@ -14,7 +14,9 @@ import {
   orderMatchesKeyword,
   resolveOrderMapPoint,
   resolveAssignedDriverId,
+  resolveDriverPlanStatus,
   resolveOrderPromiseTimes,
+  shouldFetchOrderDetail,
   sortOrdersForDispatchList
 } from "./dispatcher-console-model";
 
@@ -108,6 +110,43 @@ describe("dispatcher console model", () => {
     expect(isLatestSnapshotRequest(latestRequestId, latestRequestId)).toBe(
       true
     );
+  });
+
+  it("never presents driver A's plan while driver B is loading or after B fails", () => {
+    expect(
+      resolveDriverPlanStatus({
+        selectedDriverId: "driver-b",
+        stateDriverId: "driver-a",
+        stateStatus: "READY",
+        responseDriverId: "driver-a"
+      })
+    ).toBe("LOADING");
+
+    expect(
+      resolveDriverPlanStatus({
+        selectedDriverId: "driver-b",
+        stateDriverId: "driver-b",
+        stateStatus: "ERROR"
+      })
+    ).toBe("ERROR");
+  });
+
+  it("retries an order detail after failure and stops only after valid detail is cached", () => {
+    const assignmentId = "assignment-current";
+    let cachedAssignmentId: string | undefined;
+
+    expect(
+      shouldFetchOrderDetail(assignmentId, cachedAssignmentId)
+    ).toBe(true);
+    // The failed request does not populate the cache, so the next poll retries.
+    expect(
+      shouldFetchOrderDetail(assignmentId, cachedAssignmentId)
+    ).toBe(true);
+
+    cachedAssignmentId = assignmentId;
+    expect(
+      shouldFetchOrderDetail(assignmentId, cachedAssignmentId)
+    ).toBe(false);
   });
 
   it("only accepts detail data for the snapshot's current assignment", () => {
@@ -219,6 +258,16 @@ describe("dispatcher console model", () => {
     ]);
   });
 
+  it("does not paint idle while the selected driver's plan is loading or failed", () => {
+    const gantt = buildDriverGantt(
+      [],
+      Date.parse("2026-08-18T08:45:00.000Z"),
+      "UNKNOWN"
+    );
+
+    expect(gantt.blocks).toEqual([]);
+  });
+
   it("never paints stale planned times as numeric ETA blocks when ETA is unavailable", () => {
     const gantt = buildDriverGantt(
       [
@@ -247,6 +296,9 @@ describe("dispatcher console model", () => {
     expect(
       gantt.blocks.filter((block) => block.orderId === "order-stale")
     ).toHaveLength(0);
+    expect(gantt.blocks.filter((block) => block.kind === "IDLE")).toHaveLength(
+      0
+    );
     expect(gantt.unavailableRows).toEqual([
       expect.objectContaining({
         orderId: "order-stale",
@@ -277,10 +329,59 @@ describe("dispatcher console model", () => {
     );
 
     expect(gantt.blocks.filter((block) => block.orderId)).toHaveLength(0);
+    expect(gantt.blocks.filter((block) => block.kind === "IDLE")).toHaveLength(
+      0
+    );
     expect(gantt.unavailableRows).toEqual([
       expect.objectContaining({
         orderId: "order-without-plan",
         unavailableReason: "AMAP_UNAVAILABLE"
+      })
+    ]);
+  });
+
+  it("does not claim full idle when an assignment has unknown plan timestamps", () => {
+    const gantt = buildDriverGantt(
+      [
+        {
+          slot: "A",
+          orderId: "order-unknown-time",
+          orderNo: "RCD-UNKNOWN-TIME",
+          assignment: assignment({
+            id: "assignment-unknown-time",
+            orderId: "order-unknown-time",
+            etaAvailable: true,
+            plannedDepartAt: undefined
+          })
+        }
+      ],
+      Date.parse("2026-08-18T08:45:00.000Z")
+    );
+
+    expect(gantt.blocks).toEqual([]);
+    expect(gantt.unavailableRows).toEqual([
+      expect.objectContaining({
+        orderId: "order-unknown-time"
+      })
+    ]);
+  });
+
+  it("does not claim idle when a planned slot has no matching assignment detail", () => {
+    const gantt = buildDriverGantt(
+      [
+        {
+          slot: "A",
+          orderId: "order-missing-detail",
+          orderNo: "RCD-MISSING-DETAIL"
+        }
+      ],
+      Date.parse("2026-08-18T08:45:00.000Z")
+    );
+
+    expect(gantt.blocks).toEqual([]);
+    expect(gantt.unavailableRows).toEqual([
+      expect.objectContaining({
+        orderId: "order-missing-detail"
       })
     ]);
   });

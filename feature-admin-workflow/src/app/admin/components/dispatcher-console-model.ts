@@ -172,11 +172,45 @@ export type DriverGantt = {
   unavailableRows: DriverGanttUnavailableRow[];
 };
 
+export type DriverPlanStatus =
+  | "UNSELECTED"
+  | "LOADING"
+  | "READY"
+  | "ERROR";
+
+export type DriverGanttKnowledge = "CONFIRMED" | "UNKNOWN";
+
 export function isLatestSnapshotRequest(
   requestId: number,
   latestRequestId: number
 ) {
   return requestId === latestRequestId;
+}
+
+export function resolveDriverPlanStatus({
+  selectedDriverId,
+  stateDriverId,
+  stateStatus,
+  responseDriverId
+}: {
+  selectedDriverId: string | null;
+  stateDriverId: string | null;
+  stateStatus: DriverPlanStatus;
+  responseDriverId?: string;
+}): DriverPlanStatus {
+  if (!selectedDriverId) return "UNSELECTED";
+  if (stateDriverId !== selectedDriverId) return "LOADING";
+  if (stateStatus === "READY" && responseDriverId !== selectedDriverId) {
+    return "LOADING";
+  }
+  return stateStatus;
+}
+
+export function shouldFetchOrderDetail(
+  assignmentId: string | undefined,
+  cachedAssignmentId: string | undefined
+) {
+  return Boolean(assignmentId && assignmentId !== cachedAssignmentId);
 }
 
 export function isCurrentAssignmentDetail(
@@ -304,7 +338,8 @@ export function deriveServiceModuleMinutes(assignment: AssignmentV2) {
 
 export function buildDriverGantt(
   rows: readonly DriverGanttRow[],
-  nowMs = Date.now()
+  nowMs = Date.now(),
+  knowledge: DriverGanttKnowledge = "CONFIRMED"
 ): DriverGantt {
   const assignedRows = rows
     .filter((row): row is DriverGanttRow & { assignment: AssignmentV2 } =>
@@ -325,7 +360,7 @@ export function buildDriverGantt(
   const unavailableRows: DriverGanttUnavailableRow[] = [];
   const unavailableKeys = new Set<string>();
 
-  function addUnavailableRow(row: DriverGanttRow & { assignment: AssignmentV2 }) {
+  function addUnavailableRow(row: DriverGanttRow) {
     const key = `${row.slot}:${row.orderId ?? row.orderNo ?? "unknown"}`;
     if (unavailableKeys.has(key)) return;
     unavailableKeys.add(key);
@@ -333,16 +368,29 @@ export function buildDriverGantt(
       slot: row.slot,
       orderId: row.orderId,
       orderNo: row.orderNo,
-      unavailableReason: row.assignment.etaUnavailableReason
+      unavailableReason: row.assignment?.etaUnavailableReason
     });
+  }
+
+  for (const row of rows) {
+    if (row.orderId && !row.assignment) addUnavailableRow(row);
   }
 
   for (const row of assignedRows) {
     const departAtMs = Date.parse(row.assignment.plannedDepartAt ?? "");
     const pickupAtMs = Date.parse(row.assignment.plannedPickupAt ?? "");
     const completeAtMs = Date.parse(row.assignment.plannedCompleteAt ?? "");
+    const hasUnknownSegment = buildTimelineSegments({
+      assignment: row.assignment
+    })
+      .filter((segment) => segment.kind !== "IDLE")
+      .some(
+        (segment) =>
+          segment.minutes === null || !Number.isFinite(segment.minutes)
+      );
     if (
       !row.assignment.etaAvailable ||
+      hasUnknownSegment ||
       !Number.isFinite(departAtMs) ||
       !Number.isFinite(pickupAtMs) ||
       !Number.isFinite(completeAtMs) ||
@@ -352,6 +400,9 @@ export function buildDriverGantt(
       addUnavailableRow(row);
     }
   }
+
+  const hasUnknownOccupancy =
+    knowledge === "UNKNOWN" || unavailableRows.length > 0;
 
   function addBlock(
     block: Omit<
@@ -405,7 +456,11 @@ export function buildDriverGantt(
       cursorAt: new Date(cursorAtMs).toISOString()
     });
     const idleSegment = segments.find((segment) => segment.kind === "IDLE");
-    if (idleSegment?.minutes && idleSegment.minutes > 0) {
+    if (
+      !hasUnknownOccupancy &&
+      idleSegment?.minutes &&
+      idleSegment.minutes > 0
+    ) {
       addBlock({
         kind: "IDLE",
         startAtMs: cursorAtMs,
@@ -443,11 +498,13 @@ export function buildDriverGantt(
     cursorAtMs = Math.max(cursorAtMs, completeAtMs);
   }
 
-  addBlock({
-    kind: "IDLE",
-    startAtMs: cursorAtMs,
-    endAtMs: windowEndMs
-  });
+  if (!hasUnknownOccupancy) {
+    addBlock({
+      kind: "IDLE",
+      startAtMs: cursorAtMs,
+      endAtMs: windowEndMs
+    });
+  }
 
   return {
     windowStartMs,

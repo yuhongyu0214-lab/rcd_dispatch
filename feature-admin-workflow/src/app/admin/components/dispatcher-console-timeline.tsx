@@ -6,7 +6,8 @@ import type { AssignmentSummaryV2, AssignmentV2, OrderV2 } from "@/types/v2";
 
 import {
   buildDriverGantt,
-  ORDER_BUSINESS_META
+  ORDER_BUSINESS_META,
+  type DriverPlanStatus
 } from "./dispatcher-console-model";
 import {
   etaUnavailableReasonLabel,
@@ -60,13 +61,13 @@ export type DispatcherTimelineRow = {
 
 export function DispatcherConsoleTimeline({
   driverName,
-  loading,
+  planStatus,
   nowMs,
   rows,
   onSelectOrder
 }: {
   driverName?: string;
-  loading: boolean;
+  planStatus: DriverPlanStatus;
   nowMs: number;
   rows: readonly DispatcherTimelineRow[];
   onSelectOrder: (orderId: string) => void;
@@ -83,9 +84,10 @@ export function DispatcherConsoleTimeline({
           feasibility: row.detail?.feasibility,
           assignment: row.assignment
         })),
-        nowMs
+        nowMs,
+        planStatus === "READY" ? "CONFIRMED" : "UNKNOWN"
       ),
-    [nowMs, rows]
+    [nowMs, planStatus, rows]
   );
   const ticks = useMemo(
     () =>
@@ -176,7 +178,7 @@ export function DispatcherConsoleTimeline({
             </span>
           ))}
         </div>
-        {loading ? (
+        {planStatus === "LOADING" ? (
           <span className={styles.srOnly} role="status">
             正在同步计划
           </span>
@@ -192,9 +194,15 @@ export function DispatcherConsoleTimeline({
             <div>
               <strong>{driverName ?? "未选择司机"}</strong>
               <small>
-                {rows.some((row) => row.summary)
-                  ? "12 小时工单窗口"
-                  : "当前 12 小时无工单"}
+                {planStatus === "LOADING"
+                  ? "计划加载中"
+                  : planStatus === "ERROR"
+                    ? "计划暂不可用"
+                    : planStatus === "UNSELECTED"
+                      ? "请选择司机"
+                      : rows.some((row) => row.summary)
+                        ? "12 小时工单窗口"
+                        : "当前 12 小时无工单"}
               </small>
             </div>
           </div>
@@ -220,6 +228,20 @@ export function DispatcherConsoleTimeline({
                   <span key={tick.index} />
                 ))}
               </div>
+              {planStatus === "LOADING" || planStatus === "ERROR" ? (
+                <div className={styles.ganttPlanState} role="status">
+                  <strong>
+                    {planStatus === "LOADING"
+                      ? "计划加载中"
+                      : "计划暂不可用"}
+                  </strong>
+                  <span>
+                    {planStatus === "LOADING"
+                      ? "正在读取当前司机的 A/B/C 工单"
+                      : "当前占用情况未知，请稍后重试"}
+                  </span>
+                </div>
+              ) : null}
               {orderBands.map((band) => {
                 const business = band.businessType
                   ? ORDER_BUSINESS_META[band.businessType]

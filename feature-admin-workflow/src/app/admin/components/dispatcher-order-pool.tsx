@@ -20,6 +20,7 @@ import {
   ORDER_BUSINESS_META,
   orderMatchesKeyword,
   resolveOrderPromiseTimes,
+  shouldFetchOrderDetail,
   sortOrdersForDispatchList
 } from "./dispatcher-console-model";
 import {
@@ -39,7 +40,7 @@ const EMPTY_ORDERS: readonly OrderV2[] = [];
 
 type OrderDetailCacheEntry = {
   assignmentId: string;
-  detail: OrderDetailData | null;
+  detail: OrderDetailData;
 };
 
 export function DispatcherOrderPool() {
@@ -120,7 +121,10 @@ export function DispatcherOrderPool() {
       const assignmentId = order.currentAssignmentId;
       if (!assignmentId) continue;
       if (
-        detailsByOrderIdRef.current[order.id]?.assignmentId === assignmentId
+        !shouldFetchOrderDetail(
+          assignmentId,
+          detailsByOrderIdRef.current[order.id]?.assignmentId
+        )
       ) {
         continue;
       }
@@ -129,10 +133,10 @@ export function DispatcherOrderPool() {
         { signal: controller.signal }
       )
         .then((detail) => {
-          if (!active) return;
+          if (!active || !isCurrentAssignmentDetail(order, detail)) return;
           cacheOrderDetail(order.id, {
             assignmentId,
-            detail: isCurrentAssignmentDetail(order, detail) ? detail : null
+            detail
           });
         })
         .catch((caught: unknown) => {
@@ -142,7 +146,7 @@ export function DispatcherOrderPool() {
           ) {
             return;
           }
-          cacheOrderDetail(order.id, { assignmentId, detail: null });
+          // 失败详情不进入缓存；下一轮快照会按同一 assignmentId 重试。
         });
     }
     return () => {
@@ -357,9 +361,7 @@ export function DispatcherOrderPool() {
                       ? `${assignedDriver?.name ?? "司机未知"} · ${assignment.slot} 槽`
                       : detail === undefined
                         ? "已分配 · 同步中"
-                        : detail === null
-                          ? "已分配 · 暂不可用"
-                          : "计划已变化";
+                        : "计划已变化";
                   const etaLabel = !order.currentAssignmentId
                     ? "未生成"
                     : assignment
@@ -368,9 +370,7 @@ export function DispatcherOrderPool() {
                         : "不可用"
                       : detail === undefined
                         ? "同步中"
-                        : detail === null
-                          ? "暂不可用"
-                          : "待重算";
+                        : "待重算";
                   return (
                     <button
                       type="button"
