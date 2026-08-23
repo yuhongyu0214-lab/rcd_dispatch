@@ -1,18 +1,18 @@
 # 人车单项目状态总览
 
-> 状态快照：2026-08-16
+> 状态快照：2026-08-23
 > 用途：说明项目做到哪一步、还差什么
 > 非权威范围：产品行为、状态机、Schema、枚举、HTTP 契约、技术栈和生产架构
 
 ## 一句话结论
 
-Gate 3 保持 `PASS`，运行候选与预生产证据不变。串行 API 已通过 T1 并合入；第二轮契约前置 `f591aca69e9f6e4a20061c94ea564b053abe7be0` 已冻结 `OperationLogV2` 和 metadata 输出边界，通过 `624 passed / 7 expected skipped`、lint、29/29 页面 build、diff check。2A/2B/2C 三个本地分支与 worktree 已创建，开发尚未启动；预生产仍为 9 个 migration，远程仍为 `ae471484…` 且未推送。
+Gate 3 保持 `PASS`，运行候选与预生产证据不变。第二轮统一本地代码基线为 `develop @ f44afac43282463cd9d7cce9e13668feedf8a133`：2A 候选 `6562544361b29579b4e52c059ce8f85db7b72722` 已完成返修自测，等待代码审计和 Chrome/Edge × 100%/125% 浏览器验收；2B 候选 `c1279b5078d4ea3628f5931055abe27095519227` 等待代码审计与双尺寸浏览器验收；2C 候选 `99d69095c69e73320174b52c6e4e61319d8a3cc8` 等待代码审计与独立测试。三条线均未合入；预生产仍为 9 个 migration，远程仍为 `ae471484…`。
 
 ## 当前工作流状态
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
-| 文档治理 | `ROUND2_CONTRACT_AND_WORKTREES_READY_LOCAL` | 契约代码锚点 `f591aca…`、API r17、角色入口与三 worktree 已同步 | 主控下发本次文档提交 SHA；未推送远程 |
+| 文档治理 | `ROUND2_CANDIDATES_AND_REVIEW_SYNC_LOCAL` | `develop @ f44afac…`、2A/2B/2C 候选 SHA 与审计/测试边界已同步；API r18 仍仅在 2B 候选 | 以本轮文档提交 SHA 下发审计上下文；不推送远程 |
 | 应用候选 | `958AFCA_GATE3_ACCEPTED_DEVELOP_HANDOFF_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变运行身份；代码历史交接点为 `develop @ 51ddb5f…`，最终状态激活 HEAD 为 `ae471484…` |
 | 依赖安全 | `COMPLETED` | [依赖安全返修](2026-08-01-gate3-dependency-security-remediation.md) | 依赖变化时重跑全套审计 |
 | migration 指纹 | `PREPROD_9_APPLIED_LOCAL_10_PASS` | 第 10 个 migration 提交 `c6850df0a85aab601c3034e542a0f0b575c9053e` | 隔离 PostgreSQL 已通过；预生产 9 个保持不变，未经授权不实施第 10 个 |
@@ -26,7 +26,7 @@ Gate 3 保持 `PASS`，运行候选与预生产证据不变。串行 API 已通�
 | 真实 10 单 | `REAL10_PASS_9_COMPLETED_1_INFEASIBLE_ALERT` | [真实 E2E 重验进度](2026-08-10-gate3r-real-e2e-retest-progress.md) | 保留全部成功与失败现场，不清理 |
 | Gate 3 总闸门 | `PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变候选与证据，进入受控阶段交接 |
 | 串行调度员 V2 API 接线 | `T1_PASS / MERGED_LOCAL / POST_MERGE_PASS` | 候选 `152f7c5…` 已合入 `develop @ 8cfed6ad…`；T1 与合并后全量回归通过 | 串行前置退出；保持本地合并且暂不推送 |
-| 第二轮并行 | `BRANCHES_CREATED / DEVELOPMENT_NOT_STARTED` | `feature/v2-admin-console`、`feature/v2-driver-workflow`、`feature/v2-observability` | 三分支统一对齐主控下发的当前本地 `develop` HEAD 后执行 T0 |
+| 第二轮并行 | `THREE_CANDIDATES_UNMERGED / REVIEW_PENDING` | 2A `6562544…`；2B `c1279b5…`；2C `99d6909…` | 三条候选分别完成代码审计与冻结测试后，才可申请按序合入 |
 
 ## 唯一代码、文档与迁移基线
 
@@ -60,6 +60,7 @@ round2 freeze source: local develop @ f90bac6ec5f80abff33635cab4b23c0f86795086
 round2 frozen contract source: local develop @ 117653e55ac69a8e0d20dbf9e9904fc874707f81
 formal serial API code baseline: local develop @ 0e8ea7fc70d523de2cfa81173f1a421cad16ade7
 round2 contract code tree anchor: f591aca69e9f6e4a20061c94ea564b053abe7be0
+round2 unified local develop baseline: f44afac43282463cd9d7cce9e13668feedf8a133
 round2 merge first parent: b807b45bbd892745e42bcd8d1cd3e00f77ad12ed
 rejected dispatcher API candidate: feature/v2-dispatcher-api-wiring @ 319f73401359ef4a232a2217afaaef2ef4212af2
 superseded unaligned API remediation candidate: feature/v2-dispatcher-api-wiring @ 5b84ab4881e1a8da12672c19d87098674798e60c
@@ -73,6 +74,9 @@ remote tracking reference: origin/develop @ ae4714849fa965940b0df1c6766638cf398a
 parallel branch code tree anchor: f591aca69e9f6e4a20061c94ea564b053abe7be0
 parallel branch start and document baseline: 主控下发的当前本地 develop HEAD（同时包含上述代码树与本次治理文档）
 parallel worktrees: .worktrees/round2-admin-console | .worktrees/round2-driver-workflow | .worktrees/round2-observability
+2A candidate: feature/v2-admin-console @ 6562544361b29579b4e52c059ce8f85db7b72722 (code audit and Chrome/Edge x 100%/125% browser test pending)
+2B candidate: feature/v2-driver-workflow @ c1279b5078d4ea3628f5931055abe27095519227 (code audit and 360x800/390x844 browser test pending)
+2C candidate: feature/v2-observability @ 99d69095c69e73320174b52c6e4e61319d8a3cc8 (code audit and independent test pending)
 ```
 
 中间提交、来源分支和主工作区未提交代码不属于 Gate 3 当前验收对象。当前 HEAD、Git 远程、ACR 与预生产 app/worker 均为 `958afca…@sha256:13e0…5bff`；Nginx 沿用原镜像、配置、证书和端口，只把运行 revision 刷新为 `958afca…`。`7595a649…`、`4eb3b485…`、`084649f4…` 与迁移期候选继续保留，运行不得混用；`08d84cfc…` 是被后续限流返修取代、未进入预生产运行的候选。app、worker、Nginx、本机结构化日志、轮转和 SLS 集中观测仍健康；G3E2E R2.2 基础资料禁止重复整批写入，所有失败证据继续保留。
@@ -94,6 +98,19 @@ parallel worktrees: .worktrees/round2-admin-console | .worktrees/round2-driver-w
   继续由 2C 独占。V1 暂不删除，按兼容矩阵的切换与窗口关闭两个时点退出。
 - API r17 已把 `/logs` 冻结为 `PageResultV2<OperationLogV2>`；前后值只允许共享 DTO
   白名单，原始 `metadataJson` 不得暴露。该契约提交为 `f591aca…`。
+- 2A 完整候选 `6562544…` 相对 `f44afac…` 精确 14 个文件，其中返修提交相对父候选精确
+  6 个文件；专项 `41` 项、全量 `665 passed / 7 expected skipped`、lint、29/29 build 和
+  diff check 通过。正式浏览器测试修改白名单为空，必须先取得代码审计 `PASS`，再使用本地
+  隔离认证 fixture、API/高德 Mock 执行 Chrome/Edge × 100%/125% 冻结矩阵。
+- 2B 候选 `c1279b5…` 在自身提交内形成 API r18：`GET /api/v2/driver/tasks` 的
+  `DriverTaskV2.servicePlan` 必返并复用 `ServicePlanV2`。该版本尚未合入 `develop`，只作为
+  2B 审计与浏览器验收依据；不得将 registry 的 develop 现行版本提前写成 r18。
+- 2B 司机域专项 `48/48`、全量 `639 passed / 7 expected skipped`、lint、29/29 build、
+  白名单与 diff check 通过；真实定位重采样、下班停报、四态文案和共享任务 DTO 已返修。
+  主控状态为 `IMPLEMENTATION_PASS / CODE_AUDIT_PENDING / BROWSER_TEST_PENDING`，未授权合并。
+- 2C 候选 `99d6909…` 已提交；专项 `26/26`、全量 `641 passed / 7 expected skipped`、lint、
+  29/29 build、白名单与 diff check 通过。基线既有 assignment 测试类型问题不归 2C 修复；
+  当前为 `IMPLEMENTATION_PASS / CODE_AUDIT_PENDING / INDEPENDENT_TEST_PENDING`，未授权合并。
 - 串行 API 审计缺口已分层闭合：数据模型提交 `c6850df…` 位于祖先链；候选 `152f7c5…`
   已补齐人工计划、地址重编码、严格版本冲突、跨门店释放、完整 `modificationHistory`、
   12 操作鉴权/traceId、分页及事务测试。T1-A、T1-B 和合并后回归全部通过，并已
