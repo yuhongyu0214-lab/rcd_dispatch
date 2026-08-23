@@ -1,7 +1,7 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`。第二轮统一本地代码基线为 `develop @ f44afac43282463cd9d7cce9e13668feedf8a133`；2A `6562544…`、2B `c1279b5…`、2C `99d6909…` 均已形成未合入候选，分别等待独立审计和冻结测试。
+> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`。第二轮统一本地代码基线为 `develop @ f44afac43282463cd9d7cce9e13668feedf8a133`；2A `6562544…` 代码审计 `PASS`、浏览器测试待完成，2B `c1279b5…`、2C `99d6909…` 仍待各自独立审计与冻结测试，三条线均未合入。
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
@@ -417,7 +417,7 @@ Gate 3 若因事务 outbox 必须修改上游业务写入点，仍由同一实�
 
 **2026-08-17 第二轮执行快照**：三条线均从统一本地 `develop @ f44afac43282463cd9d7cce9e13668feedf8a133` 开始。2A 保持实现中且尚未提交；2B 已形成 `c1279b5078d4ea3628f5931055abe27095519227`，司机专项 `48/48`、全量 `639/7`、lint、build、白名单和 diff check 通过，API r18 的 `DriverTaskV2.servicePlan` 只在该候选内，下一步是只读代码审计与 `360×800`、`390×844` 浏览器验收；2C 已形成 `99d69095c69e73320174b52c6e4e61319d8a3cc8`，专项 `26/26`、全量 `641/7`、lint、build、白名单和 diff check 通过，下一步是只读代码审计与独立测试。任何一条线在各自审计和测试完成前均不得合入 `develop`。
 
-**2026-08-23 2A 候选快照**：`feature/v2-admin-console @ 6562544361b29579b4e52c059ce8f85db7b72722` 相对统一本地代码基线精确 14 个文件，返修提交精确 6 个文件；专项 `41` 项、全量 `665/7`、lint、29/29 build 和 diff check 通过，工作区干净。下一步先做只读代码审计；审计 `PASS` 后，测试 Agent 以空修改白名单、本地隔离认证 fixture、API/高德 Mock 执行 Chrome/Edge × 100%/125% 冻结矩阵。禁止连接真实数据库、Redis/Tair、高德、云服务或预生产。
+**2026-08-23 2A 候选快照**：`feature/v2-admin-console @ 6562544361b29579b4e52c059ce8f85db7b72722` 相对统一本地代码基线精确 14 个文件，返修提交精确 6 个文件；专项 `41` 项、全量 `665/7`、lint、31/31 build 和 diff check 通过，工作区干净。代码审计结论为 `PASS`，候选无需返修、amend 或 rebase；测试 Agent 下一步以空修改白名单、本地隔离认证 fixture、API/高德 Mock 执行 Chrome/Edge × 100%/125% 冻结矩阵。禁止连接真实数据库、Redis/Tair、高德、云服务或预生产。
 
 ### 7.1 并行线 2A：调度员 Web
 
@@ -694,7 +694,7 @@ worktree：`.worktrees/round2-observability`
 - 后续追加发现 ETA Top-8 仍会裁掉本轮 A 槽新生成的 delivery cursor，导致可连续进入 B 的订单误报 `ETA_UNAVAILABLE`；已恢复计划池全部 delivery→pickup 必要组合，并补 `buildEtaMatrix()` → `runDispatchV2()` A/B 串联回归。
 - G3-3 本地开发已闭环：司机类事件按受影响门店加载全部活动司机参与比较；相同逻辑计划重试不回收/重建 Assignment 或递增 `planVersion`；outbox 只有持有当前租约的 worker 才计为处理成功；锁忙、Redis 不可用降级、过期快照重算均有独立编排测试。
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
-- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 与 Gate 3 `PASS` 证据保持不变；第二轮统一本地代码基线为 `f44afac…`。2A `6562544…`、2B `c1279b5…` 与 2C `99d6909…` 均已形成未合并候选，分别等待审计和测试。
+- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 与 Gate 3 `PASS` 证据保持不变；第二轮统一本地代码基线为 `f44afac…`。2A `6562544…` 代码审计 `PASS`、浏览器测试待完成；2B `c1279b5…` 与 2C `99d6909…` 继续等待各自审计和测试。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
 - 当前执行限制：不得再次变更 app、worker 或 Nginx，不得执行 migration、重复基础资料、清理任何失败样本或直接写业务数据库。错误 helper 产生的独立 `G3FAULT` 订单必须保留并与冻结 10 单分开统计。
-- 下一动作：为 2A、2B、2C 分别下发候选、代码基线、文档基线与只读审计白名单；各自审计通过后执行冻结测试。三条线只按主控批准的顺序合入，远程同步稍后处理。
+- 下一动作：向 2A 测试 Agent 下发候选、代码基线、新文档基线、空修改白名单与本地隔离测试授权，执行 Chrome/Edge × 100%/125% 冻结矩阵；2B、2C 继续各自审计流程。三条线只按主控批准的顺序合入，远程同步稍后处理。

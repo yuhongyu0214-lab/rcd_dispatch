@@ -6,13 +6,13 @@
 
 ## 一句话结论
 
-Gate 3 保持 `PASS`，运行候选与预生产证据不变。第二轮统一本地代码基线为 `develop @ f44afac43282463cd9d7cce9e13668feedf8a133`：2A 候选 `6562544361b29579b4e52c059ce8f85db7b72722` 已完成返修自测，等待代码审计和 Chrome/Edge × 100%/125% 浏览器验收；2B 候选 `c1279b5078d4ea3628f5931055abe27095519227` 等待代码审计与双尺寸浏览器验收；2C 候选 `99d69095c69e73320174b52c6e4e61319d8a3cc8` 等待代码审计与独立测试。三条线均未合入；预生产仍为 9 个 migration，远程仍为 `ae471484…`。
+Gate 3 保持 `PASS`，运行候选与预生产证据不变。第二轮统一本地代码基线为 `develop @ f44afac43282463cd9d7cce9e13668feedf8a133`：2A 候选 `6562544361b29579b4e52c059ce8f85db7b72722` 代码审计 `PASS`，等待 Chrome/Edge × 100%/125% 浏览器验收；2B 候选 `c1279b5078d4ea3628f5931055abe27095519227` 等待代码审计与双尺寸浏览器验收；2C 候选 `99d69095c69e73320174b52c6e4e61319d8a3cc8` 等待代码审计与独立测试。三条线均未合入；预生产仍为 9 个 migration，远程仍为 `ae471484…`。
 
 ## 当前工作流状态
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
-| 文档治理 | `ROUND2_CANDIDATES_AND_REVIEW_SYNC_LOCAL` | `develop @ f44afac…`、2A/2B/2C 候选 SHA 与审计/测试边界已同步；API r18 仍仅在 2B 候选 | 以本轮文档提交 SHA 下发审计上下文；不推送远程 |
+| 文档治理 | `2A_AUDIT_PASS_BROWSER_CONTEXT_SYNC_LOCAL` | 2A 审计 `PASS`、`31/31` 构建证据与浏览器授权边界已同步；API r18 仍仅在 2B 候选 | 以本轮文档提交 SHA 下发 2A 浏览器测试上下文；不推送远程 |
 | 应用候选 | `958AFCA_GATE3_ACCEPTED_DEVELOP_HANDOFF_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变运行身份；代码历史交接点为 `develop @ 51ddb5f…`，最终状态激活 HEAD 为 `ae471484…` |
 | 依赖安全 | `COMPLETED` | [依赖安全返修](2026-08-01-gate3-dependency-security-remediation.md) | 依赖变化时重跑全套审计 |
 | migration 指纹 | `PREPROD_9_APPLIED_LOCAL_10_PASS` | 第 10 个 migration 提交 `c6850df0a85aab601c3034e542a0f0b575c9053e` | 隔离 PostgreSQL 已通过；预生产 9 个保持不变，未经授权不实施第 10 个 |
@@ -26,7 +26,7 @@ Gate 3 保持 `PASS`，运行候选与预生产证据不变。第二轮统一本
 | 真实 10 单 | `REAL10_PASS_9_COMPLETED_1_INFEASIBLE_ALERT` | [真实 E2E 重验进度](2026-08-10-gate3r-real-e2e-retest-progress.md) | 保留全部成功与失败现场，不清理 |
 | Gate 3 总闸门 | `PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变候选与证据，进入受控阶段交接 |
 | 串行调度员 V2 API 接线 | `T1_PASS / MERGED_LOCAL / POST_MERGE_PASS` | 候选 `152f7c5…` 已合入 `develop @ 8cfed6ad…`；T1 与合并后全量回归通过 | 串行前置退出；保持本地合并且暂不推送 |
-| 第二轮并行 | `THREE_CANDIDATES_UNMERGED / REVIEW_PENDING` | 2A `6562544…`；2B `c1279b5…`；2C `99d6909…` | 三条候选分别完成代码审计与冻结测试后，才可申请按序合入 |
+| 第二轮并行 | `2A_CODE_AUDIT_PASS / BROWSER_TEST_PENDING` | 2A `6562544…`；2B `c1279b5…`；2C `99d6909…` | 2A 执行冻结浏览器矩阵；2B/2C 继续各自审计流程 |
 
 ## 唯一代码、文档与迁移基线
 
@@ -74,7 +74,7 @@ remote tracking reference: origin/develop @ ae4714849fa965940b0df1c6766638cf398a
 parallel branch code tree anchor: f591aca69e9f6e4a20061c94ea564b053abe7be0
 parallel branch start and document baseline: 主控下发的当前本地 develop HEAD（同时包含上述代码树与本次治理文档）
 parallel worktrees: .worktrees/round2-admin-console | .worktrees/round2-driver-workflow | .worktrees/round2-observability
-2A candidate: feature/v2-admin-console @ 6562544361b29579b4e52c059ce8f85db7b72722 (code audit and Chrome/Edge x 100%/125% browser test pending)
+2A candidate: feature/v2-admin-console @ 6562544361b29579b4e52c059ce8f85db7b72722 (code audit PASS; Chrome/Edge x 100%/125% browser test pending)
 2B candidate: feature/v2-driver-workflow @ c1279b5078d4ea3628f5931055abe27095519227 (code audit and 360x800/390x844 browser test pending)
 2C candidate: feature/v2-observability @ 99d69095c69e73320174b52c6e4e61319d8a3cc8 (code audit and independent test pending)
 ```
@@ -99,9 +99,9 @@ parallel worktrees: .worktrees/round2-admin-console | .worktrees/round2-driver-w
 - API r17 已把 `/logs` 冻结为 `PageResultV2<OperationLogV2>`；前后值只允许共享 DTO
   白名单，原始 `metadataJson` 不得暴露。该契约提交为 `f591aca…`。
 - 2A 完整候选 `6562544…` 相对 `f44afac…` 精确 14 个文件，其中返修提交相对父候选精确
-  6 个文件；专项 `41` 项、全量 `665 passed / 7 expected skipped`、lint、29/29 build 和
-  diff check 通过。正式浏览器测试修改白名单为空，必须先取得代码审计 `PASS`，再使用本地
-  隔离认证 fixture、API/高德 Mock 执行 Chrome/Edge × 100%/125% 冻结矩阵。
+  6 个文件；专项 `41` 项、全量 `665 passed / 7 expected skipped`、lint、31/31 build 和
+  diff check 通过。代码审计已 `PASS`；正式浏览器测试修改白名单为空，使用本地隔离认证
+  fixture、API/高德 Mock 执行 Chrome/Edge × 100%/125% 冻结矩阵。
 - 2B 候选 `c1279b5…` 在自身提交内形成 API r18：`GET /api/v2/driver/tasks` 的
   `DriverTaskV2.servicePlan` 必返并复用 `ServicePlanV2`。该版本尚未合入 `develop`，只作为
   2B 审计与浏览器验收依据；不得将 registry 的 develop 现行版本提前写成 r18。
