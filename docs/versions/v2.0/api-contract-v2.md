@@ -1,7 +1,7 @@
 # 人车单 V2 API 契约
 
-> 契约版本：`RCD-API-V2.0-R17-20260816`
-> 状态：第二轮并行前置契约已冻结；`OperationLogV2` 响应与 metadata 边界已收口
+> 契约版本：`RCD-API-V2.0-R18-20260817`
+> 状态：第二轮司机任务读取契约已冻结；`DriverTaskV2.servicePlan` 已收口为共享 DTO
 > 实施约束：本文件只冻结契约，不含任何代码；TypeScript DTO、错误类型和契约测试在 Gate 2 落地
 > 上游依据：[PRD V2](prd-v2.md) · [数据架构 V2](data-architecture-v2.md) · [项目规则 V2](project-rules-v2.md)
 > 代码事实：`codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`
@@ -169,7 +169,7 @@ PageResultV2<T> = { items: T[], total: number, page: number, pageSize: number }
 - 司机无拒单和改派接口；此类操作不存在于 driver 路径下。
 - 第二轮 H5 地图不新增聚合路径，固定组合本节三个读取接口：`/driver/map`、`/driver/tasks` 与 `/driver/orders/unassigned`；客户端每 15 秒读取，位置上报仍按数据架构的 30 秒目标频率。
 - `/driver/map` 保持返回 `DriverV2[]`，只含上班司机的位置层；`slots` 不得用于泄露他人订单详情。`lastLocation` 只有在 `lat/lng/accuracyMeters/capturedAt` 完整时才整体出现。
-- `/driver/tasks` 只返回本人 A/B/C，并为地图展示向 `AssignmentSummaryV2` 向后兼容增加 `businessType`、`lockType`、`feasibility`、`promisedPickupAt`、`pickupPoint`、`deliveryPoint`、`pickupAddress`、`deliveryAddress`。
+- `/driver/tasks` 只返回本人 A/B/C，响应固定为 `DriverTaskV2[]`。`DriverTaskV2` 在 `AssignmentSummaryV2` 与既有 H5 展示字段上增加 `servicePlan: ServicePlanV2 | null`；已有服务计划时返回完整 `ServicePlanV2`，尚未建立计划时必须明确返回 `null`，不得省略字段。
 - `/driver/orders/unassigned` 只返回尚未分配订单的 `DriverOrderMarkerV2[]`；订单分配给任一司机后立即从结果移除。任何司机读取其他司机已分配订单详情返回 403。
 - 三个读取接口均从已认证身份解析调用者 `driverId`；query/body 中出现的 `driverId` 不得改变授权主体。浏览器不得接收 `AMAP_SERVER_KEY`。
 
@@ -268,6 +268,25 @@ departedAt?, arrivedAt?, completedAt?,
 lastEtaCalculatedAt?
 // planVersion 不在 Assignment 上：归属司机计划聚合，见 DriverV2 与数据架构 §6
 ```
+
+### 3.2.1 DriverTaskV2
+
+`GET /api/v2/driver/tasks` 的 `data` 固定为 `DriverTaskV2[]`：
+
+```text
+DriverTaskV2 = AssignmentSummaryV2 + {
+  businessType: STORE_PICKUP | STORE_RETURN | DOOR_DELIVERY | DOOR_PICKUP,
+  executionStatus: PLANNED | EN_ROUTE | IN_SERVICE,
+  feasibility: UNKNOWN | NORMAL | AT_RISK | INFEASIBLE,
+  promisedPickupAt,
+  pickupPoint?: { lat, lng }, deliveryPoint?: { lat, lng },
+  pickupAddress?, deliveryAddress?,
+  servicePlan: ServicePlanV2 | null
+}
+```
+
+- `servicePlan` 是必返字段：已有计划时返回 §3.4 的完整 `ServicePlanV2`，尚未建立计划时返回 `null`，不得省略。
+- 只返回已认证司机本人的 A/B/C；不增加第四个司机读取接口。
 
 ### 3.3 DriverV2
 
@@ -423,3 +442,4 @@ MapSnapshotV2 = {
 | V2.0-r15 | 2026-08-16 | 串行 API 审计返修冻结：计划编辑命令严格先校验版本且不推测 replay；手动分配/改派必须在提交前形成指定司机的完整 A/B/C 锁定计划；地址变化先地理编码再原子提交；冻结 `MapSnapshotV2` 顶层、订单修改历史摘要和 `/drivers` 分页 DTO |
 | V2.0-r16 | 2026-08-16 | 统一 `DEPENDENCY_UNAVAILABLE.details.dependency` 为共享 DTO 已冻结的大写枚举 `AMAP`；修正 r15 两处小写笔误，不改变错误码、状态码或实现范围 |
 | V2.0-r17 | 2026-08-16 | 第二轮并行前置补丁：冻结 `/api/v2/logs` 为 `PageResultV2<OperationLogV2>`，明确日志身份、实体、动作、操作人、关联 ID、结构化前后值白名单与 `metadataJson` 禁止暴露边界 |
+| V2.0-r18 | 2026-08-17 | 司机任务读取契约收口：`GET /api/v2/driver/tasks` 固定返回 `DriverTaskV2[]`，复用共享 `ServicePlanV2`；`servicePlan` 有计划时返回完整 DTO、无计划时明确返回 `null`，不新增读取接口 |
