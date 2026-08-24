@@ -1,6 +1,6 @@
 # 人车单项目文档版本总入口
 
-> 版本戳：`RCD-DOC-REGISTRY-20260824-R40`
+> 版本戳：`RCD-DOC-REGISTRY-20260824-R41`
 > 建立日期：2026-07-13
 > 治理更新时间：2026-08-24
 > 归档方式：现行权威集中到 `v2.0/`；已融合或冲突的旧方案从工作树清场，历史由 Git 追溯
@@ -22,7 +22,7 @@
 | 产品需求 | V2.0-r5 | §9.2.2 H5 整体重做优先；地图 DTO、可见字段、刷新、鉴权和移动端验收已再冻结 | [PRD V2](v2.0/prd-v2.md) |
 | 数据架构 | V2.0-r16 | 当前候选 Schema/migration tree 与冻结基线完全相同 | [数据架构 V2](v2.0/data-architecture-v2.md) |
 | 代码与设计约束 | V2.0-r18 | 第二轮串行前置和 2A/2B/2C 唯一文件所有权已冻结 | [项目规则 V2](v2.0/project-rules-v2.md) |
-| API 契约 | V2.0-r17（develop 现行） | 2B 候选 `143a10a…` 内含 r18 的 `DriverTaskV2.servicePlan` 收口；待审计、测试和合并后才进入 develop 现行入口 | [API 契约 V2](v2.0/api-contract-v2.md) |
+| API 契约 | V2.0-r17（develop 现行） | 2B 候选 `143a10a…` 内含 r18 的 `DriverTaskV2.servicePlan` 收口；代码审计已 PASS，待浏览器测试和合并后才进入 develop 现行入口 | [API 契约 V2](v2.0/api-contract-v2.md) |
 | 领域词汇 | V2.0-r13 | 当前候选领域术语与枚举零变化已登记 | [领域词汇 V2](v2.0/domain-glossary-v2.md) |
 | 应用框架与依赖决策 | V2.0-r5 | 当前候选未改变框架、依赖来源或兼容边界 | [应用决策日志](v2.0/application-decision-log.md) |
 | V1→V2 兼容映射 | V2.0 | Gate 0 已冻结 | [兼容矩阵](v2.0/v1-v2-compatibility-matrix.md) |
@@ -30,8 +30,8 @@
 | 构建、部署与回退 | V2.0-r13 | Gate 3 `PASS` 文档基线 `464ee5d…` 已远程核验；分阶段和禁止重复 migration 规则不变 | [部署指南 V2](v2.0/deployment-guide-v2.md) |
 | 生产运行与恢复 | V2.0-r6 | 最终运行资源、健康、10 单、outbox 和证据一致性通过；整机/RDS 灾备仍为独立演练 | [运维指南 V2](v2.0/operations-guide-v2.md) |
 | 基础设施决策与替代历史 | V2.0-r3 | INFRA-001～023 已登记；公网 IP 预生产演示获准，正式上线条件不变 | [基础设施决策日志](v2.0/infrastructure-decision-log.md) |
-| 项目当前状态 | 2026-08-24 | 正式基线为 `develop @ 2adae769…`；2B 新候选 `143a10a…` 已重放并自测通过，等待独立审计与双尺寸浏览器验收 | [状态总览](../status/README.md) |
-| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260824-R39 | Layer 0；所有 Agent 必读；不超过 150 行；2B 新候选、正式基线和测试放行边界已登记 | [Agent 公共上下文](../context/agent-common-context.md) |
+| 项目当前状态 | 2026-08-24 | 正式基线为 `develop @ 2adae769…`；2B 候选 `143a10a…` 代码审计 PASS，Chrome/Edge 双尺寸浏览器验收已授权 | [状态总览](../status/README.md) |
+| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260824-R40 | Layer 0；所有 Agent 必读；不超过 150 行；2B 审计 PASS 与浏览器测试授权已登记 | [Agent 公共上下文](../context/agent-common-context.md) |
 | V1 产品与开发主线 | V1.x | 历史只读 | [V1 历史索引](v1/README.md) |
 
 ## 文档权威顺序（按领域拆分，唯一权威口径）
@@ -169,7 +169,7 @@ remote commit: 958afca537b412fb972b6e180561a9b37022834d
 2. 新候选的 Schema/migration tree 与完成一次性空 PostgreSQL 演练的旧冻结候选完全相同；原有 9 个正向 migration、最终 Schema、8 个 rollback 和五类安全护栏结论继续有效。
 3. 冻结真实 10 单已完成：订单 1～6、8～10 共 9 单完成，订单 7 按预期为 `INFEASIBLE` 且保留 1 条开放预警；并发、旧版本、到达后改排拒绝与订单 10 幂等重放均通过。首轮失败、旧映射、边界抖动和错误 helper 现场继续保留，不得清理。
 4. 最终一致性审查确认本地/远程代码、ACR digest、ECS 运行身份、真实依赖、10 单结果和故障/回退证据一致；文档口径已返修，并以 `feature/v2-gate3-review-remediation @ 57ef86c43bf220f48774e130575c40b8c94a83d5` 形成可追溯基线，本地、upstream 与 GitHub 远程核验一致。
-5. 主控已于 2026-08-11 最终裁决 Gate 3 `PASS`。2026-08-16 串行 API 候选完成 T1 并合入。2026-08-23，2C 重放为 `04aba179…` 并 `--ff-only` 合入本地 develop，合入后回归通过；随后治理提交形成正式基线 `develop @ 2adae769caae1dce7f994de1d1ce63ab75b0fc36`。2026-08-24，2B 直接基于该正式基线形成唯一候选 `143a10a…`，29 个文件边界与自测通过；独立代码审计前，测试 Agent 只能准备 Chrome/Edge × `360×800`、`390×844` 矩阵，不得形成正式验收结论。2A `6562544…` 已 `EXIT_PASS`，在 2B 后合入。远程仍为 `ae471484…`。
+5. 主控已于 2026-08-11 最终裁决 Gate 3 `PASS`。2026-08-16 串行 API 候选完成 T1 并合入。2026-08-23，2C 重放为 `04aba179…` 并 `--ff-only` 合入本地 develop，合入后回归通过；随后治理提交形成正式基线 `develop @ 2adae769caae1dce7f994de1d1ce63ab75b0fc36`。2026-08-24，2B 直接基于该正式基线形成唯一候选 `143a10a…`，29 个文件边界、自测与独立代码审计通过；测试 Agent 已获准执行 Chrome、Edge × `360×800`、`390×844` 正式矩阵，浏览器测试 PASS 前仍不得合入。2A `6562544…` 已 `EXIT_PASS`，在 2B 后合入。远程仍为 `ae471484…`。
 
 状态事实和阻断项统一在[状态总览](../status/README.md)维护；状态文档不得修改领域契约。
 

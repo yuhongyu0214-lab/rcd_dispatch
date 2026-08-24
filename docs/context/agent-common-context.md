@@ -1,7 +1,7 @@
 # 人车单 V2 Agent 公共上下文（Layer 0）
 
 > 文档类型：`DERIVED / LAYER_0`
-> 上下文版本：`RCD-AGENT-CONTEXT-20260824-R39`
+> 上下文版本：`RCD-AGENT-CONTEXT-20260824-R40`
 > 适用范围：所有新建或重新启动的 Agent
 > 权威范围：仅提供项目目标、当前阶段、公共纪律、模块边界和命令入口
 > 非权威范围：产品行为、Schema、HTTP DTO、枚举、基础设施细节和任务验收标准
@@ -12,7 +12,7 @@
 
 人车单调度系统 V2 面向汽车租赁调度，主线是订单接入、实时位置、司机班次、A/B/C 工单时间轴、真实 ETA、调度事务和执行闭环。
 
-Gate 3 已于 2026-08-11 最终裁决 `PASS`。串行调度员 API 已合入并通过 T1；2C 已合入本地 `develop` 并通过合入后回归，随后治理提交形成当前正式代码基线 `develop @ 2adae769caae1dce7f994de1d1ce63ab75b0fc36`。2B 已重放为唯一候选 `143a10a2aeff5ebacd1397a73a82d0ae3484a8da`，直接父提交为该正式基线，29 个文件边界与自测通过；当前仍为 `CODE_AUDIT_PENDING / BROWSER_TEST_BLOCKED`。2A 候选 `6562544361b29579b4e52c059ce8f85db7b72722` 已 `EXIT_PASS`，在 2B 之后合入。`origin/develop` 仍为 `ae471484…`。
+Gate 3 已于 2026-08-11 最终裁决 `PASS`。串行调度员 API 已合入并通过 T1；2C 已合入本地 `develop` 并通过合入后回归，随后治理提交形成当前正式代码基线 `develop @ 2adae769caae1dce7f994de1d1ce63ab75b0fc36`。2B 唯一候选 `143a10a2aeff5ebacd1397a73a82d0ae3484a8da` 直接基于该正式基线，29 个文件边界、自测和独立代码审计均通过；当前为 `CODE_AUDIT_PASS / BROWSER_TEST_AUTHORIZED`。2A 候选 `6562544361b29579b4e52c059ce8f85db7b72722` 已 `EXIT_PASS`，在 2B 之后合入。`origin/develop` 仍为 `ae471484…`。
 
 ## 2. 当前版本与闸门
 
@@ -29,12 +29,12 @@ Gate 3 已于 2026-08-11 最终裁决 `PASS`。串行调度员 API 已合入并�
 | 镜像 | app/worker 运行 `958afca…` → `sha256:13e0…5bff`；Nginx 原镜像/配置/证书/端口不变且 release revision 对齐；更早运行/回退候选继续保留，不得混用 |
 | 基础设施 | 阿里云主线；ECS 上 app/worker/Nginx、自签名 HTTPS、结构化日志、`json-file` 轮转与 LoongCollector `3.2.6` 已验收；SLS 运行/安全日志、查询、脱敏、30/180 天留存、告警、通知和预算通过；正式域名/备案/可信证书延后 |
 | Gate 3 | `PASS`（2026-08-11 最终裁决） |
-| 第二轮并行 | 2C `MERGED_LOCAL / POST_MERGE_PASS`；2B `REBASED / SELF_TEST_PASS / CODE_AUDIT_PENDING / BROWSER_TEST_BLOCKED`；2A `EXIT_PASS / MERGE_QUEUED_AFTER_2B` |
+| 第二轮并行 | 2C `MERGED_LOCAL / POST_MERGE_PASS`；2B `REBASED / SELF_TEST_PASS / CODE_AUDIT_PASS / BROWSER_TEST_AUTHORIZED`；2A `EXIT_PASS / MERGE_QUEUED_AFTER_2B` |
 | Railway | 仅历史 Demo 证据，不是生产基线 |
 
 状态变化只认 [项目状态总览](../status/README.md)；文档入口只认 [文档版本总入口](../versions/README.md)。
 
-当前 Gate 3 运行候选仍为 `958afca…@sha256:13e0…5bff`，预生产、真实 10 单、故障恢复和回退证据保持不可变。2B 唯一候选 `143a10a…` 已直接基于 `2adae769…`，专项 `80/80`、2B/2C 联测 `29/29`、全量 `674 passed / 7 expected skipped`、lint、29/29 build、diff check 和 29 文件边界通过。独立代码审计 `PASS` 前，测试 Agent 只能准备 Chrome/Edge × `360×800`、`390×844` 矩阵，不得形成正式浏览器验收结论；审计与冻结测试均通过后才能合入，之后才轮到 2A。API r18 的 `DriverTaskV2.servicePlan` 读取契约目前只在 2B 候选中，合入前仍以 `develop` 的 API r17 为现行入口。不得把第 10 个 migration 投入预生产，不得连接预生产 RDS/Tair、真实高德，不得执行部署、重复基础资料或证据清理。
+当前 Gate 3 运行候选仍为 `958afca…@sha256:13e0…5bff`，预生产、真实 10 单、故障恢复和回退证据保持不可变。2B 唯一候选 `143a10a…` 已直接基于 `2adae769…`，专项 `80/80`、2B/2C 联测 `29/29`、全量 `674 passed / 7 expected skipped`、lint、29/29 build、diff check、29 文件边界及独立代码审计通过。测试 Agent 现获准执行 Chrome、Edge × `360×800`、`390×844` 正式矩阵；修改白名单为空，外部系统授权为无。冻结浏览器测试 `PASS` 前仍不得合入，之后才轮到 2A。API r18 的 `DriverTaskV2.servicePlan` 读取契约目前只在 2B 候选中，合入前仍以 `develop` 的 API r17 为现行入口。不得把第 10 个 migration 投入预生产，不得连接预生产 RDS/Tair、真实高德，不得执行部署、重复基础资料或证据清理。
 
 ## 3. 公共模块边界
 
