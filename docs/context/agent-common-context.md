@@ -1,7 +1,7 @@
 # 人车单 V2 Agent 公共上下文（Layer 0）
 
 > 文档类型：`DERIVED / LAYER_0`
-> 上下文版本：`RCD-AGENT-CONTEXT-20260824-R44`
+> 上下文版本：`RCD-AGENT-CONTEXT-20260824-R45`
 > 适用范围：所有新建或重新启动的 Agent
 > 权威范围：仅提供项目目标、当前阶段、公共纪律、模块边界和命令入口
 > 非权威范围：产品行为、Schema、HTTP DTO、枚举、基础设施细节和任务验收标准
@@ -12,7 +12,7 @@
 
 人车单调度系统 V2 面向汽车租赁调度，主线是订单接入、实时位置、司机班次、A/B/C 工单时间轴、真实 ETA、调度事务和执行闭环。
 
-Gate 3 已于 2026-08-11 最终裁决 `PASS`。串行调度员 API、2C、2B 与 2A 均已合入本地 `develop` 并通过各自合入后回归。2A 候选 `1c4f9f29e890360e1439bf0d0962d3ccb5f73b56` 完成 Chrome 151、Edge 151 × 100%/125% 浏览器重点复验后，以 `--no-ff` 合入，形成统一代码基线 `develop @ 46813c3ecf4a0df1eaf99bfb3d8d72f7d450193b`；合入后全量 `715 passed / 7 expected skipped`、lint、31/31 build、diff check 和干净工作区通过。第二轮当前为 `MERGED_LOCAL / POST_MERGE_PASS / JOINT_INTEGRATION_P2_PENDING`。`origin/develop` 仍为 `ae471484…`。
+Gate 3 已于 2026-08-11 最终裁决 `PASS`。串行调度员 API、2C、2B 与 2A 均已合入本地 `develop` 并通过各自合入后回归。统一代码树锚点为 `46813c3ecf4a0df1eaf99bfb3d8d72f7d450193b`，治理基线为 `develop @ 3bf5aa34780d891613cb0ad0c0414de480df0934`。第二轮联合联调的两项 P2 已批准进入单一前端返修线 `feature/v2-round2-p2-remediation`：只处理 GPS 状态 live region 和司机端既有设计 token 收口，精确 4 文件，不修改 `globals.css`、API、Schema、调度或云资源。当前为 `P2_REMEDIATION_READY`；`origin/develop` 仍为 `ae471484…`。
 
 ## 2. 当前版本与闸门
 
@@ -29,12 +29,12 @@ Gate 3 已于 2026-08-11 最终裁决 `PASS`。串行调度员 API、2C、2B 与
 | 镜像 | app/worker 运行 `958afca…` → `sha256:13e0…5bff`；Nginx 原镜像/配置/证书/端口不变且 release revision 对齐；更早运行/回退候选继续保留，不得混用 |
 | 基础设施 | 阿里云主线；ECS 上 app/worker/Nginx、自签名 HTTPS、结构化日志、`json-file` 轮转与 LoongCollector `3.2.6` 已验收；SLS 运行/安全日志、查询、脱敏、30/180 天留存、告警、通知和预算通过；正式域名/备案/可信证书延后 |
 | Gate 3 | `PASS`（2026-08-11 最终裁决） |
-| 第二轮并行 | 2C、2B、2A 均为 `MERGED_LOCAL / POST_MERGE_PASS`；联合联调两项 P2 待关闭 |
+| 第二轮并行 | 2C、2B、2A 均为 `MERGED_LOCAL / POST_MERGE_PASS`；`feature/v2-round2-p2-remediation` 已授权，等待从本轮治理提交创建并启动 |
 | Railway | 仅历史 Demo 证据，不是生产基线 |
 
 状态变化只认 [项目状态总览](../status/README.md)；文档入口只认 [文档版本总入口](../versions/README.md)。
 
-当前 Gate 3 运行候选仍为 `958afca…@sha256:13e0…5bff`，预生产、真实 10 单、故障恢复和回退证据保持不可变。2B `143a10a…` 已以 `--no-ff` 合入代码锚点 `2a621620…`；API r18 的 `DriverTaskV2.servicePlan` 已成为 develop 现行契约。2A `1c4f9f29…` 的 Chrome/Edge × 100%/125% 四组矩阵与 28 组关键场景全部通过，随后以 `--no-ff` 合入 `develop @ 46813c3…`，双父为 `5218f35…` 与 `1c4f9f29…`；合入后全量 `715 passed / 7 expected skipped`、lint、31/31 build、diff check 和干净工作区通过。非阻断 P2“GPS 状态缺少 live region”和“部分样式尚未完全使用设计 token”进入第二轮联合联调，关闭前不得启动 3A/3B。不得把第 10 个 migration 投入预生产，不得连接预生产 RDS/Tair、真实高德，不得执行部署、重复基础资料或证据清理。
+当前 Gate 3 运行候选仍为 `958afca…@sha256:13e0…5bff`，预生产、真实 10 单、故障恢复和回退证据保持不可变。P2 返修只允许修改 `driver-gps-tracker.tsx`、`driver-gps-tracker.test.tsx`、`driver-workspace.tsx`、`driver-workspace.test.tsx`：live region 只播报状态文字，不把 30 秒时间戳放入播报区；样式只把既有语义颜色、表面和边框映射到 `globals.css` 已存在 token，不新增 token、不改变布局、文案或业务行为。完成专项、全量 test/lint/build、独立代码审计及 Chrome/Edge × `360×800`、`390×844` 复验前不得合入或启动 3A/3B。不得把第 10 个 migration 投入预生产，不得连接预生产 RDS/Tair、真实高德，不得执行部署、重复基础资料或证据清理。
 
 ## 3. 公共模块边界
 

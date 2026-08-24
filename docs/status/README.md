@@ -6,13 +6,13 @@
 
 ## 一句话结论
 
-Gate 3 保持 `PASS`，运行候选与预生产证据不变。2C、2B、2A 均为 `MERGED_LOCAL / POST_MERGE_PASS`。2A `1c4f9f29e890360e1439bf0d0962d3ccb5f73b56` 完成 Chrome 151、Edge 151 × 100%/125% 四组矩阵和 28 组关键场景后，以 `--no-ff` 合入统一代码基线 `develop @ 46813c3ecf4a0df1eaf99bfb3d8d72f7d450193b`；合入后全量 `715 passed / 7 expected skipped`、lint、31/31 build、diff check 和干净工作区通过。当前只剩第二轮联合联调的两项非阻断 P2，关闭前不启动 3A/3B。预生产仍为 9 个 migration，远程仍为 `ae471484…`。
+Gate 3 保持 `PASS`，运行候选与预生产证据不变。2C、2B、2A 均为 `MERGED_LOCAL / POST_MERGE_PASS`，统一代码树锚点为 `46813c3ecf4a0df1eaf99bfb3d8d72f7d450193b`，治理基线为 `develop @ 3bf5aa34780d891613cb0ad0c0414de480df0934`。两项非阻断 P2 已冻结为单一前端返修线 `feature/v2-round2-p2-remediation`，精确 4 文件；完成代码审计、回归和移动端浏览器复验前不启动 3A/3B。预生产仍为 9 个 migration，远程仍为 `ae471484…`。
 
 ## 当前工作流状态
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
-| 文档治理 | `2A_MERGED_POST_MERGE_PASS_SYNC_PENDING_COMMIT` | `develop @ 46813c3…`；浏览器与合入后回归 PASS | 提交本轮 5 份治理文档；随后关闭联合联调两项 P2 |
+| 文档治理 | `P2_REMEDIATION_READY_SYNC_PENDING_COMMIT` | P2 分支、worktree、4 文件白名单和验收闸门已冻结 | 提交治理文档 → 从新 SHA 创建 P2 worktree → 启动前端返修 Agent |
 | 应用候选 | `958AFCA_GATE3_ACCEPTED_DEVELOP_HANDOFF_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变运行身份；代码历史交接点为 `develop @ 51ddb5f…`，最终状态激活 HEAD 为 `ae471484…` |
 | 依赖安全 | `COMPLETED` | [依赖安全返修](2026-08-01-gate3-dependency-security-remediation.md) | 依赖变化时重跑全套审计 |
 | migration 指纹 | `PREPROD_9_APPLIED_LOCAL_10_PASS` | 第 10 个 migration 提交 `c6850df0a85aab601c3034e542a0f0b575c9053e` | 隔离 PostgreSQL 已通过；预生产 9 个保持不变，未经授权不实施第 10 个 |
@@ -26,7 +26,7 @@ Gate 3 保持 `PASS`，运行候选与预生产证据不变。2C、2B、2A 均�
 | 真实 10 单 | `REAL10_PASS_9_COMPLETED_1_INFEASIBLE_ALERT` | [真实 E2E 重验进度](2026-08-10-gate3r-real-e2e-retest-progress.md) | 保留全部成功与失败现场，不清理 |
 | Gate 3 总闸门 | `PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变候选与证据，进入受控阶段交接 |
 | 串行调度员 V2 API 接线 | `T1_PASS / MERGED_LOCAL / POST_MERGE_PASS` | 候选 `152f7c5…` 已合入 `develop @ 8cfed6ad…`；T1 与合并后全量回归通过 | 串行前置退出；保持本地合并且暂不推送 |
-| 第二轮并行 | `2C_MERGED / 2B_MERGED / 2A_MERGED / POST_MERGE_PASS` | 2A 浏览器四组矩阵与合入后 `715/7`、lint、31/31 build PASS | 联合联调关闭 GPS live region 与设计 token 两项 P2 → 启动 3A/3B |
+| 第二轮并行 | `MERGED_LOCAL / POST_MERGE_PASS / P2_REMEDIATION_READY` | `feature/v2-round2-p2-remediation`；精确 4 文件，外部系统授权无 | P2 开发、自测、审计、移动端浏览器复验 → 合入 → 启动 3A/3B |
 
 ## 唯一代码、文档与迁移基线
 
@@ -67,6 +67,9 @@ round2 current formal code baseline: local develop @ 46813c3ecf4a0df1eaf99bfb3d8
 round2 2B merge parents: ef07d09b9f16c2961659ee5afa0d917ef30bf4fd | 143a10a2aeff5ebacd1397a73a82d0ae3484a8da
 round2 2A rebase and document baseline: local develop @ f3d68171826c20a849b9a8ca3d6bb5970e9ba49a
 round2 2A merge parents: 5218f355128d20c8a7e37615d43259683bbc6980 | 1c4f9f29e890360e1439bf0d0962d3ccb5f73b56
+round2 P2 remediation branch: feature/v2-round2-p2-remediation
+round2 P2 remediation worktree: .worktrees/round2-p2-remediation
+round2 P2 remediation whitelist: driver-gps-tracker.tsx | driver-gps-tracker.test.tsx | driver-workspace.tsx | driver-workspace.test.tsx
 rejected dispatcher API candidate: feature/v2-dispatcher-api-wiring @ 319f73401359ef4a232a2217afaaef2ef4212af2
 superseded unaligned API remediation candidate: feature/v2-dispatcher-api-wiring @ 5b84ab4881e1a8da12672c19d87098674798e60c
 superseded API remediation candidate: feature/v2-dispatcher-api-wiring @ 60f03af3c73bb867a7139b705741135d276b50ab
@@ -125,7 +128,10 @@ parallel worktrees: .worktrees/round2-admin-console | .worktrees/round2-driver-w
   合入后全量仍为 `674 passed / 7 expected skipped`，lint、29/29 build、diff check 和干净
   工作区通过，当前为 `MERGED_LOCAL / POST_MERGE_PASS`。
 - 2B 浏览器验收保留两项非阻断 P2：GPS 状态缺少 live region；部分样式尚未完全使用设计
-  token。二者登记到 2A 合入后的第二轮联合联调、进入 3A/3B 前处理，不阻断 2B 合入裁决。
+  token。二者已冻结为单一前端返修线：live region 只播报状态文字，时间戳保持在播报区外；
+  样式只复用既有 token，禁止修改 `globals.css` 或改变布局、文案与业务行为。精确白名单为
+  `driver-gps-tracker.tsx`、对应测试、`driver-workspace.tsx`、对应测试；通过独立审计、全量回归
+  和 Chrome/Edge × `360×800`、`390×844` 前不得合入或启动 3A/3B。
 - 2C 原候选 `99d6909…` 在不改变 patch 的前提下线性重放到文档基线 `1e83782…`，修正提交
   说明后形成 `04aba179…`；稳定 patch-id 一致，精确 9 个白名单文件。专项及共享契约 `35/35`，
   合入前后全量均为 `648 passed / 7 expected skipped`，lint、29/29 build 和 diff check 通过；
