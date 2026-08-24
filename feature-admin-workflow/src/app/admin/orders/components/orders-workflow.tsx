@@ -877,6 +877,9 @@ export function OrdersWorkflow() {
       <div className={styles.appShell}>
         <nav className={styles.navRail} aria-label="后台模块导航">
           <div className={styles.railBrand}>RCD</div>
+          <Link href="/admin/orders/v2" className={styles.railItem} title="V2 调度工作台">
+            V2
+          </Link>
           <Link href="/admin/map" className={styles.railItem} title="地图看板">
             图
           </Link>
