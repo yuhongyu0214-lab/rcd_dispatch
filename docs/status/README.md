@@ -6,13 +6,13 @@
 
 ## 一句话结论
 
-Gate 3 保持 `PASS`，运行候选与预生产证据不变。本地正式代码基线为 `develop @ 2adae769caae1dce7f994de1d1ce63ab75b0fc36`，其中 2C 已合入并通过合入后回归。2B 唯一候选 `143a10a2aeff5ebacd1397a73a82d0ae3484a8da` 的直接父提交、29 文件边界、自测和独立代码审计均通过，当前为 `CODE_AUDIT_PASS / BROWSER_TEST_AUTHORIZED`；测试 Agent 可启动 Chrome、Edge × `360×800`、`390×844` 正式矩阵。2A 候选 `6562544361b29579b4e52c059ce8f85db7b72722` 已退出验收并在 2B 后合入。预生产仍为 9 个 migration，远程仍为 `ae471484…`。
+Gate 3 保持 `PASS`，运行候选与预生产证据不变。第二轮正式代码基线为 `develop @ 2adae769caae1dce7f994de1d1ce63ab75b0fc36`，其中 2C 已合入并通过合入后回归。2B 唯一候选 `143a10a2aeff5ebacd1397a73a82d0ae3484a8da` 的直接父提交、29 文件边界、自测、独立代码审计和 Chrome/Edge 双尺寸浏览器验收均通过，当前为 `EXIT_PASS / MERGE_ELIGIBLE`，但尚未授权合入。2A 候选 `6562544361b29579b4e52c059ce8f85db7b72722` 已退出验收并在 2B 后合入。预生产仍为 9 个 migration，远程仍为 `ae471484…`。
 
 ## 当前工作流状态
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
-| 文档治理 | `2B_CODE_AUDIT_PASS_SYNC_PENDING_COMMIT` | 同一 2B 候选审计 PASS；API r18 仍仅在 2B 候选，浏览器测试尚未执行 | 形成新的文档提交 SHA 后启动冻结浏览器矩阵；不推送远程 |
+| 文档治理 | `2B_BROWSER_PASS_SYNC_PENDING_COMMIT` | 同一 2B 候选浏览器矩阵 PASS；API r18 仍仅在 2B 候选 | 形成新的文档提交 SHA；后续合入须另行授权且不推送远程 |
 | 应用候选 | `958AFCA_GATE3_ACCEPTED_DEVELOP_HANDOFF_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变运行身份；代码历史交接点为 `develop @ 51ddb5f…`，最终状态激活 HEAD 为 `ae471484…` |
 | 依赖安全 | `COMPLETED` | [依赖安全返修](2026-08-01-gate3-dependency-security-remediation.md) | 依赖变化时重跑全套审计 |
 | migration 指纹 | `PREPROD_9_APPLIED_LOCAL_10_PASS` | 第 10 个 migration 提交 `c6850df0a85aab601c3034e542a0f0b575c9053e` | 隔离 PostgreSQL 已通过；预生产 9 个保持不变，未经授权不实施第 10 个 |
@@ -26,7 +26,7 @@ Gate 3 保持 `PASS`，运行候选与预生产证据不变。本地正式代码
 | 真实 10 单 | `REAL10_PASS_9_COMPLETED_1_INFEASIBLE_ALERT` | [真实 E2E 重验进度](2026-08-10-gate3r-real-e2e-retest-progress.md) | 保留全部成功与失败现场，不清理 |
 | Gate 3 总闸门 | `PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变候选与证据，进入受控阶段交接 |
 | 串行调度员 V2 API 接线 | `T1_PASS / MERGED_LOCAL / POST_MERGE_PASS` | 候选 `152f7c5…` 已合入 `develop @ 8cfed6ad…`；T1 与合并后全量回归通过 | 串行前置退出；保持本地合并且暂不推送 |
-| 第二轮并行 | `2C_MERGED / 2B_CODE_AUDIT_PASS` | develop `2adae769…`；2B `143a10a…` 已授权浏览器验收；2A `6562544…` 最后一位 | Chrome/Edge 双尺寸验收 → 2B 合入后全量回归 |
+| 第二轮并行 | `2C_MERGED / 2B_EXIT_PASS / MERGE_ELIGIBLE` | 正式代码基线 `2adae769…`；2B `143a10a…` 浏览器验收 PASS；2A `6562544…` 最后一位 | 主控另行批准 2B `--no-ff` 合入 → 合入后全量回归 |
 
 ## 唯一代码、文档与迁移基线
 
@@ -77,7 +77,7 @@ parallel branch code tree anchor: f591aca69e9f6e4a20061c94ea564b053abe7be0
 parallel branch start and document baseline: 主控下发的当前本地 develop HEAD（同时包含上述代码树与本次治理文档）
 parallel worktrees: .worktrees/round2-admin-console | .worktrees/round2-driver-workflow | .worktrees/round2-observability
 2A candidate: feature/v2-admin-console @ 6562544361b29579b4e52c059ce8f85db7b72722 (code audit PASS; browser test PASS; merge after 2B)
-2B candidate: feature/v2-driver-workflow @ 143a10a2aeff5ebacd1397a73a82d0ae3484a8da (direct parent 2adae769; self-test PASS; code audit PASS; formal Chrome/Edge 360x800/390x844 test authorized)
+2B candidate: feature/v2-driver-workflow @ 143a10a2aeff5ebacd1397a73a82d0ae3484a8da (direct parent 2adae769; self-test PASS; code audit PASS; Chrome/Edge 360x800/390x844 browser test PASS; merge eligible)
 2C merged: feature/v2-observability @ 04aba1798b9ea1d834da56f5e072f936543bafc1 (rebased from 99d6909 with identical patch; ff-only merged; post-merge PASS)
 ```
 
@@ -111,9 +111,12 @@ parallel worktrees: .worktrees/round2-admin-console | .worktrees/round2-driver-w
   2B/2C 联测 `29/29`、全量 `674 passed / 7 expected skipped`、lint、29/29 build、
   29 文件白名单与 diff check 通过。真实定位重采样、下班停报、四态文案、移动端滚动、
   轮询竞态、地图实例复用和共享任务 DTO 已返修；同一候选的独立代码审计已 `PASS`，未产生
-  新代码 SHA。主控状态为 `REBASED / SELF_TEST_PASS / CODE_AUDIT_PASS /
-  BROWSER_TEST_AUTHORIZED`；测试 Agent 可执行 Chrome、Edge × `360×800`、`390×844` 正式
-  验收，但浏览器测试 PASS 前仍未授权合并。
+  新代码 SHA。Chrome 151、Edge 151 × `360×800`、`390×844` 浏览器矩阵全部 `PASS`：实际
+  视口准确、无横向滚动、点击目标不小于 44px，轮询不重置地图，Marker 与订单双向联动，
+  A/B/C 动作、五种位置拒收和地图失败降级均符合冻结要求。当前为 `EXIT_PASS /
+  MERGE_ELIGIBLE`，但仍须主控另行授权合入。
+- 2B 浏览器验收保留两项非阻断 P2：GPS 状态缺少 live region；部分样式尚未完全使用设计
+  token。二者登记到 2A 合入后的第二轮联合联调、进入 3A/3B 前处理，不阻断 2B 合入裁决。
 - 2C 原候选 `99d6909…` 在不改变 patch 的前提下线性重放到文档基线 `1e83782…`，修正提交
   说明后形成 `04aba179…`；稳定 patch-id 一致，精确 9 个白名单文件。专项及共享契约 `35/35`，
   合入前后全量均为 `648 passed / 7 expected skipped`，lint、29/29 build 和 diff check 通过；
