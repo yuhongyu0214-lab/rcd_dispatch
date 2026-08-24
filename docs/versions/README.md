@@ -1,6 +1,6 @@
 # 人车单项目文档版本总入口
 
-> 版本戳：`RCD-DOC-REGISTRY-20260824-R43`
+> 版本戳：`RCD-DOC-REGISTRY-20260824-R44`
 > 建立日期：2026-07-13
 > 治理更新时间：2026-08-24
 > 归档方式：现行权威集中到 `v2.0/`；已融合或冲突的旧方案从工作树清场，历史由 Git 追溯
@@ -30,8 +30,8 @@
 | 构建、部署与回退 | V2.0-r13 | Gate 3 `PASS` 文档基线 `464ee5d…` 已远程核验；分阶段和禁止重复 migration 规则不变 | [部署指南 V2](v2.0/deployment-guide-v2.md) |
 | 生产运行与恢复 | V2.0-r6 | 最终运行资源、健康、10 单、outbox 和证据一致性通过；整机/RDS 灾备仍为独立演练 | [运维指南 V2](v2.0/operations-guide-v2.md) |
 | 基础设施决策与替代历史 | V2.0-r3 | INFRA-001～023 已登记；公网 IP 预生产演示获准，正式上线条件不变 | [基础设施决策日志](v2.0/infrastructure-decision-log.md) |
-| 项目当前状态 | 2026-08-24 | 正式代码基线为 `develop @ 2a621620…`；2C、2B 均已本地合入并通过合入后回归，下一项为 2A 重放与复验 | [状态总览](../status/README.md) |
-| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260824-R42 | Layer 0；所有 Agent 必读；不超过 150 行；2B `MERGED_LOCAL / POST_MERGE_PASS` 已登记 | [Agent 公共上下文](../context/agent-common-context.md) |
+| 项目当前状态 | 2026-08-24 | 2C、2B 已合入；2A 新候选 `1c4f9f29…` 的自动化与代码审计 PASS，浏览器重点复验待执行 | [状态总览](../status/README.md) |
+| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260824-R43 | Layer 0；所有 Agent 必读；不超过 150 行；2A `BROWSER_RETEST_PENDING` 已登记 | [Agent 公共上下文](../context/agent-common-context.md) |
 | V1 产品与开发主线 | V1.x | 历史只读 | [V1 历史索引](v1/README.md) |
 
 ## 文档权威顺序（按领域拆分，唯一权威口径）
@@ -169,7 +169,7 @@ remote commit: 958afca537b412fb972b6e180561a9b37022834d
 2. 新候选的 Schema/migration tree 与完成一次性空 PostgreSQL 演练的旧冻结候选完全相同；原有 9 个正向 migration、最终 Schema、8 个 rollback 和五类安全护栏结论继续有效。
 3. 冻结真实 10 单已完成：订单 1～6、8～10 共 9 单完成，订单 7 按预期为 `INFEASIBLE` 且保留 1 条开放预警；并发、旧版本、到达后改排拒绝与订单 10 幂等重放均通过。首轮失败、旧映射、边界抖动和错误 helper 现场继续保留，不得清理。
 4. 最终一致性审查确认本地/远程代码、ACR digest、ECS 运行身份、真实依赖、10 单结果和故障/回退证据一致；文档口径已返修，并以 `feature/v2-gate3-review-remediation @ 57ef86c43bf220f48774e130575c40b8c94a83d5` 形成可追溯基线，本地、upstream 与 GitHub 远程核验一致。
-5. 主控已于 2026-08-11 最终裁决 Gate 3 `PASS`。2026-08-16 串行 API 候选完成 T1 并合入。2026-08-23，2C 重放为 `04aba179…` 并 `--ff-only` 合入本地 develop，合入后回归通过；随后治理提交形成 2B 起始基线 `develop @ 2adae769…`。2026-08-24，2B 唯一候选 `143a10a…` 完成 29 文件边界、自测、独立代码审计以及 Chrome/Edge 双尺寸浏览器验收后，以 `--no-ff` 合入本地 `develop @ 2a62162016f6967bc0a57b45ab1a6e4b8543bdac`；合入后全量 `674 passed / 7 expected skipped`、lint、29/29 build、diff check 和干净工作区通过，API r18 成为 develop 现行契约。2A 原候选 `6562544…` 已在旧基线 `EXIT_PASS`，下一步须基于新 develop 形成新 SHA 并复验。GPS 状态缺少 live region、部分样式未完全使用设计 token 两项非阻断 P2 仍在 2A 合入后的第二轮联合联调、进入 3A/3B 前处理。远程仍为 `ae471484…`。
+5. 主控已于 2026-08-11 最终裁决 Gate 3 `PASS`。2026-08-16 串行 API 候选完成 T1 并合入。2026-08-23，2C 重放为 `04aba179…` 并 `--ff-only` 合入本地 develop，合入后回归通过。2026-08-24，2B `143a10a…` 完成审计和浏览器验收后，以 `--no-ff` 合入本地代码锚点 `2a621620…`，合入后全量回归通过；治理提交形成 2A 重放基线 `develop @ f3d68171826c20a849b9a8ca3d6bb5970e9ba49a`。2A 旧候选 `6562544…` 的两个提交随后等价重放为 `1c4f9f29e890360e1439bf0d0962d3ccb5f73b56`，稳定 patch-id 和 14 文件边界一致；新基线全量 `715 passed / 7 expected skipped`、lint、31/31 build、diff check、干净工作区与代码审计通过，当前等待 Chrome/Edge 浏览器重点复验，复验前不得合入。GPS 状态缺少 live region、部分样式未完全使用设计 token 两项非阻断 P2 仍在 2A 合入后的第二轮联合联调、进入 3A/3B 前处理。远程仍为 `ae471484…`。
 
 状态事实和阻断项统一在[状态总览](../status/README.md)维护；状态文档不得修改领域契约。
 

@@ -1,7 +1,7 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`。第二轮当前正式代码基线为 `develop @ 2a621620…`；2C、2B 均已本地合入并通过合入后回归。2A 原候选 `6562544…` 已在旧基线 `EXIT_PASS`，须基于新 develop 形成新候选并复验。固定顺序仍为 2C → 2B → 2A。
+> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`。第二轮中 2C、2B 均已本地合入并通过合入后回归；2A 已等价重放到 `develop @ f3d68171826c20a849b9a8ca3d6bb5970e9ba49a`，形成新候选 `1c4f9f29e890360e1439bf0d0962d3ccb5f73b56`，自动化与代码审计通过，浏览器重点复验待执行。固定顺序仍为 2C → 2B → 2A。
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
@@ -419,6 +419,8 @@ Gate 3 若因事务 outbox 必须修改上游业务写入点，仍由同一实�
 
 **2026-08-23 2A 候选快照**：`feature/v2-admin-console @ 6562544361b29579b4e52c059ce8f85db7b72722` 相对统一本地代码基线精确 14 个文件，返修提交精确 6 个文件；专项 `41` 项、全量 `665/7`、lint、31/31 build 和 diff check 通过，工作区干净。代码审计与 Chrome/Edge × 100%/125% 浏览器矩阵均 `PASS`；地图、订单池和 A/B/C 时间轴同屏、慢响应隔离、未知计划禁止空闲、详情失败恢复、人工操作入口及 125% 布局均通过。本地 Mock、一次性 PostgreSQL 和端口已清理，候选无需返修、amend 或 rebase，状态为 `EXIT_PASS / MERGE_QUEUED_3`。
 
+**2026-08-24 2A 新基线审计快照**：旧候选 `6562544361b29579b4e52c059ce8f85db7b72722` 的两个提交无冲突重放到 `develop @ f3d68171826c20a849b9a8ca3d6bb5970e9ba49a`，形成唯一新候选 `feature/v2-admin-console @ 1c4f9f29e890360e1439bf0d0962d3ccb5f73b56`。稳定 patch-id `7c758ab98580b1362ba715d023afb7d076847488`、精确 14 文件边界与旧候选一致；全量 `715 passed / 7 expected skipped`、lint、31/31 build、diff check、干净工作区和独立代码审计通过，无新增 P0/P1。由于运行基线新增 2C、2B，仍须完成 Chrome/Edge 浏览器重点复验；当前状态为 `CODE_AUDIT_PASS / AUTOMATED_TEST_PASS / BROWSER_RETEST_PENDING`，不得合入。
+
 **2026-08-23 2C 退出与合入快照**：原候选 `99d69095c69e73320174b52c6e4e61319d8a3cc8` 因 develop 已包含后续治理提交，先以相同稳定 patch-id 线性重放到 `1e837829…`，修正提交说明后形成 `feature/v2-observability @ 04aba1798b9ea1d834da56f5e072f936543bafc1`。候选精确 9 个独占文件，专项及共享契约 `35/35`，合入前后全量均为 `648 passed / 7 expected skipped`，lint、29/29 build、diff check 和干净工作区通过；随后 `--ff-only` 合入本地 develop，未推送、部署或连接外部系统。2B 必须等本轮治理文档提交后，再以新的 develop HEAD 为 rebase 目标。
 
 **2026-08-24 2B 重放、退出与合入快照**：2C 治理提交形成 2B 起始基线 `develop @ 2adae769caae1dce7f994de1d1ce63ab75b0fc36` 后，2B 直接重放为唯一候选 `feature/v2-driver-workflow @ 143a10a2aeff5ebacd1397a73a82d0ae3484a8da`，其直接父提交为该正式基线，相对基线精确 29 个文件。专项 `80/80`、2B/2C 联测 `29/29`、全量 `674 passed / 7 expected skipped`、lint、29/29 build、diff check、干净工作区和独立代码审计通过；Chrome 151、Edge 151 × `360×800`、`390×844` 浏览器矩阵随后全部 `PASS`。主控按批准以 `--no-ff` 合入，形成 `develop @ 2a62162016f6967bc0a57b45ab1a6e4b8543bdac`，两个父提交为 `ef07d09…` 与 `143a10a…`；合入后全量、lint、29/29 build、diff check 和干净工作区再次通过。当前状态为 `MERGED_LOCAL / POST_MERGE_PASS`。GPS 状态缺少 live region、部分样式未完全使用设计 token 两项非阻断 P2 延至 2A 合入后的联合联调、进入 3A/3B 前处理。
@@ -719,7 +721,7 @@ flowchart TD
 - 后续追加发现 ETA Top-8 仍会裁掉本轮 A 槽新生成的 delivery cursor，导致可连续进入 B 的订单误报 `ETA_UNAVAILABLE`；已恢复计划池全部 delivery→pickup 必要组合，并补 `buildEtaMatrix()` → `runDispatchV2()` A/B 串联回归。
 - G3-3 本地开发已闭环：司机类事件按受影响门店加载全部活动司机参与比较；相同逻辑计划重试不回收/重建 Assignment 或递增 `planVersion`；outbox 只有持有当前租约的 worker 才计为处理成功；锁忙、Redis 不可用降级、过期快照重算均有独立编排测试。
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
-- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 与 Gate 3 `PASS` 证据保持不变；第二轮正式代码基线为 `develop @ 2a621620…`，2C、2B 均已本地合入并通过合入后回归。2A 原候选 `6562544…` 已在旧基线退出验收，等待基于新 develop 形成新候选并复验。
+- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 与 Gate 3 `PASS` 证据保持不变；2C、2B 均已本地合入并通过合入后回归。2A 新候选 `1c4f9f29e890360e1439bf0d0962d3ccb5f73b56` 已基于 `develop @ f3d68171826c20a849b9a8ca3d6bb5970e9ba49a` 通过自动化与代码审计，等待浏览器重点复验。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
 - 当前执行限制：不得再次变更 app、worker 或 Nginx，不得执行 migration、重复基础资料、清理任何失败样本或直接写业务数据库。错误 helper 产生的独立 `G3FAULT` 订单必须保留并与冻结 10 单分开统计。
-- 下一动作：为本轮 2B 合入和合入后回归形成可追溯文档基线；随后将 2A 原候选 `6562544…` 基于 `develop @ 2a621620…` 形成新 SHA，复核 14 文件边界并重新执行审计、回归与浏览器重点验收。2A 合入后的联合联调关闭 GPS live region 与设计 token 两项 P2，再启动 3A/3B。远程同步稍后处理。
+- 下一动作：为 2A 新候选、自动化和代码审计结论形成可追溯文档基线；随后对 `1c4f9f29e890360e1439bf0d0962d3ccb5f73b56` 执行 Chrome/Edge 浏览器重点复验。复验 `PASS` 后才可裁决合入并执行合入后全量回归。2A 合入后的联合联调关闭 GPS live region 与设计 token 两项 P2，再启动 3A/3B。远程同步稍后处理。
