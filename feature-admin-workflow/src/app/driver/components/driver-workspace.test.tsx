@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -275,11 +277,22 @@ describe("driver H5 workspace", () => {
     expect(html).toContain('aria-pressed="false"');
   });
 
-  it("uses accessible contrast classes for small action text", () => {
+  it("uses existing semantic tokens for workspace colors, surfaces and borders", () => {
     expect(DRIVER_ACCESSIBLE_COLOR_CLASSES).toEqual({
-      unassignedActive: "bg-amber-700 text-white",
-      completeAction: "bg-emerald-700 text-white"
+      unassignedActive: "bg-[var(--warning)] text-[var(--accent-ink)]",
+      completeAction: "bg-[var(--success)] text-[var(--surface)]"
     });
+
+    const source = readFileSync(
+      new URL("./driver-workspace.tsx", import.meta.url),
+      "utf8"
+    );
+    expect(source).toContain("bg-[var(--bg)]");
+    expect(source).toContain("bg-[var(--surface)]");
+    expect(source).toContain("border-[var(--line)]");
+    expect(source).not.toMatch(
+      /\b(?:bg|text|border|ring|accent)-(?:slate|blue|amber|emerald|rose|white|black)(?:-\d+|\/\d+)?\b/
+    );
   });
 
   it("marks stale positions with explicit text rather than color alone", () => {

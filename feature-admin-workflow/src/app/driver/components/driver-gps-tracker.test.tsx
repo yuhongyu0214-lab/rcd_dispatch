@@ -1,11 +1,18 @@
+import { readFileSync } from "node:fs";
+
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DRIVER_LOCATION_INTERVAL_MS } from "./driver-h5-entry";
 import {
+  DriverGpsStatus,
   GPS_TIMESTAMP_CLASS,
   getLocationReportView,
   startDriverGpsSampling
 } from "./driver-gps-tracker";
+
+vi.stubGlobal("React", React);
 
 function position(timestamp: number, lat: number): GeolocationPosition {
   return {
@@ -70,9 +77,46 @@ describe("driver GPS sampling", () => {
     ).toBe("定位样本重复，位置未更新");
   });
 
-  it("uses an accessible text color for the last report time", () => {
-    expect(GPS_TIMESTAMP_CLASS).toContain("text-slate-600");
-    expect(GPS_TIMESTAMP_CLASS).not.toContain("text-slate-400");
+  it("announces only the GPS status and keeps the periodic timestamp outside the live region", () => {
+    const html = renderToStaticMarkup(
+      <DriverGpsStatus
+        view={{ dot: "bg-[var(--success)]", label: "位置上报正常" }}
+        lastReportedAt={new Date("2026-08-24T08:00:00.000Z")}
+      />
+    );
+
+    const liveRegionStart = html.indexOf('role="status"');
+    const timestampStart = html.indexOf(`class="${GPS_TIMESTAMP_CLASS}"`);
+    const liveRegionEnd = html.lastIndexOf("</span>", timestampStart);
+
+    expect(liveRegionStart).toBeGreaterThanOrEqual(0);
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('aria-atomic="true"');
+    expect(html).toContain('aria-hidden="true"');
+    expect(liveRegionEnd).toBeGreaterThan(liveRegionStart);
+    expect(liveRegionEnd).toBeLessThan(timestampStart);
+  });
+
+  it("uses existing semantic tokens for GPS status colors", () => {
+    expect(getLocationReportView({ index: 0, status: "success" }).dot).toBe(
+      "bg-[var(--success)]"
+    );
+    expect(
+      getLocationReportView({
+        index: 0,
+        status: "skipped",
+        reason: "ACCURACY_TOO_LOW"
+      }).dot
+    ).toBe("bg-[var(--warning)]");
+    expect(GPS_TIMESTAMP_CLASS).toContain("text-[var(--text-secondary)]");
+
+    const source = readFileSync(
+      new URL("./driver-gps-tracker.tsx", import.meta.url),
+      "utf8"
+    );
+    expect(source).not.toMatch(
+      /\b(?:bg|text|border|ring|accent)-(?:slate|blue|amber|emerald|rose|white|black)(?:-\d+|\/\d+)?\b/
+    );
   });
 
   it("requests a fresh position every interval and preserves each browser timestamp", async () => {
