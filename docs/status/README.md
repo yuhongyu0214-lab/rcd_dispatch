@@ -1,18 +1,18 @@
 # 人车单项目状态总览
 
-> 状态快照：2026-08-24
+> 状态快照：2026-08-25
 > 用途：说明项目做到哪一步、还差什么
 > 非权威范围：产品行为、状态机、Schema、枚举、HTTP 契约、技术栈和生产架构
 
 ## 一句话结论
 
-Gate 3 保持 `PASS`，运行候选与预生产证据不变。2C、2B、2A 均为 `MERGED_LOCAL / POST_MERGE_PASS`，统一代码树锚点为 `46813c3ecf4a0df1eaf99bfb3d8d72f7d450193b`，治理基线为 `develop @ 3bf5aa34780d891613cb0ad0c0414de480df0934`。两项非阻断 P2 已冻结为单一前端返修线 `feature/v2-round2-p2-remediation`，精确 4 文件；完成代码审计、回归和移动端浏览器复验前不启动 3A/3B。预生产仍为 9 个 migration，远程仍为 `ae471484…`。
+Gate 3 保持 `PASS`，运行候选与预生产证据不变。2C、2B、2A 均为 `MERGED_LOCAL / POST_MERGE_PASS`，统一代码树锚点为 `46813c3ecf4a0df1eaf99bfb3d8d72f7d450193b`。P2 正式代码基线为 `develop @ 446a36f16a5fcbc0e55b13be164c9108cac0403f`，唯一候选为 `feature/v2-round2-p2-remediation @ 0e354696ebe306c29b2be6ab265d4c93ff354dcc`，现为 `CODE_AUDIT_PASS / BROWSER_TEST_AUTHORIZED`；测试修改白名单为空，外部系统授权为无。Chrome/Edge × `360×800`、`390×844` 通过前不合入、不启动 3A/3B。预生产仍为 9 个 migration，远程仍为 `ae471484…`。
 
 ## 当前工作流状态
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
-| 文档治理 | `P2_REMEDIATION_READY_SYNC_PENDING_COMMIT` | P2 分支、worktree、4 文件白名单和验收闸门已冻结 | 提交治理文档 → 从新 SHA 创建 P2 worktree → 启动前端返修 Agent |
+| 文档治理 | `P2_BROWSER_TEST_AUTHORIZED` | 代码基线 `446a36f…`；唯一候选 `0e354696…`；代码审计 `PASS` | 使用本次治理提交 SHA 启动只读浏览器测试 |
 | 应用候选 | `958AFCA_GATE3_ACCEPTED_DEVELOP_HANDOFF_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变运行身份；代码历史交接点为 `develop @ 51ddb5f…`，最终状态激活 HEAD 为 `ae471484…` |
 | 依赖安全 | `COMPLETED` | [依赖安全返修](2026-08-01-gate3-dependency-security-remediation.md) | 依赖变化时重跑全套审计 |
 | migration 指纹 | `PREPROD_9_APPLIED_LOCAL_10_PASS` | 第 10 个 migration 提交 `c6850df0a85aab601c3034e542a0f0b575c9053e` | 隔离 PostgreSQL 已通过；预生产 9 个保持不变，未经授权不实施第 10 个 |
@@ -26,7 +26,7 @@ Gate 3 保持 `PASS`，运行候选与预生产证据不变。2C、2B、2A 均�
 | 真实 10 单 | `REAL10_PASS_9_COMPLETED_1_INFEASIBLE_ALERT` | [真实 E2E 重验进度](2026-08-10-gate3r-real-e2e-retest-progress.md) | 保留全部成功与失败现场，不清理 |
 | Gate 3 总闸门 | `PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变候选与证据，进入受控阶段交接 |
 | 串行调度员 V2 API 接线 | `T1_PASS / MERGED_LOCAL / POST_MERGE_PASS` | 候选 `152f7c5…` 已合入 `develop @ 8cfed6ad…`；T1 与合并后全量回归通过 | 串行前置退出；保持本地合并且暂不推送 |
-| 第二轮并行 | `MERGED_LOCAL / POST_MERGE_PASS / P2_REMEDIATION_READY` | `feature/v2-round2-p2-remediation`；精确 4 文件，外部系统授权无 | P2 开发、自测、审计、移动端浏览器复验 → 合入 → 启动 3A/3B |
+| 第二轮并行 | `MERGED_LOCAL / POST_MERGE_PASS / P2_CODE_AUDIT_PASS / BROWSER_TEST_AUTHORIZED` | `feature/v2-round2-p2-remediation @ 0e354696…`；累计精确 4 文件 | Chrome/Edge × 两种手机尺寸复验 → 主控合入裁决 → 3A/3B |
 
 ## 唯一代码、文档与迁移基线
 
@@ -63,13 +63,19 @@ round2 contract code tree anchor: f591aca69e9f6e4a20061c94ea564b053abe7be0
 round2 initial unified local develop baseline: f44afac43282463cd9d7cce9e13668feedf8a133
 round2 2C post-merge code anchor: 04aba1798b9ea1d834da56f5e072f936543bafc1
 round2 pre-2B formal code baseline: local develop @ 2adae769caae1dce7f994de1d1ce63ab75b0fc36
-round2 current formal code baseline: local develop @ 46813c3ecf4a0df1eaf99bfb3d8d72f7d450193b
+round2 current code tree anchor: local develop @ 46813c3ecf4a0df1eaf99bfb3d8d72f7d450193b
 round2 2B merge parents: ef07d09b9f16c2961659ee5afa0d917ef30bf4fd | 143a10a2aeff5ebacd1397a73a82d0ae3484a8da
 round2 2A rebase and document baseline: local develop @ f3d68171826c20a849b9a8ca3d6bb5970e9ba49a
 round2 2A merge parents: 5218f355128d20c8a7e37615d43259683bbc6980 | 1c4f9f29e890360e1439bf0d0962d3ccb5f73b56
 round2 P2 remediation branch: feature/v2-round2-p2-remediation
 round2 P2 remediation worktree: .worktrees/round2-p2-remediation
+round2 P2 formal code baseline: local develop @ 446a36f16a5fcbc0e55b13be164c9108cac0403f
+round2 P2 superseded contrast candidate: d05a78aba30bdca5d801189f2d05006a8f3da880
+round2 P2 unique candidate: 0e354696ebe306c29b2be6ab265d4c93ff354dcc
+round2 P2 status: CODE_AUDIT_PASS / BROWSER_TEST_AUTHORIZED
 round2 P2 remediation whitelist: driver-gps-tracker.tsx | driver-gps-tracker.test.tsx | driver-workspace.tsx | driver-workspace.test.tsx
+round2 P2 browser test modification whitelist: EMPTY
+round2 P2 external system authorization: NONE
 rejected dispatcher API candidate: feature/v2-dispatcher-api-wiring @ 319f73401359ef4a232a2217afaaef2ef4212af2
 superseded unaligned API remediation candidate: feature/v2-dispatcher-api-wiring @ 5b84ab4881e1a8da12672c19d87098674798e60c
 superseded API remediation candidate: feature/v2-dispatcher-api-wiring @ 60f03af3c73bb867a7139b705741135d276b50ab
@@ -127,11 +133,12 @@ parallel worktrees: .worktrees/round2-admin-console | .worktrees/round2-driver-w
   `develop @ 2a621620…`；合并提交的两个父节点为 `ef07d09…` 与 `143a10a…`，精确 29 个文件。
   合入后全量仍为 `674 passed / 7 expected skipped`，lint、29/29 build、diff check 和干净
   工作区通过，当前为 `MERGED_LOCAL / POST_MERGE_PASS`。
-- 2B 浏览器验收保留两项非阻断 P2：GPS 状态缺少 live region；部分样式尚未完全使用设计
-  token。二者已冻结为单一前端返修线：live region 只播报状态文字，时间戳保持在播报区外；
-  样式只复用既有 token，禁止修改 `globals.css` 或改变布局、文案与业务行为。精确白名单为
-  `driver-gps-tracker.tsx`、对应测试、`driver-workspace.tsx`、对应测试；通过独立审计、全量回归
-  和 Chrome/Edge × `360×800`、`390×844` 前不得合入或启动 3A/3B。
+- 2B 浏览器验收遗留的 GPS live region 与司机端设计 token 两项 P2 已在正式代码基线
+  `446a36f…` 上形成唯一候选 `0e354696…`。累计精确 4 文件；live region、时间戳隔离、既有 token
+  收口和小字号 `>=4.5:1` 对比度均有回归覆盖，全量 `717 passed / 7 expected skipped`、lint、
+  31/31 build、diff check 与独立代码审计通过。当前为 `CODE_AUDIT_PASS / BROWSER_TEST_AUTHORIZED`；
+  测试 Agent 修改白名单为空、外部系统授权为无，Chrome/Edge × `360×800`、`390×844` 通过前
+  不得合入或启动 3A/3B。
 - 2C 原候选 `99d6909…` 在不改变 patch 的前提下线性重放到文档基线 `1e83782…`，修正提交
   说明后形成 `04aba179…`；稳定 patch-id 一致，精确 9 个白名单文件。专项及共享契约 `35/35`，
   合入前后全量均为 `648 passed / 7 expected skipped`，lint、29/29 build 和 diff check 通过；

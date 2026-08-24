@@ -1,7 +1,7 @@
 # 人车单 V2 Agent 公共上下文（Layer 0）
 
 > 文档类型：`DERIVED / LAYER_0`
-> 上下文版本：`RCD-AGENT-CONTEXT-20260824-R45`
+> 上下文版本：`RCD-AGENT-CONTEXT-20260825-R46`
 > 适用范围：所有新建或重新启动的 Agent
 > 权威范围：仅提供项目目标、当前阶段、公共纪律、模块边界和命令入口
 > 非权威范围：产品行为、Schema、HTTP DTO、枚举、基础设施细节和任务验收标准
@@ -12,7 +12,7 @@
 
 人车单调度系统 V2 面向汽车租赁调度，主线是订单接入、实时位置、司机班次、A/B/C 工单时间轴、真实 ETA、调度事务和执行闭环。
 
-Gate 3 已于 2026-08-11 最终裁决 `PASS`。串行调度员 API、2C、2B 与 2A 均已合入本地 `develop` 并通过各自合入后回归。统一代码树锚点为 `46813c3ecf4a0df1eaf99bfb3d8d72f7d450193b`，治理基线为 `develop @ 3bf5aa34780d891613cb0ad0c0414de480df0934`。第二轮联合联调的两项 P2 已批准进入单一前端返修线 `feature/v2-round2-p2-remediation`：只处理 GPS 状态 live region 和司机端既有设计 token 收口，精确 4 文件，不修改 `globals.css`、API、Schema、调度或云资源。当前为 `P2_REMEDIATION_READY`；`origin/develop` 仍为 `ae471484…`。
+Gate 3 已于 2026-08-11 最终裁决 `PASS`。串行调度员 API、2C、2B 与 2A 均已合入本地 `develop` 并通过各自合入后回归。统一代码树锚点为 `46813c3ecf4a0df1eaf99bfb3d8d72f7d450193b`；P2 正式代码基线为 `develop @ 446a36f16a5fcbc0e55b13be164c9108cac0403f`，唯一候选为 `feature/v2-round2-p2-remediation @ 0e354696ebe306c29b2be6ab265d4c93ff354dcc`。GPS live region、既有设计 token 收口及小字号 WCAG AA 对比度返修已通过独立代码审计，当前为 `CODE_AUDIT_PASS / BROWSER_TEST_AUTHORIZED`；测试修改白名单为空，外部系统授权为无，`origin/develop` 仍为 `ae471484…`。
 
 ## 2. 当前版本与闸门
 
@@ -23,18 +23,18 @@ Gate 3 已于 2026-08-11 最终裁决 `PASS`。串行调度员 API、2C、2B 与
 | 远程代码 SHA | `958afca537b412fb972b6e180561a9b37022834d`，已完成普通快进推送与远端核验 |
 | 文档基线 | Gate 3 `PASS` 内容基线 `feature/v2-gate3-review-remediation @ 464ee5d6ffdb435d76b65f9814d82e4666fd84a9`，本地/upstream/GitHub 远程一致 |
 | Gate 3→develop | 交接分支 `b853a7af245942758de1cd46c9a25c384c08ec62`；代码交接合并点 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`，本地/upstream/GitHub 远程一致 |
-| 第二轮正式代码基线 | `46813c3ecf4a0df1eaf99bfb3d8d72f7d450193b`；2A 合并父提交为 `5218f35…` 与 `1c4f9f29…`，2B 代码锚点 `2a621620…`、2C `04aba179…`、初始基线 `f44afac…`、契约锚点 `f591aca…` 和数据补丁 `c6850df…` 均在祖先链 |
+| 第二轮代码树与 P2 基线 | 统一代码树锚点 `46813c3ecf4a0df1eaf99bfb3d8d72f7d450193b`；P2 正式代码基线 `446a36f16a5fcbc0e55b13be164c9108cac0403f`；唯一候选 `0e354696ebe306c29b2be6ab265d4c93ff354dcc`，其父候选 `d05a78a…` 与正式基线均在祖先链 |
 | 数据库实施 | 空 PostgreSQL 演练已验证 9 个 migration、最终 Schema、8 个 rollback 和 5 类护栏；真实预生产已完成备份、9 个 migration、最小权限和 G3E2E R2.2 基础资料 `3/6/5/8` 核验，owner 已关闭；首轮失败样本与本轮通过/失败事实均保留，禁止重复 bootstrap 或清理 |
 | 候选状态 | `DEPLOYED / REAL_E2E_PASS / FAULT_ROLLBACK_PASS / FINAL_CONSISTENCY_RUNTIME_PASS`：代码、镜像、运行资源、真实 10 单和故障/回退证据一致 |
 | 镜像 | app/worker 运行 `958afca…` → `sha256:13e0…5bff`；Nginx 原镜像/配置/证书/端口不变且 release revision 对齐；更早运行/回退候选继续保留，不得混用 |
 | 基础设施 | 阿里云主线；ECS 上 app/worker/Nginx、自签名 HTTPS、结构化日志、`json-file` 轮转与 LoongCollector `3.2.6` 已验收；SLS 运行/安全日志、查询、脱敏、30/180 天留存、告警、通知和预算通过；正式域名/备案/可信证书延后 |
 | Gate 3 | `PASS`（2026-08-11 最终裁决） |
-| 第二轮并行 | 2C、2B、2A 均为 `MERGED_LOCAL / POST_MERGE_PASS`；`feature/v2-round2-p2-remediation` 已授权，等待从本轮治理提交创建并启动 |
+| 第二轮并行 | 2C、2B、2A 均为 `MERGED_LOCAL / POST_MERGE_PASS`；P2 唯一候选为 `CODE_AUDIT_PASS / BROWSER_TEST_AUTHORIZED`，等待 Chrome/Edge × 两种真实手机尺寸验收 |
 | Railway | 仅历史 Demo 证据，不是生产基线 |
 
 状态变化只认 [项目状态总览](../status/README.md)；文档入口只认 [文档版本总入口](../versions/README.md)。
 
-当前 Gate 3 运行候选仍为 `958afca…@sha256:13e0…5bff`，预生产、真实 10 单、故障恢复和回退证据保持不可变。P2 返修只允许修改 `driver-gps-tracker.tsx`、`driver-gps-tracker.test.tsx`、`driver-workspace.tsx`、`driver-workspace.test.tsx`：live region 只播报状态文字，不把 30 秒时间戳放入播报区；样式只把既有语义颜色、表面和边框映射到 `globals.css` 已存在 token，不新增 token、不改变布局、文案或业务行为。完成专项、全量 test/lint/build、独立代码审计及 Chrome/Edge × `360×800`、`390×844` 复验前不得合入或启动 3A/3B。不得把第 10 个 migration 投入预生产，不得连接预生产 RDS/Tair、真实高德，不得执行部署、重复基础资料或证据清理。
+当前 Gate 3 运行候选仍为 `958afca…@sha256:13e0…5bff`，预生产、真实 10 单、故障恢复和回退证据保持不可变。P2 候选累计只修改 `driver-gps-tracker.tsx`、`driver-gps-tracker.test.tsx`、`driver-workspace.tsx`、`driver-workspace.test.tsx`：live region 只播报状态文字，30 秒时间戳在播报区外；样式仅复用既有 token，小字号最终组合对比度均不低于 `4.5:1`。代码审计已通过；浏览器测试 Agent 修改白名单为空，只可使用本地服务、隔离认证 fixture、进程级临时环境变量、API/高德 Mock、Git 忽略临时产物和截图，外部系统授权为无。Chrome/Edge × `360×800`、`390×844` 复验通过前不得合入或启动 3A/3B；不得连接真实数据库、Redis/Tair、高德、云服务或预生产，不得执行 migration、部署、提交、推送或合并。
 
 ## 3. 公共模块边界
 
