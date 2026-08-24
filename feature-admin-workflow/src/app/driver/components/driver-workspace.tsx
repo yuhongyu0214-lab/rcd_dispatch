@@ -63,7 +63,13 @@ const FEASIBILITY_LABELS: Record<OrderFeasibilityV2, string> = {
 
 export const DRIVER_ACCESSIBLE_COLOR_CLASSES = {
   unassignedActive: "bg-[var(--warning)] text-[var(--accent-ink)]",
-  completeAction: "bg-[var(--success)] text-[var(--surface)]"
+  completeAction: "bg-[var(--success)] text-[var(--ink)]",
+  freshLocationText: "text-[color-mix(in_srgb,var(--success)_70%,var(--ink))]",
+  staleLocationText: "text-[color-mix(in_srgb,var(--danger)_70%,var(--ink))]",
+  warningText: "text-[color-mix(in_srgb,var(--warning)_60%,var(--ink))]",
+  infoText: "text-[color-mix(in_srgb,var(--info)_70%,var(--ink))]",
+  helperText: "text-[var(--text-secondary)]",
+  disabledHelperText: "disabled:text-[var(--text-secondary)]"
 } as const;
 
 export function createLatestResponseGate() {
@@ -185,13 +191,17 @@ function TaskCard({
               <h3 className="truncate text-sm font-semibold text-[var(--text-primary)]">
                 {visible(task.orderNo, "任务")}
               </h3>
-              <p className="text-xs text-[var(--text-tertiary)]">
+              <p
+                className={`text-xs ${DRIVER_ACCESSIBLE_COLOR_CLASSES.helperText}`}
+              >
                 {BUSINESS_LABELS[task.businessType] ?? task.businessType}
               </p>
             </div>
           </div>
         </div>
-        <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--info)_13%,var(--surface))] px-2.5 py-1 text-xs font-medium text-[color-mix(in_srgb,var(--info)_80%,var(--ink))]">
+        <span
+          className={`shrink-0 rounded-full bg-[color-mix(in_srgb,var(--info)_13%,var(--surface))] px-2.5 py-1 text-xs font-medium ${DRIVER_ACCESSIBLE_COLOR_CLASSES.infoText}`}
+        >
           {STATUS_LABELS[task.executionStatus]}
         </span>
       </div>
@@ -200,7 +210,9 @@ function TaskCard({
         <p className="break-words text-sm text-[var(--text-primary)]">
           {visible(targetAddress, "地址待补充")}
         </p>
-        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--text-tertiary)]">
+        <div
+          className={`mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs ${DRIVER_ACCESSIBLE_COLOR_CLASSES.helperText}`}
+        >
           <span>{new Date(task.promisedPickupAt).toLocaleString("zh-CN")}</span>
           <span>{task.lockType === "NONE" ? "未锁定" : "任务已锁定"}</span>
           <span>{FEASIBILITY_LABELS[task.feasibility]}</span>
@@ -266,7 +278,7 @@ function TaskCard({
                 href={navigationUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="flex min-h-11 items-center justify-center rounded-xl border border-[color-mix(in_srgb,var(--info)_42%,var(--line))] bg-[color-mix(in_srgb,var(--info)_13%,var(--surface))] px-4 text-sm font-medium text-[color-mix(in_srgb,var(--info)_80%,var(--ink))]"
+                className={`flex min-h-11 items-center justify-center rounded-xl border border-[color-mix(in_srgb,var(--info)_42%,var(--line))] bg-[color-mix(in_srgb,var(--info)_13%,var(--surface))] px-4 text-sm font-medium ${DRIVER_ACCESSIBLE_COLOR_CLASSES.infoText}`}
               >
                 继续导航
               </a>
@@ -326,14 +338,18 @@ function UnassignedCard({
           <p className="truncate text-sm font-semibold text-[var(--text-primary)]">
             {visible(order.orderNo, "未分配任务")}
           </p>
-          <p className="mt-1 break-words text-xs text-[var(--text-tertiary)]">
+          <p
+            className={`mt-1 break-words text-xs ${DRIVER_ACCESSIBLE_COLOR_CLASSES.helperText}`}
+          >
             {visible(
               order.pickupAddress ?? order.deliveryAddress,
               "地址待补充"
             )}
           </p>
         </div>
-        <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--warning)_17%,var(--surface))] px-2.5 py-1 text-xs font-medium text-[color-mix(in_srgb,var(--warning)_78%,var(--ink))]">
+        <span
+          className={`shrink-0 rounded-full bg-[color-mix(in_srgb,var(--warning)_17%,var(--surface))] px-2.5 py-1 text-xs font-medium ${DRIVER_ACCESSIBLE_COLOR_CLASSES.warningText}`}
+        >
           仅查看
         </span>
       </div>
@@ -500,7 +516,7 @@ export function DriverWorkspace({
               type="button"
               disabled={endingShift || hasExecutingTask || !onShift}
               onClick={() => void handleEndShift()}
-              className="min-h-11 shrink-0 rounded-xl border border-[var(--line)] px-3 text-sm font-medium disabled:cursor-not-allowed disabled:bg-[var(--bg)] disabled:text-[var(--text-tertiary)]"
+              className={`min-h-11 shrink-0 rounded-xl border border-[var(--line)] px-3 text-sm font-medium disabled:cursor-not-allowed disabled:bg-[var(--bg)] ${DRIVER_ACCESSIBLE_COLOR_CLASSES.disabledHelperText}`}
             >
               {endingShift ? "处理中" : onShift ? "下班" : "已下班"}
             </button>
@@ -520,7 +536,7 @@ export function DriverWorkspace({
         {refreshError ? (
           <div
             role="status"
-            className="mt-3 rounded-xl bg-[color-mix(in_srgb,var(--warning)_17%,var(--surface))] px-3 py-2 text-xs text-[color-mix(in_srgb,var(--warning)_78%,var(--ink))]"
+            className={`mt-3 rounded-xl bg-[color-mix(in_srgb,var(--warning)_17%,var(--surface))] px-3 py-2 text-xs ${DRIVER_ACCESSIBLE_COLOR_CLASSES.warningText}`}
           >
             数据刷新失败，正在保留上次结果并自动重试
           </div>
@@ -530,7 +546,9 @@ export function DriverWorkspace({
           <div className="mb-3 flex min-w-0 items-center justify-between gap-2">
             <div>
               <h2 className="text-sm font-semibold">全局执行地图</h2>
-              <p className="text-xs text-[var(--text-tertiary)]">
+              <p
+                className={`text-xs ${DRIVER_ACCESSIBLE_COLOR_CLASSES.helperText}`}
+              >
                 15 秒更新 · 位置超过 120 秒即过期
               </p>
             </div>
@@ -559,8 +577,8 @@ export function DriverWorkspace({
                 <span
                   className={
                     driver.locationFreshness === "FRESH"
-                      ? "text-[var(--success)]"
-                      : "text-[var(--danger)]"
+                      ? DRIVER_ACCESSIBLE_COLOR_CLASSES.freshLocationText
+                      : DRIVER_ACCESSIBLE_COLOR_CLASSES.staleLocationText
                   }
                 >
                   {driver.locationFreshness === "FRESH"
@@ -612,7 +630,9 @@ export function DriverWorkspace({
                 />
               ))
             ) : (
-              <div className="rounded-2xl bg-[var(--surface)] p-8 text-center text-sm text-[var(--text-tertiary)]">
+              <div
+                className={`rounded-2xl bg-[var(--surface)] p-8 text-center text-sm ${DRIVER_ACCESSIBLE_COLOR_CLASSES.helperText}`}
+              >
                 当前没有 A/B/C 任务
               </div>
             )
@@ -626,7 +646,9 @@ export function DriverWorkspace({
               />
             ))
           ) : (
-            <div className="rounded-2xl bg-[var(--surface)] p-8 text-center text-sm text-[var(--text-tertiary)]">
+            <div
+              className={`rounded-2xl bg-[var(--surface)] p-8 text-center text-sm ${DRIVER_ACCESSIBLE_COLOR_CLASSES.helperText}`}
+            >
               当前没有允许显示的未分配订单
             </div>
           )}
