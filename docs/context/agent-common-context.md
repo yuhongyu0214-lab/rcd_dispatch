@@ -1,7 +1,7 @@
 # 人车单 V2 Agent 公共上下文（Layer 0）
 
 > 文档类型：`DERIVED / LAYER_0`
-> 上下文版本：`RCD-AGENT-CONTEXT-20260824-R43`
+> 上下文版本：`RCD-AGENT-CONTEXT-20260824-R44`
 > 适用范围：所有新建或重新启动的 Agent
 > 权威范围：仅提供项目目标、当前阶段、公共纪律、模块边界和命令入口
 > 非权威范围：产品行为、Schema、HTTP DTO、枚举、基础设施细节和任务验收标准
@@ -12,7 +12,7 @@
 
 人车单调度系统 V2 面向汽车租赁调度，主线是订单接入、实时位置、司机班次、A/B/C 工单时间轴、真实 ETA、调度事务和执行闭环。
 
-Gate 3 已于 2026-08-11 最终裁决 `PASS`。串行调度员 API、2C 与 2B 已合入本地 `develop` 并通过回归；2B 代码锚点为 `2a62162016f6967bc0a57b45ab1a6e4b8543bdac`，治理提交随后形成 2A 重放基线 `develop @ f3d68171826c20a849b9a8ca3d6bb5970e9ba49a`。2A 两个提交已线性重放为新候选 `1c4f9f29e890360e1439bf0d0962d3ccb5f73b56`，相对基线仍精确 14 个文件且稳定 patch-id 与旧候选一致；新基线全量 `715 passed / 7 expected skipped`、lint、31/31 build、diff check 和独立代码审计通过，当前为 `CODE_AUDIT_PASS / AUTOMATED_TEST_PASS / BROWSER_RETEST_PENDING`。`origin/develop` 仍为 `ae471484…`。
+Gate 3 已于 2026-08-11 最终裁决 `PASS`。串行调度员 API、2C、2B 与 2A 均已合入本地 `develop` 并通过各自合入后回归。2A 候选 `1c4f9f29e890360e1439bf0d0962d3ccb5f73b56` 完成 Chrome 151、Edge 151 × 100%/125% 浏览器重点复验后，以 `--no-ff` 合入，形成统一代码基线 `develop @ 46813c3ecf4a0df1eaf99bfb3d8d72f7d450193b`；合入后全量 `715 passed / 7 expected skipped`、lint、31/31 build、diff check 和干净工作区通过。第二轮当前为 `MERGED_LOCAL / POST_MERGE_PASS / JOINT_INTEGRATION_P2_PENDING`。`origin/develop` 仍为 `ae471484…`。
 
 ## 2. 当前版本与闸门
 
@@ -23,18 +23,18 @@ Gate 3 已于 2026-08-11 最终裁决 `PASS`。串行调度员 API、2C 与 2B �
 | 远程代码 SHA | `958afca537b412fb972b6e180561a9b37022834d`，已完成普通快进推送与远端核验 |
 | 文档基线 | Gate 3 `PASS` 内容基线 `feature/v2-gate3-review-remediation @ 464ee5d6ffdb435d76b65f9814d82e4666fd84a9`，本地/upstream/GitHub 远程一致 |
 | Gate 3→develop | 交接分支 `b853a7af245942758de1cd46c9a25c384c08ec62`；代码交接合并点 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`，本地/upstream/GitHub 远程一致 |
-| 第二轮正式代码基线 | `2a62162016f6967bc0a57b45ab1a6e4b8543bdac`；2B 以 `--no-ff` 合入，两个父提交为 `ef07d09…` 与 `143a10a…`；2C `04aba179…`、初始基线 `f44afac…`、契约锚点 `f591aca…` 和数据补丁 `c6850df…` 均在祖先链 |
+| 第二轮正式代码基线 | `46813c3ecf4a0df1eaf99bfb3d8d72f7d450193b`；2A 合并父提交为 `5218f35…` 与 `1c4f9f29…`，2B 代码锚点 `2a621620…`、2C `04aba179…`、初始基线 `f44afac…`、契约锚点 `f591aca…` 和数据补丁 `c6850df…` 均在祖先链 |
 | 数据库实施 | 空 PostgreSQL 演练已验证 9 个 migration、最终 Schema、8 个 rollback 和 5 类护栏；真实预生产已完成备份、9 个 migration、最小权限和 G3E2E R2.2 基础资料 `3/6/5/8` 核验，owner 已关闭；首轮失败样本与本轮通过/失败事实均保留，禁止重复 bootstrap 或清理 |
 | 候选状态 | `DEPLOYED / REAL_E2E_PASS / FAULT_ROLLBACK_PASS / FINAL_CONSISTENCY_RUNTIME_PASS`：代码、镜像、运行资源、真实 10 单和故障/回退证据一致 |
 | 镜像 | app/worker 运行 `958afca…` → `sha256:13e0…5bff`；Nginx 原镜像/配置/证书/端口不变且 release revision 对齐；更早运行/回退候选继续保留，不得混用 |
 | 基础设施 | 阿里云主线；ECS 上 app/worker/Nginx、自签名 HTTPS、结构化日志、`json-file` 轮转与 LoongCollector `3.2.6` 已验收；SLS 运行/安全日志、查询、脱敏、30/180 天留存、告警、通知和预算通过；正式域名/备案/可信证书延后 |
 | Gate 3 | `PASS`（2026-08-11 最终裁决） |
-| 第二轮并行 | 2C `MERGED_LOCAL / POST_MERGE_PASS`；2B `MERGED_LOCAL / POST_MERGE_PASS`；2A `REBASED / CODE_AUDIT_PASS / AUTOMATED_TEST_PASS / BROWSER_RETEST_PENDING` |
+| 第二轮并行 | 2C、2B、2A 均为 `MERGED_LOCAL / POST_MERGE_PASS`；联合联调两项 P2 待关闭 |
 | Railway | 仅历史 Demo 证据，不是生产基线 |
 
 状态变化只认 [项目状态总览](../status/README.md)；文档入口只认 [文档版本总入口](../versions/README.md)。
 
-当前 Gate 3 运行候选仍为 `958afca…@sha256:13e0…5bff`，预生产、真实 10 单、故障恢复和回退证据保持不可变。2B `143a10a…` 已以 `--no-ff` 合入代码锚点 `2a621620…`；API r18 的 `DriverTaskV2.servicePlan` 已成为 develop 现行契约。2A 原补丁从旧候选 `6562544…` 等价重放为 `1c4f9f29…`，直接基于 `develop @ f3d6817…`，稳定 patch-id `7c758ab…`、14 文件边界与原候选一致；全量 `715 passed / 7 expected skipped`、lint、31/31 build、diff check、干净工作区和代码审计通过。冻结浏览器重点复验通过前不得合入。非阻断 P2“GPS 状态缺少 live region”和“部分样式尚未完全使用设计 token”继续登记到 2A 合入后的第二轮联合联调、进入 3A/3B 前处理。不得把第 10 个 migration 投入预生产，不得连接预生产 RDS/Tair、真实高德，不得执行部署、重复基础资料或证据清理。
+当前 Gate 3 运行候选仍为 `958afca…@sha256:13e0…5bff`，预生产、真实 10 单、故障恢复和回退证据保持不可变。2B `143a10a…` 已以 `--no-ff` 合入代码锚点 `2a621620…`；API r18 的 `DriverTaskV2.servicePlan` 已成为 develop 现行契约。2A `1c4f9f29…` 的 Chrome/Edge × 100%/125% 四组矩阵与 28 组关键场景全部通过，随后以 `--no-ff` 合入 `develop @ 46813c3…`，双父为 `5218f35…` 与 `1c4f9f29…`；合入后全量 `715 passed / 7 expected skipped`、lint、31/31 build、diff check 和干净工作区通过。非阻断 P2“GPS 状态缺少 live region”和“部分样式尚未完全使用设计 token”进入第二轮联合联调，关闭前不得启动 3A/3B。不得把第 10 个 migration 投入预生产，不得连接预生产 RDS/Tair、真实高德，不得执行部署、重复基础资料或证据清理。
 
 ## 3. 公共模块边界
 
