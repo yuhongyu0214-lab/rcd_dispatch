@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -70,6 +72,63 @@ const data: DriverWorkspaceData = {
     }
   ]
 };
+
+type Rgb = [number, number, number];
+
+function parseOklchToken(css: string, token: string): Rgb {
+  const match = css.match(
+    new RegExp(`--${token}:\\s*oklch\\(([\\d.]+)\\s+([\\d.]+)\\s+([\\d.]+)\\)`)
+  );
+  if (!match) throw new Error(`Missing OKLCH token: --${token}`);
+
+  const lightness = Number(match[1]);
+  const chroma = Number(match[2]);
+  const hueRadians = (Number(match[3]) * Math.PI) / 180;
+  const a = chroma * Math.cos(hueRadians);
+  const b = chroma * Math.sin(hueRadians);
+  const lRoot = lightness + 0.3963377774 * a + 0.2158037573 * b;
+  const mRoot = lightness - 0.1055613458 * a - 0.0638541728 * b;
+  const sRoot = lightness - 0.0894841775 * a - 1.291485548 * b;
+  const l = lRoot ** 3;
+  const m = mRoot ** 3;
+  const s = sRoot ** 3;
+  const linear = [
+    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s
+  ];
+
+  return linear.map((channel) => {
+    const encoded =
+      channel <= 0.0031308
+        ? 12.92 * channel
+        : 1.055 * channel ** (1 / 2.4) - 0.055;
+    return Math.max(0, Math.min(1, encoded));
+  }) as Rgb;
+}
+
+function mixSrgb(first: Rgb, second: Rgb, firstWeight: number): Rgb {
+  return first.map(
+    (channel, index) =>
+      channel * firstWeight + second[index] * (1 - firstWeight)
+  ) as Rgb;
+}
+
+function relativeLuminance(color: Rgb) {
+  const [red, green, blue] = color.map((channel) =>
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+  );
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
+function contrastRatio(foreground: Rgb, background: Rgb) {
+  const foregroundLuminance = relativeLuminance(foreground);
+  const backgroundLuminance = relativeLuminance(background);
+  return (
+    (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) /
+    (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
+  );
+}
 
 describe("driver H5 workspace", () => {
   it("updates map markers in place without fitting the viewport again", () => {
@@ -275,11 +334,87 @@ describe("driver H5 workspace", () => {
     expect(html).toContain('aria-pressed="false"');
   });
 
-  it("uses accessible contrast classes for small action text", () => {
+  it("uses existing semantic tokens for workspace colors, surfaces and borders", () => {
     expect(DRIVER_ACCESSIBLE_COLOR_CLASSES).toEqual({
-      unassignedActive: "bg-amber-700 text-white",
-      completeAction: "bg-emerald-700 text-white"
+      unassignedActive: "bg-[var(--warning)] text-[var(--accent-ink)]",
+      completeAction: "bg-[var(--success)] text-[var(--ink)]",
+      freshLocationText:
+        "text-[color-mix(in_srgb,var(--success)_70%,var(--ink))]",
+      staleLocationText:
+        "text-[color-mix(in_srgb,var(--danger)_70%,var(--ink))]",
+      warningText: "text-[color-mix(in_srgb,var(--warning)_60%,var(--ink))]",
+      infoText: "text-[color-mix(in_srgb,var(--info)_70%,var(--ink))]",
+      helperText: "text-[var(--text-secondary)]",
+      disabledHelperText: "disabled:text-[var(--text-secondary)]"
     });
+
+    const source = readFileSync(
+      new URL("./driver-workspace.tsx", import.meta.url),
+      "utf8"
+    );
+    expect(source).toContain("bg-[var(--bg)]");
+    expect(source).toContain("bg-[var(--surface)]");
+    expect(source).toContain("border-[var(--line)]");
+    expect(source).toContain("bg-[var(--success)]");
+    expect(source).toContain(
+      "bg-[color-mix(in_srgb,var(--panel)_50%,var(--surface))]"
+    );
+    expect(source).toContain(
+      "bg-[color-mix(in_srgb,var(--warning)_17%,var(--surface))]"
+    );
+    expect(source).toContain(
+      "bg-[color-mix(in_srgb,var(--info)_13%,var(--surface))]"
+    );
+    for (const className of [
+      "completeAction",
+      "freshLocationText",
+      "staleLocationText",
+      "warningText",
+      "infoText",
+      "helperText",
+      "disabledHelperText"
+    ]) {
+      expect(source).toContain(`DRIVER_ACCESSIBLE_COLOR_CLASSES.${className}`);
+    }
+    expect(source).not.toMatch(
+      /\b(?:bg|text|border|ring|accent)-(?:slate|blue|amber|emerald|rose|white|black)(?:-\d+|\/\d+)?\b/
+    );
+  });
+
+  it("keeps every small semantic text combination at WCAG AA contrast", () => {
+    const css = readFileSync(
+      new URL("../../globals.css", import.meta.url),
+      "utf8"
+    );
+    const token = (name: string) => parseOklchToken(css, name);
+    const surface = token("surface");
+    const panel = token("panel");
+    const pageBackground = token("bg");
+    const ink = token("ink");
+    const success = token("success");
+    const warning = token("warning");
+    const danger = token("danger");
+    const info = token("info");
+    const accentInk = token("accent-ink");
+    const secondary = token("text-secondary");
+    const mixedPanel = mixSrgb(panel, surface, 0.5);
+    const warningSurface = mixSrgb(warning, surface, 0.17);
+    const infoSurface = mixSrgb(info, surface, 0.13);
+    const ratios = {
+      completeAction: contrastRatio(ink, success),
+      unassignedActive: contrastRatio(accentInk, warning),
+      freshLocation: contrastRatio(mixSrgb(success, ink, 0.7), mixedPanel),
+      staleLocation: contrastRatio(mixSrgb(danger, ink, 0.7), mixedPanel),
+      warningText: contrastRatio(mixSrgb(warning, ink, 0.6), warningSurface),
+      infoText: contrastRatio(mixSrgb(info, ink, 0.7), infoSurface),
+      helperOnSurface: contrastRatio(secondary, surface),
+      helperOnMixedPanel: contrastRatio(secondary, mixedPanel),
+      helperOnPageBackground: contrastRatio(secondary, pageBackground)
+    };
+
+    for (const [name, ratio] of Object.entries(ratios)) {
+      expect(ratio, name).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it("marks stale positions with explicit text rather than color alone", () => {

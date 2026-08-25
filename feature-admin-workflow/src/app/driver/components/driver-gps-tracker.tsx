@@ -15,13 +15,13 @@ import {
 } from "./driver-h5-entry";
 
 type GpsStatus = "starting" | "active" | "degraded" | "denied";
-type GpsStatusView = { dot: string; label: string };
+export type GpsStatusView = { dot: string; label: string };
 
 const STATUS_VIEW: Record<GpsStatus, GpsStatusView> = {
-  starting: { dot: "bg-slate-300", label: "定位启动中" },
-  active: { dot: "bg-emerald-500", label: "位置上报正常" },
-  degraded: { dot: "bg-amber-400", label: "位置上报异常" },
-  denied: { dot: "bg-rose-500", label: "请开启定位权限" }
+  starting: { dot: "bg-[var(--muted)]", label: "定位启动中" },
+  active: { dot: "bg-[var(--success)]", label: "位置上报正常" },
+  degraded: { dot: "bg-[var(--warning)]", label: "位置上报异常" },
+  denied: { dot: "bg-[var(--danger)]", label: "请开启定位权限" }
 };
 
 const LOCATION_REJECTION_VIEW: Record<
@@ -29,30 +29,30 @@ const LOCATION_REJECTION_VIEW: Record<
   GpsStatusView
 > = {
   ACCURACY_TOO_LOW: {
-    dot: "bg-amber-500",
+    dot: "bg-[var(--warning)]",
     label: "定位精度不足，位置未接收"
   },
   CLOCK_SKEW: {
-    dot: "bg-amber-500",
+    dot: "bg-[var(--warning)]",
     label: "设备时间异常，位置未接收"
   },
   EXPIRED_AT_RECEIPT: {
-    dot: "bg-amber-500",
+    dot: "bg-[var(--warning)]",
     label: "定位样本已过期，位置未接收"
   },
   INVALID_SAMPLE: {
-    dot: "bg-amber-500",
+    dot: "bg-[var(--warning)]",
     label: "定位数据无效，位置未接收"
   },
   DUPLICATE: {
-    dot: "bg-amber-500",
+    dot: "bg-[var(--warning)]",
     label: "定位样本重复，位置未更新"
   }
 };
 
-const STOPPED_VIEW = { dot: "bg-slate-300", label: "定位已停止" };
+const STOPPED_VIEW = { dot: "bg-[var(--muted)]", label: "定位已停止" };
 
-export const GPS_TIMESTAMP_CLASS = "shrink-0 text-slate-600";
+export const GPS_TIMESTAMP_CLASS = "shrink-0 text-[var(--text-secondary)]";
 
 export function getLocationReportView(
   result: LocationSampleResultV2
@@ -109,6 +109,39 @@ export function startDriverGpsSampling({
     stopped = true;
     clearInterval(timer);
   };
+}
+
+export function DriverGpsStatus({
+  view,
+  lastReportedAt
+}: {
+  view: GpsStatusView;
+  lastReportedAt: Date | null;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-2 text-xs text-[var(--text-secondary)]">
+      <span
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="flex min-w-0 items-center gap-2"
+      >
+        <span
+          aria-hidden="true"
+          className={`h-2.5 w-2.5 shrink-0 rounded-full ${view.dot}`}
+        />
+        <span className="truncate">{view.label}</span>
+      </span>
+      {lastReportedAt ? (
+        <span className={GPS_TIMESTAMP_CLASS}>
+          {lastReportedAt.toLocaleTimeString("zh-CN", {
+            hour: "2-digit",
+            minute: "2-digit"
+          })}
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 export function DriverGpsTracker({
@@ -189,18 +222,5 @@ export function DriverGpsTracker({
   const view = enabled
     ? (locationReportView ?? STATUS_VIEW[status])
     : STOPPED_VIEW;
-  return (
-    <div className="flex min-w-0 items-center gap-2 text-xs text-slate-600">
-      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${view.dot}`} />
-      <span className="truncate">{view.label}</span>
-      {lastReportedAt ? (
-        <span className={GPS_TIMESTAMP_CLASS}>
-          {lastReportedAt.toLocaleTimeString("zh-CN", {
-            hour: "2-digit",
-            minute: "2-digit"
-          })}
-        </span>
-      ) : null}
-    </div>
-  );
+  return <DriverGpsStatus view={view} lastReportedAt={lastReportedAt} />;
 }
