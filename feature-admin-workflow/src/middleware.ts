@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { fail } from "@/lib/api-response";
+import {
+  buildV1WriteGoneCorsHeaders,
+  buildV1WriteGoneMessage,
+  findV1WriteGuardMatch,
+  isV2StateMachineEnabled
+} from "@/lib/compatibility/v1-write-guard";
 import { getOrCreateTraceId } from "@/lib/observability-v2/trace";
 
 /**
@@ -18,6 +25,28 @@ import { getOrCreateTraceId } from "@/lib/observability-v2/trace";
  */
 export function middleware(request: NextRequest) {
   const traceId = getOrCreateTraceId(request.headers);
+  const v1WriteMatch = findV1WriteGuardMatch(
+    request.method,
+    request.nextUrl.pathname
+  );
+
+  if (
+    isV2StateMachineEnabled(process.env.RCD_V2_STATE_MACHINE_ENABLED) &&
+    v1WriteMatch
+  ) {
+    return fail(buildV1WriteGoneMessage(v1WriteMatch), {
+      status: 410,
+      traceId,
+      headers: {
+        "Cache-Control": "no-store",
+        ...buildV1WriteGoneCorsHeaders(
+          v1WriteMatch,
+          request.headers.get("Origin"),
+          process.env.CORS_ORIGINS
+        )
+      }
+    });
+  }
 
   // 构造新 Headers，注入 X-Trace-Id 供下游路由读取
   const requestHeaders = new Headers(request.headers);
