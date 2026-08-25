@@ -6,13 +6,13 @@
 
 ## 一句话结论
 
-Gate 3 保持 `PASS`，运行候选与预生产证据不变。2C、2B、2A 与 P2 均为 `MERGED_LOCAL / POST_MERGE_PASS`。P2 候选 `0e354696…` 已通过 Chrome/Edge × `360×800`、`390×844`，并以 `--no-ff` 合入本地 `develop @ 5c2760cea40b975b24d5d2201333ab5048ce1cf0`；合入后全量 `717 passed / 7 expected skipped`、lint、31/31 build、diff check 和干净工作区通过。3A/3B 入口条件满足但尚未启动，须等待本轮治理提交 SHA 与主控任务卡。预生产仍为 9 个 migration，远程仍为 `ae471484…`。
+Gate 3、第二轮和 P2 保持 `PASS`。治理前 `HEAD == develop == 3464d15f8c60c01acef306a6c8d10bd4430ed2a5`，业务代码锚点为 `5c2760cea40b975b24d5d2201333ab5048ce1cf0`；`origin/develop @ ae4714849fa965940b0df1c6766638cf398ac0ce` 未推送。3A/3B 已获方案授权并完成前置冻结，状态为 `3A_3B_AUTHORIZED / PREFLIGHT_FROZEN / NOT_STARTED`；本治理文档所在提交是两线唯一共同 `BASELINE_SHA`，完整值由主控提交后下发，分支创建后仍等待各自 T0 环境授权。
 
 ## 当前工作流状态
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
-| 文档治理 | `P2_EXIT_PASS / 3A_3B_PREFLIGHT_READY` | P2 合并点 `5c2760c…`；浏览器与合入后回归均 `PASS` | 提交本轮治理文档 → 主控冻结 3A/3B 任务卡与统一起始 SHA |
+| 文档治理 | `3A_3B_AUTHORIZED / PREFLIGHT_FROZEN / NOT_STARTED` | 治理前 `develop @ 3464d15…`；两份任务卡已冻结 | 以本治理文档所在提交作为统一 `BASELINE_SHA`，创建并核验两条 worktree |
 | 应用候选 | `958AFCA_GATE3_ACCEPTED_DEVELOP_HANDOFF_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变运行身份；代码历史交接点为 `develop @ 51ddb5f…`，最终状态激活 HEAD 为 `ae471484…` |
 | 依赖安全 | `COMPLETED` | [依赖安全返修](2026-08-01-gate3-dependency-security-remediation.md) | 依赖变化时重跑全套审计 |
 | migration 指纹 | `PREPROD_9_APPLIED_LOCAL_10_PASS` | 第 10 个 migration 提交 `c6850df0a85aab601c3034e542a0f0b575c9053e` | 隔离 PostgreSQL 已通过；预生产 9 个保持不变，未经授权不实施第 10 个 |
@@ -27,7 +27,18 @@ Gate 3 保持 `PASS`，运行候选与预生产证据不变。2C、2B、2A 与 P
 | Gate 3 总闸门 | `PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变候选与证据，进入受控阶段交接 |
 | 串行调度员 V2 API 接线 | `T1_PASS / MERGED_LOCAL / POST_MERGE_PASS` | 候选 `152f7c5…` 已合入 `develop @ 8cfed6ad…`；T1 与合并后全量回归通过 | 串行前置退出；保持本地合并且暂不推送 |
 | 第二轮并行 | `MERGED_LOCAL / POST_MERGE_PASS / P2_EXIT_PASS` | P2 候选 `0e354696…` 已合入 `develop @ 5c2760c…` | 第二轮退出；进入 3A/3B 并行验证前置 |
-| 并行验证 3A/3B | `ENTRY_READY / NOT_STARTED` | P2 浏览器与合入后回归通过；尚无任务分支或外部授权 | 本轮治理提交后冻结分工、白名单、验收与停止条件 |
+| 并行验证 3A/3B | `AUTHORIZED / PREFLIGHT_FROZEN / NOT_STARTED` | 分工、初始空白名单、隔离候选和停止条件已冻结；两线只允许从本治理文档所在提交创建 | 核验两个分支/worktree 同 SHA；再由主控分别下发 T0 环境授权 |
+
+## 3A/3B 冻结任务卡
+
+新统一基线定义为本治理文档所在提交，其完整 SHA 由主控提交后下发（同一提交内不自引用），不得猜测。两条线必须从该同一 SHA 创建，不继承 P2 文件白名单或外部系统授权；验证 Agent 不更新治理文档。
+
+| 验证线 | 角色、分支与 worktree | 初始修改边界 | 隔离候选与外部边界 | 必须达成 |
+|---|---|---|---|---|
+| 3A | 数据库验证 Agent；`feature/v2-migration-validation`；`.worktrees/v2-migration-validation` | 白名单为空；只读 T0 后需要脚本时，由主控另发精确文件白名单 | PostgreSQL 18.3 `127.0.0.1:55437`；禁止外部系统、预生产和真实 RDS/Tair/高德 | V1/V2 映射、双读/兼容窗口、10 个 migration、关键数据核对、rollback 阻断与安全回退、Schema 零漂移 |
+| 3B | 测试 Agent；`feature/v2-e2e-validation`；`.worktrees/v2-e2e-validation` | 白名单为空；只读 T0 后需要测试脚本时，由主控另发精确文件白名单 | PostgreSQL 18.3 `127.0.0.1:55438`、app `3048`、Mock `3049`；Redis/Tair、高德、订单源仅进程级或本地 Mock；禁止外部系统、预生产和云资源 | PRD §13 完整 14 项、并发幂等、依赖故障、无假 ETA/位置、API 安全/trace、Chrome/Edge 桌面 100%/125% 与 H5 `360×800`/`390×844`、test/lint/tsc/build/diff check |
+
+分支创建后仍为 `NOT_STARTED`。任一出现 HEAD/基线不一致、工作区不干净、端口/数据库身份/空库状态不明、需要修改 Schema/migration/API 契约/业务代码、需要外部连接/新依赖/跨域文件、权威文档冲突，或 rollback 需要删除事实绕过保护，必须停止并回报主控。
 
 ## 唯一代码、文档与迁移基线
 
@@ -80,6 +91,12 @@ round2 P2 status: MERGED_LOCAL / POST_MERGE_PASS
 round2 P2 remediation whitelist: driver-gps-tracker.tsx | driver-gps-tracker.test.tsx | driver-workspace.tsx | driver-workspace.test.tsx
 round2 P2 browser test modification whitelist: EMPTY
 round2 P2 external system authorization: NONE
+3A/3B governance pre-commit HEAD and develop: 3464d15f8c60c01acef306a6c8d10bd4430ed2a5
+3A/3B business code anchor: 5c2760cea40b975b24d5d2201333ab5048ce1cf0
+3A/3B new unified baseline: 本治理文档所在提交（完整 SHA 由主控提交后下发，同一提交内不自引用）
+3A branch/worktree: feature/v2-migration-validation | .worktrees/v2-migration-validation
+3B branch/worktree: feature/v2-e2e-validation | .worktrees/v2-e2e-validation
+3A/3B status: AUTHORIZED / PREFLIGHT_FROZEN / NOT_STARTED
 rejected dispatcher API candidate: feature/v2-dispatcher-api-wiring @ 319f73401359ef4a232a2217afaaef2ef4212af2
 superseded unaligned API remediation candidate: feature/v2-dispatcher-api-wiring @ 5b84ab4881e1a8da12672c19d87098674798e60c
 superseded API remediation candidate: feature/v2-dispatcher-api-wiring @ 60f03af3c73bb867a7139b705741135d276b50ab
@@ -142,8 +159,8 @@ parallel worktrees: .worktrees/round2-admin-console | .worktrees/round2-driver-w
   滚动，36 个可见点击目标均不小于 44px，live region/时间戳隔离、五种拒收文案、九组 WCAG AA
   对比度、Marker 联动、轮询不重置视野、地图失败降级和干净控制台均通过。候选随后以 `--no-ff`
   合入 `develop @ 5c2760c…`；合入后全量 `717 passed / 7 expected skipped`、lint、31/31 build、
-  diff check 和干净工作区再次通过。P2 为 `MERGED_LOCAL / POST_MERGE_PASS`，3A/3B 为
-  `ENTRY_READY / NOT_STARTED`。
+  diff check 和干净工作区再次通过。治理前统一 `HEAD/develop` 为 `3464d15…`；3A/3B 为
+  `AUTHORIZED / PREFLIGHT_FROZEN / NOT_STARTED`，尚未创建或运行。
 - 2C 原候选 `99d6909…` 在不改变 patch 的前提下线性重放到文档基线 `1e83782…`，修正提交
   说明后形成 `04aba179…`；稳定 patch-id 一致，精确 9 个白名单文件。专项及共享契约 `35/35`，
   合入前后全量均为 `648 passed / 7 expected skipped`，lint、29/29 build 和 diff check 通过；

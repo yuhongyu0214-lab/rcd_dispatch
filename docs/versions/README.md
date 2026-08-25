@@ -1,6 +1,6 @@
 # 人车单项目文档版本总入口
 
-> 版本戳：`RCD-DOC-REGISTRY-20260825-R48`
+> 版本戳：`RCD-DOC-REGISTRY-20260825-R49`
 > 建立日期：2026-07-13
 > 治理更新时间：2026-08-25
 > 归档方式：现行权威集中到 `v2.0/`；已融合或冲突的旧方案从工作树清场，历史由 Git 追溯
@@ -30,8 +30,8 @@
 | 构建、部署与回退 | V2.0-r13 | Gate 3 `PASS` 文档基线 `464ee5d…` 已远程核验；分阶段和禁止重复 migration 规则不变 | [部署指南 V2](v2.0/deployment-guide-v2.md) |
 | 生产运行与恢复 | V2.0-r6 | 最终运行资源、健康、10 单、outbox 和证据一致性通过；整机/RDS 灾备仍为独立演练 | [运维指南 V2](v2.0/operations-guide-v2.md) |
 | 基础设施决策与替代历史 | V2.0-r3 | INFRA-001～023 已登记；公网 IP 预生产演示获准，正式上线条件不变 | [基础设施决策日志](v2.0/infrastructure-decision-log.md) |
-| 项目当前状态 | 2026-08-25 | P2 已合入本地 develop 并通过合入后回归；3A/3B 入口条件满足、尚未启动 | [状态总览](../status/README.md) |
-| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260825-R47 | Layer 0；所有 Agent 必读；不超过 150 行；P2 `POST_MERGE_PASS` 已登记 | [Agent 公共上下文](../context/agent-common-context.md) |
+| 项目当前状态 | 2026-08-25 | `3A_3B_AUTHORIZED / PREFLIGHT_FROZEN / NOT_STARTED`；本治理文档所在提交是两线统一基线 | [状态总览](../status/README.md) |
+| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260825-R48 | Layer 0；所有 Agent 必读；不超过 150 行；3A/3B 前置已冻结 | [Agent 公共上下文](../context/agent-common-context.md) |
 | V1 产品与开发主线 | V1.x | 历史只读 | [V1 历史索引](v1/README.md) |
 
 ## 文档权威顺序（按领域拆分，唯一权威口径）
@@ -115,6 +115,19 @@ HTTP 契约               → v2.0/api-contract-v2.md
 - 本轮追加：指定测试文件、用例、Mock 条件、回归范围和失败判定。
 - 不进入上下文：决策日志全文、无关实现和云资源建设细节。
 
+### 3A/3B 冻结任务入口
+
+状态统一为 `3A_3B_AUTHORIZED / PREFLIGHT_FROZEN / NOT_STARTED`。治理前 `HEAD == develop == 3464d15f8c60c01acef306a6c8d10bd4430ed2a5`，业务代码锚点 `5c2760cea40b975b24d5d2201333ab5048ce1cf0`，`origin/develop @ ae4714849fa965940b0df1c6766638cf398ac0ce` 未推送；新统一基线定义为本治理文档所在提交，其完整 SHA 由主控提交后下发（同一提交内不自引用），不得猜测。
+
+| 验证线 | 角色与入口 | 初始边界 | 隔离候选与结果摘要 |
+|---|---|---|---|
+| 3A | 数据库验证 Agent；`feature/v2-migration-validation`；`.worktrees/v2-migration-validation` | 修改白名单为空；只读 T0 后需要脚本时由主控另发精确白名单 | PostgreSQL 18.3 `127.0.0.1:55437`；验证 10 个 migration、迁移映射、双读/兼容窗口、数据核对、rollback 阻断与安全回退、零漂移 |
+| 3B | 测试 Agent；`feature/v2-e2e-validation`；`.worktrees/v2-e2e-validation` | 修改白名单为空；只读 T0 后需要测试脚本时由主控另发精确白名单 | PostgreSQL 18.3 `127.0.0.1:55438`、app `3048`、Mock `3049`；验证 PRD §13 完整 14 项、并发幂等、依赖故障、无假 ETA/位置、API 安全/trace、Chrome/Edge 桌面 100%/125% 与 H5 `360×800`/`390×844`、test/lint/tsc/build/diff check |
+
+两条线必须从本治理文档所在提交创建，不继承 P2 白名单或授权，且 Agent 不更新治理文档。主控提交后下发完整 `BASELINE_SHA` 并创建分支；创建后仍为 `NOT_STARTED`，等待主控分别下发 T0 环境授权。3A 不得连接外部系统、预生产或真实 RDS/Tair/高德；3B 的 Redis/Tair、高德和订单源仅使用进程级或本地 Mock，不得连接外部系统、预生产或云资源。
+
+共同停止条件：HEAD/基线不一致、工作区不干净、端口/数据库身份/空库状态不明、需要修改 Schema/migration/API 契约/业务代码、需要外部连接/新依赖/跨域文件、权威文档冲突，或 rollback 需要删除事实绕过保护。详细验收以[并行开发主计划 §8.2～§8.3](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md)为准。
+
 ### 未分配到默认角色上下文的文档
 
 - [基础设施架构 V2](v2.0/infrastructure-v2.md)、[部署指南 V2](v2.0/deployment-guide-v2.md) 全文和[运维指南 V2](v2.0/operations-guide-v2.md)不进入所有 Agent 的公共上下文；只有主控明确创建基础设施任务并授权时才作为 Layer 2 提供。
@@ -169,7 +182,7 @@ remote commit: 958afca537b412fb972b6e180561a9b37022834d
 2. 新候选的 Schema/migration tree 与完成一次性空 PostgreSQL 演练的旧冻结候选完全相同；原有 9 个正向 migration、最终 Schema、8 个 rollback 和五类安全护栏结论继续有效。
 3. 冻结真实 10 单已完成：订单 1～6、8～10 共 9 单完成，订单 7 按预期为 `INFEASIBLE` 且保留 1 条开放预警；并发、旧版本、到达后改排拒绝与订单 10 幂等重放均通过。首轮失败、旧映射、边界抖动和错误 helper 现场继续保留，不得清理。
 4. 最终一致性审查确认本地/远程代码、ACR digest、ECS 运行身份、真实依赖、10 单结果和故障/回退证据一致；文档口径已返修，并以 `feature/v2-gate3-review-remediation @ 57ef86c43bf220f48774e130575c40b8c94a83d5` 形成可追溯基线，本地、upstream 与 GitHub 远程核验一致。
-5. 主控已于 2026-08-11 最终裁决 Gate 3 `PASS`。2026-08-16 串行 API 候选完成 T1 并合入。2026-08-23，2C 重放为 `04aba179…` 并 `--ff-only` 合入本地 develop，合入后回归通过。2026-08-24，2B `143a10a…` 和 2A `1c4f9f29…` 依序完成审计、浏览器验收、合入及合入后回归。2026-08-25，P2 唯一候选 `0e354696…` 完成 4 文件返修、独立代码审计及 Chrome/Edge × `360×800`、`390×844` 验收，并以 `--no-ff` 合入 `develop @ 5c2760cea40b975b24d5d2201333ab5048ce1cf0`；合入后全量 `717 passed / 7 expected skipped`、lint、31/31 build、diff check 和干净工作区通过。P2 状态为 `MERGED_LOCAL / POST_MERGE_PASS`；3A/3B 入口条件满足但尚未启动，须等待本轮治理提交 SHA 与主控任务卡。远程仍为 `ae471484…`。
+5. 主控已于 2026-08-11 最终裁决 Gate 3 `PASS`。2026-08-16 串行 API 候选完成 T1 并合入。2026-08-23～24，2C、2B、2A 依序完成审计、浏览器验收、合入及合入后回归。2026-08-25，P2 唯一候选 `0e354696…` 合入 `develop @ 5c2760cea40b975b24d5d2201333ab5048ce1cf0` 并通过 `717 passed / 7 expected skipped`、lint、31/31 build 和 diff check；治理前 `HEAD == develop == 3464d15f8c60c01acef306a6c8d10bd4430ed2a5`。3A/3B 为 `AUTHORIZED / PREFLIGHT_FROZEN / NOT_STARTED`，只有本轮治理提交形成新 SHA 后才可创建同基线分支，且仍须等待主控最终任务卡。远程仍为 `ae471484…`。
 
 状态事实和阻断项统一在[状态总览](../status/README.md)维护；状态文档不得修改领域契约。
 

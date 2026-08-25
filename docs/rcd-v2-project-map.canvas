@@ -1,6 +1,6 @@
 {
 	"nodes":[
-		{"id":"g-context","type":"group","x":4400,"y":-280,"width":3000,"height":4500,"color":"2","label":"④ Agent 上下文：公共层 → 角色最小读取"},
+		{"id":"g-context","type":"group","x":4400,"y":-280,"width":3000,"height":6300,"color":"2","label":"④ Agent 上下文：公共层 → 角色最小读取"},
 		{"id":"g-runtime","type":"group","x":1300,"y":-280,"width":2900,"height":4500,"color":"5","label":"③ 系统如何工作：前端 → 后端 → 数据与云"},
 		{"id":"g-flow","type":"group","x":-1050,"y":-280,"width":2100,"height":4500,"color":"4","label":"② 开发 Workflow：按 Gate 推进"},
 		{"id":"g-docs","type":"group","x":-3100,"y":-280,"width":1800,"height":4500,"color":"6","label":"① 文档治理：谁说了算"},
@@ -24,7 +24,7 @@
 		{"id":"doc-ops","type":"text","text":"## 运维与恢复\n[[docs/versions/v2.0/operations-guide-v2.md|运维指南 V2]]\n\n决定监控、告警、备份、RPO/RTO 和事故处理。","x":-2160,"y":1870,"width":680,"height":280,"color":"6"},
 		{"id":"ctx-sync","type":"text","text":"# 上下文同步闸门\n\n每个主回合结束，Codex Stop Hook 提示：\n**如需提交项目状态上传到文档，回复「提交并更新文档」**\n\n用户确认后，主控只同步实际受影响的：\n1. 状态与证据\n2. 权威/决策文档当前事实\n3. 文档版本与角色映射\n4. Layer 0 公共上下文\n5. 本 Canvas\n\n没有文档提交 SHA 时，新 Agent 只能只读盘点。","x":4620,"y":2300,"width":2540,"height":650,"color":"1"},
 		{"id":"ctx-runtime","type":"text","text":"# 每次任务临时组装 Layer 2\n\n角色 + 任务目标 + 代码 SHA + 文档 SHA + 文件白名单 + 禁止操作 + 验收命令 + 停止条件。\n\nLayer 2 不成为权威文档，用完即失效。","x":4620,"y":3100,"width":2540,"height":400,"color":"2"},
-		{"id":"ctx-freeze","type":"text","text":"## 当前放行边界\n\nGate 3 `PASS`，运行候选与证据保持不可变。\n\n✅ P2：`MERGED_LOCAL / POST_MERGE_PASS`\n✅ 合并点：`develop @ 5c2760c…`\n✅ 717/7、lint、31/31 build、浏览器矩阵\n🟡 3A/3B：`ENTRY_READY / NOT_STARTED`\n⏸ 等待本轮治理提交 SHA 与主控任务卡\n🚫 不继承 P2 白名单或外部系统授权\n⏸ `origin/develop @ ae471484…`，未推送","x":4620,"y":3700,"width":2540,"height":540,"color":"1"},
+		{"id":"ctx-freeze","type":"text","text":"## 当前放行边界\n\n**状态：`3A_3B_AUTHORIZED / PREFLIGHT_FROZEN / NOT_STARTED`**\n\n✅ 治理前 `HEAD == develop == 3464d15f8c60c01acef306a6c8d10bd4430ed2a5`\n✅ 业务代码锚点 `5c2760cea40b975b24d5d2201333ab5048ce1cf0`\n✅ 新基线：本治理文档所在提交；完整 SHA 由主控下发\n⏸ 两分支只允许从该同一 SHA 创建\n⏸ 分支创建后仍等待各自 T0 环境授权\n🚫 不继承 P2 白名单/授权；Agent 不更新治理文档\n⏸ `origin/develop @ ae4714849fa965940b0df1c6766638cf398ac0ce`，未推送","x":4620,"y":3700,"width":2540,"height":650,"color":"1"},
 		{"id":"flow-title","type":"text","text":"# V2 串行闸门\n\n只有前一阶段验收通过，下一阶段才可开始。","x":-850,"y":-80,"width":1700,"height":200,"color":"4"},
 		{"id":"gate2","type":"text","text":"## ✅ Gate 2｜DTO / API 契约\n冻结前端、后端、司机端和外部来源之间的数据边界。","x":-750,"y":1070,"width":1500,"height":230,"color":"4"},
 		{"id":"round1","type":"text","text":"## ✅ 第一轮并行\n订单来源 Adapter｜实时位置｜调度核心\n\n三条线只实现自己的独占范围。","x":-750,"y":1370,"width":1500,"height":250,"color":"4"},
@@ -42,7 +42,7 @@
 		{"id":"runtime-title","type":"text","text":"# 一次请求与一次调度怎样跑\n\n用户/订单来源进入 app，业务事实进入 PostgreSQL，实时数据进入 Tair，后台 worker 持续处理 outbox。","x":1500,"y":-80,"width":2500,"height":200,"color":"5"},
 		{"id":"runtime-summary","type":"text","text":"# 每个环节承担什么\n\n**前端**：把订单、地图、时间轴和操作呈现给人，不直接决定业务事实。  \n**API/app**：鉴权、校验、编排和事务，是业务入口。  \n**Adapter**：隔离哈啰、插件等外部字段。  \n**调度核心**：根据真实位置、ETA 和约束计算 A/B/C 计划。  \n**PostgreSQL**：保存最终事实和审计。  \n**Tair**：提升实时性，失效后允许降级。  \n**worker/outbox**：把持续调度事件可靠地跑起来。  \n**ACR/ECS/Nginx/SLS**：负责构建、运行、入口和排障。","x":1450,"y":3290,"width":2480,"height":760},
 		{"id":"gate4","type":"text","text":"## 🟡 Gate 4｜稳定化\n生产稳定、演示闭环、风险收口。","x":-750,"y":4000,"width":1500,"height":180,"color":"3"},
-		{"id":"current-status","type":"text","text":"# 🟡 你现在正在这里\n\n**项目：人车单调度系统 V2**  \n**主阶段：3A / 3B 并行验证前置**  \n**状态：`P2_POST_MERGE_PASS / 3A_3B_ENTRY_READY`**\n\n- ✅ Gate 3 与第二轮三线合入回归 PASS\n- ✅ P2 浏览器验收与本地合入 PASS\n- ✅ 合并点：`develop @ 5c2760c…`\n- ✅ 合入后 717/7、lint、31/31 build\n- 🟡 3A/3B 尚未创建或启动\n- ⏸ 等待新文档 SHA 与两份任务卡\n- ⏸ 远程仍为 `ae471484…`，未推送\n- 🔴 下一任务：冻结 3A/3B 分工与验证边界","x":-2860,"y":-1060,"width":3000,"height":700,"color":"1"},
+		{"id":"current-status","type":"text","text":"# 🟡 你现在正在这里\n\n**项目：人车单调度系统 V2**  \n**主阶段：3A / 3B 并行验证前置**  \n**状态：`3A_3B_AUTHORIZED / PREFLIGHT_FROZEN / NOT_STARTED`**\n\n- ✅ Gate 3、第二轮与 P2 均已退出\n- ✅ 治理前 `HEAD == develop == 3464d15…`\n- ✅ 业务代码锚点 `5c2760c…`\n- ✅ 任务卡与共同基线规则已冻结\n- 🟡 两 worktree 由主控从本治理提交创建并核验\n- ⏸ 创建后仍等待各自 T0 环境授权\n- ⏸ `origin/develop @ ae471484…`，未推送","x":-2860,"y":-1060,"width":3000,"height":700,"color":"1"},
 		{"id":"status-entry","type":"text","text":"# 当前状态入口\n\n[[docs/status/README.md|项目状态总览]]\n[[docs/status/2026-08-10-gate3-final-consistency-review.md|最终一致性终审]]\n[[docs/status/2026-08-10-gate3r-fault-rollback-acceptance.md|故障与回退验收]]\n[[docs/status/2026-08-10-gate3r-real-e2e-retest-progress.md|真实 E2E 重验进度]]\n[[docs/status/2026-08-09-gate3r-minimal-e2e-remediation-candidate.md|最小 E2E 返修候选]]\n[[docs/status/2026-08-09-gate3r-real-e2e-first-round-failure.md|真实 E2E 首轮失败]]\n[[docs/versions/README.md|文档版本总入口]]\n\n**唯一当前候选**  \n`codex/v2-gate3-app-candidate`  \n`958afca5...22834d`","x":380,"y":-1060,"width":1600,"height":590,"color":"1"},
 		{"id":"legend","type":"text","text":"# 图例\n\n🟢 已完成 / 已冻结  \n🔴 当前正在处理  \n🟡 尚未开始 / 等待闸门  \n🟣 权威文档  \n🔵 运行系统与数据流\n\n> “文档冻结”不等于“云资源已部署”","x":2200,"y":-1060,"width":1700,"height":450},
 		{"id":"doc-status","type":"text","text":"## 项目进度（只说明做到哪）\n[[docs/status/README.md|状态总览]]\n\n状态文档不能覆盖产品、数据、API 或基础设施权威。","x":-2920,"y":2220,"width":1440,"height":250,"color":"6"},
@@ -59,7 +59,7 @@
 		{"id":"gate3-infra","type":"text","text":"### ✅ Gate 3-R｜基建收口\n- ✅ 镜像、RDS/Tair、migration、权限\n- ✅ app / worker / Nginx / HTTPS / SLS\n- ✅ G3E2E 基础资料与 API ingest\n- ✅ 真实 10 单\n- ✅ worker 故障恢复\n- ✅ 应用回退与当前候选恢复\n- ✅ 文档追溯\n- ✅ Gate 3 最终 `PASS`","x":-780,"y":2550,"width":730,"height":460,"color":"4"},
 		{"id":"gate3-final","type":"text","text":"### ✅ Gate 3 终审 PASS\n\n- 文档版本一致\n- 代码 SHA / 镜像 digest 一致\n- 最终资源运行身份一致\n- 失败现场与未完成项完整保留","x":50,"y":2550,"width":730,"height":360,"color":"4"},
 		{"id":"round2","type":"text","text":"## ✅ 第二轮｜全部退出 PASS\n\n1. ✅ 2C、2B、2A 已合入并回归 PASS\n2. ✅ GPS live region 与 token/对比度返修\n3. ✅ Chrome/Edge × 360×800、390×844\n4. ✅ P2 合入 `develop @ 5c2760c…`\n5. ✅ 合入后 717/7、lint、31/31 build\n6. ➡️ 进入 3A/3B 并行验证前置\n7. 🚫 未推送、未触碰预生产\n\nV1 暂不删除；后续验证必须使用新治理基线。","x":-750,"y":3370,"width":1500,"height":470,"color":"4"},
-		{"id":"migration-e2e","type":"text","text":"## 🟡 迁移与端到端验证\n真实链路、兼容窗口、业务闭环和故障演练。","x":-750,"y":3710,"width":1500,"height":220,"color":"3"},
+		{"id":"migration-e2e","type":"text","text":"## 🟡 3A / 3B 并行验证\n`AUTHORIZED / PREFLIGHT_FROZEN / NOT_STARTED`\n\n同一治理提交 SHA 起步；3A 验证迁移/回退，3B 验证端到端/故障。","x":-750,"y":3710,"width":1500,"height":250,"color":"3"},
 		{"id":"nginx","type":"text","text":"## Nginx + HTTPS｜技术入口 ✅\n公网 IP 可跨网络演示；80 → 443，app 3000 与 worker 内部接口不公网暴露。\n\n当前为自签名证书，不代表浏览器可信 HTTPS 或正式上线。","x":2310,"y":570,"width":1620,"height":260,"color":"5"},
 		{"id":"tair","type":"text","text":"## Tair / Redis｜实时短期数据\n最新位置、在线状态、ETA 缓存、短锁。\n\n故障可以降级，但不能覆盖 PostgreSQL 事实。","x":2310,"y":2160,"width":760,"height":360,"color":"5"},
 		{"id":"amap","type":"text","text":"## 高德 API\n浏览器：地图渲染\n服务端：地理编码、路径、真实 ETA\n\n不决定司机、槽位或业务状态。","x":3170,"y":2160,"width":760,"height":360,"color":"5"},
@@ -68,7 +68,10 @@
 		{"id":"driver-api","type":"text","text":"## 司机接口\n验证司机身份，处理位置、出发、到达和完成。\n\n状态变更与事件同事务提交。","x":3170,"y":1320,"width":760,"height":310,"color":"5"},
 		{"id":"outbox","type":"text","text":"## DispatchEventOutbox\n业务事务同时写入待处理事件。\n\nworker 触发 app 领取、处理、失败重试和租约接管。","x":3170,"y":1730,"width":760,"height":270,"color":"5"},
 		{"id":"migration-role","type":"text","text":"## 一次性 migration ✅\n预生产 9 个 migration 与对象权限已验收。\n\n不得重复执行；关闭 owner 长期入口后，才能启动新 app。","x":2310,"y":2760,"width":760,"height":300,"color":"4"},
-		{"id":"sls","type":"text","text":"## SLS｜集中运行日志 ✅\nLoongCollector 3.2.6、runtime/security、结构化查询、脱敏、30/180 天留存、告警、通知和预算均已验收。\n\n业务审计仍以 PostgreSQL 为准。","x":3170,"y":2760,"width":760,"height":330,"color":"4"}
+		{"id":"sls","type":"text","text":"## SLS｜集中运行日志 ✅\nLoongCollector 3.2.6、runtime/security、结构化查询、脱敏、30/180 天留存、告警、通知和预算均已验收。\n\n业务审计仍以 PostgreSQL 为准。","x":3170,"y":2760,"width":760,"height":330,"color":"4"},
+		{"id":"validation-3a-card","type":"text","text":"# 3A｜数据库验证 Agent\n\n**分支** `feature/v2-migration-validation`\n**worktree** `.worktrees/v2-migration-validation`\n**初始修改白名单** 空；T0 后另行授权脚本\n**隔离候选** PostgreSQL 18.3 `127.0.0.1:55437`\n**外部授权** 无；禁止预生产、真实 RDS/Tair/高德\n\n**达成结果**\n10 migration｜V1/V2 映射｜双读/兼容窗口｜数据核对｜rollback 阻断+安全回退｜零漂移","x":4400,"y":4400,"width":1420,"height":820,"color":"2"},
+		{"id":"validation-3b-card","type":"text","text":"# 3B｜测试 Agent\n\n**分支** `feature/v2-e2e-validation`\n**worktree** `.worktrees/v2-e2e-validation`\n**初始修改白名单** 空；T0 后另行授权脚本\n**隔离候选** PG 18.3 `127.0.0.1:55438`｜app `3048`｜Mock `3049`\n**外部授权** 无；Redis/Tair、高德、订单源仅进程级/本地 Mock\n\n**达成结果**\nPRD §13 完整 14 项｜并发幂等｜依赖故障｜无假 ETA/位置｜API 安全/trace｜Chrome/Edge 桌面 100%/125% + H5 `360×800`/`390×844`｜test/lint/tsc/build/diff check","x":5960,"y":4400,"width":1440,"height":920,"color":"2"},
+		{"id":"validation-stop","type":"text","text":"## 两线共同启动与停止条件\n\n- 必须从本治理文档所在提交的同一 SHA 创建；完整值由主控下发，创建后仍为 `NOT_STARTED`\n- 不继承 P2 白名单或授权；Agent 不更新治理文档\n- HEAD/基线不一致、工作区不干净、端口/数据库身份/空库不明立即停止\n- 需要改 Schema/migration/API 契约/业务代码，或需外部连接/新依赖/跨域文件立即停止\n- 权威文档冲突，或 rollback 需删除事实绕过保护立即停止","x":4400,"y":5420,"width":3000,"height":520,"color":"1"}
 	],
 	"edges":[
 		{"id":"e-doc-entry-prd","fromNode":"doc-entry","fromSide":"bottom","toNode":"doc-prd","toSide":"top","color":"6","label":"产品行为"},
@@ -150,6 +153,10 @@
 		{"id":"e-context-authority","fromNode":"ctx-audit","fromSide":"bottom","toNode":"ctx-authority","toSide":"top","color":"2","label":"查映射"},
 		{"id":"e-context-sync","fromNode":"ctx-authority","fromSide":"bottom","toNode":"ctx-sync","toSide":"top","color":"1","label":"变化触发同步"},
 		{"id":"e-context-runtime","fromNode":"ctx-sync","fromSide":"bottom","toNode":"ctx-runtime","toSide":"top","color":"2","label":"重新组装"},
-		{"id":"e-context-freeze","fromNode":"ctx-runtime","fromSide":"bottom","toNode":"ctx-freeze","toSide":"top","color":"3","label":"按 Gate 放行"}
+		{"id":"e-context-freeze","fromNode":"ctx-runtime","fromSide":"bottom","toNode":"ctx-freeze","toSide":"top","color":"3","label":"按 Gate 放行"},
+		{"id":"e-freeze-validation-3a","fromNode":"ctx-freeze","fromSide":"bottom","toNode":"validation-3a-card","toSide":"top","color":"2","label":"同一基线"},
+		{"id":"e-freeze-validation-3b","fromNode":"ctx-freeze","fromSide":"bottom","toNode":"validation-3b-card","toSide":"top","color":"2","label":"同一基线"},
+		{"id":"e-validation-3a-stop","fromNode":"validation-3a-card","fromSide":"bottom","toNode":"validation-stop","toSide":"top","color":"1","label":"停止边界"},
+		{"id":"e-validation-3b-stop","fromNode":"validation-3b-card","fromSide":"bottom","toNode":"validation-stop","toSide":"top","color":"1","label":"停止边界"}
 	]
 }

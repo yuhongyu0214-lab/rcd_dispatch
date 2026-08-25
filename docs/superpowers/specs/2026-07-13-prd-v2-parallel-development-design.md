@@ -1,7 +1,7 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`。第二轮 2C、2B、2A 与 P2 均已合入本地 develop 并通过合入后回归；当前为 `3A_3B_ENTRY_READY / NOT_STARTED`，须先冻结并行验证任务卡与统一基线。
+> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`。第二轮 2C、2B、2A 与 P2 均已合入本地 develop 并通过合入后回归；当前为 `3A_3B_AUTHORIZED / PREFLIGHT_FROZEN / NOT_STARTED`，本治理文档所在提交是两线唯一共同基线。
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
@@ -540,7 +540,13 @@ flowchart TD
 
 ### 8.2 并行验证 3A：V1/V2 迁移验证
 
-建议分支：`feature/v2-migration-validation`
+冻结任务卡：
+
+- 角色：数据库验证 Agent。
+- 分支：`feature/v2-migration-validation`；worktree：`.worktrees/v2-migration-validation`。
+- 初始修改白名单：空。先执行只读 T0；需要新增验证脚本时，由主控另发精确文件白名单。
+- 隔离候选：PostgreSQL 18.3 `127.0.0.1:55437`；实际使用前仍须确认端口、数据库身份和空库状态。
+- 外部系统授权：无。禁止连接外部系统、预生产、真实 RDS/Tair 或高德。
 
 验收标准：
 
@@ -548,23 +554,39 @@ flowchart TD
 - V1 页面和接口在兼容窗口内仍可运行。
 - 影子写入或双读核对通过。
 - 关键表数量、字段、坐标、时间和取消状态一致。
+- 当前 develop 的 10 个 migration 按序应用；rollback 保护能阻断不安全回退，安全场景可实际回退并再次 Forward。
+- 最终 Prisma/Schema 零漂移，不为缺失的历史 rollback 发明替代行为。
 - 更换 Adapter 不修改调度核心、Redis Key、高德和前端 DTO。
-- 回滚脚本实际演练通过。
 
 该分支只做验证脚本、报告和兼容检查。发现 Schema 问题时重新进入受控的数据模型修复分支，不直接修改已冻结 Schema。
 
 ### 8.3 并行验证 3B：端到端与故障验证
 
-建议分支：`feature/v2-e2e-validation`
+冻结任务卡：
+
+- 角色：测试 Agent。
+- 分支：`feature/v2-e2e-validation`；worktree：`.worktrees/v2-e2e-validation`。
+- 初始修改白名单：空。先执行只读 T0；需要新增测试脚本时，由主控另发精确文件白名单。
+- 隔离候选：PostgreSQL 18.3 `127.0.0.1:55438`、app `3048`、Mock `3049`；实际使用前仍须确认端口、数据库身份和空库状态。
+- 外部系统授权：无。Redis/Tair、高德和订单源仅允许进程级或本地 Mock；禁止连接外部系统、预生产或云资源。
 
 验收标准：
 
-- PRD V2 十项验收全部有自动测试或明确验证记录。
+- 当前 PRD §13 的完整 14 项验收全部有自动测试或明确验证记录。
 - 并发重排、重复订单、重复派单和版本冲突测试通过。
 - 高德、Redis/Tair 和外部订单源故障测试通过。
 - 无假 ETA、假位置或最后写入者无条件覆盖。
-- Chrome 和 Edge 在 100% 与 125% 缩放下布局稳定。
-- `pnpm test`、`pnpm lint` 和 `pnpm build` 通过。
+- API 鉴权、安全边界、统一错误和 body/header `traceId` 一致性通过。
+- Chrome 和 Edge 的调度员桌面 100%/125% 与司机 H5 `360×800`/`390×844` 矩阵通过。
+- `pnpm test`、`pnpm lint`、`pnpm exec tsc --noEmit`、`pnpm build` 和 `git diff --check` 通过。
+
+### 8.3.1 共同基线、启动和停止边界
+
+- 治理前统一事实：`HEAD == develop == 3464d15f8c60c01acef306a6c8d10bd4430ed2a5`；业务代码锚点 `5c2760cea40b975b24d5d2201333ab5048ce1cf0`；`origin/develop @ ae4714849fa965940b0df1c6766638cf398ac0ce`，未推送。
+- 新统一基线定义为本治理文档所在提交，其完整 SHA 由主控提交后下发（同一提交内不自引用），不得猜测；两条分支必须从该同一 SHA 创建。
+- 分支创建后仍为 `NOT_STARTED`；必须等待主控分别下发角色上下文、空白名单确认、验收命令和 T0 环境授权。
+- 两条线不继承 P2 的文件白名单或外部系统授权；验证 Agent 不更新治理文档，也不得互相合并或 cherry-pick。
+- 立即停止：HEAD/基线不一致、工作区不干净、端口/数据库身份/空库状态不明、需要修改 Schema/migration/API 契约/业务代码、需要外部连接/新依赖/跨域文件、权威文档冲突，或 rollback 需要删除事实绕过保护。
 
 ### 8.4 Gate 4：稳定化与发布验收
 
@@ -729,7 +751,7 @@ flowchart TD
 - 后续追加发现 ETA Top-8 仍会裁掉本轮 A 槽新生成的 delivery cursor，导致可连续进入 B 的订单误报 `ETA_UNAVAILABLE`；已恢复计划池全部 delivery→pickup 必要组合，并补 `buildEtaMatrix()` → `runDispatchV2()` A/B 串联回归。
 - G3-3 本地开发已闭环：司机类事件按受影响门店加载全部活动司机参与比较；相同逻辑计划重试不回收/重建 Assignment 或递增 `planVersion`；outbox 只有持有当前租约的 worker 才计为处理成功；锁忙、Redis 不可用降级、过期快照重算均有独立编排测试。
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
-- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 与 Gate 3 `PASS` 证据保持不变；2C、2B、2A 与 P2 均已本地合入并通过合入后回归。3A/3B 入口条件满足、尚未启动。
+- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 与 Gate 3 `PASS` 证据保持不变；2C、2B、2A 与 P2 均已本地合入并通过合入后回归。3A/3B 已获授权并完成前置冻结，仍为 `NOT_STARTED`。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
 - 当前执行限制：不得再次变更 app、worker 或 Nginx，不得执行 migration、重复基础资料、清理任何失败样本或直接写业务数据库。错误 helper 产生的独立 `G3FAULT` 订单必须保留并与冻结 10 单分开统计。
-- 下一动作：提交本轮 5 份治理文档并形成新的统一 develop/文档 SHA；主控随后分别冻结 3A 迁移验证与 3B 端到端/故障验证的角色、分支、白名单、数据环境、验收命令和停止条件，再从同一新 SHA 创建验证分支。远程同步稍后处理。
+- 下一动作：主控以本治理文档所在提交作为统一 develop/文档 `BASELINE_SHA`，从该同一 SHA 创建并核验 3A/3B 分支与 worktree。分支创建后继续保持 `NOT_STARTED`，等待主控分别下发 T0 环境授权；远程同步稍后处理。
