@@ -1,7 +1,7 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`。第二轮 2C、2B、2A 已按固定顺序全部合入本地 develop 并通过合入后回归；P2 唯一候选 `0e354696…` 已通过代码审计并获准启动移动端浏览器复验，复验通过后才可合入并启动 3A/3B。
+> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`。第二轮 2C、2B、2A 与 P2 均已合入本地 develop 并通过合入后回归；当前为 `3A_3B_ENTRY_READY / NOT_STARTED`，须先冻结并行验证任务卡与统一基线。
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
@@ -431,6 +431,8 @@ Gate 3 若因事务 outbox 必须修改上游业务写入点，仍由同一实�
 
 **2026-08-25 P2 代码审计与浏览器授权快照**：正式代码基线为 `develop @ 446a36f16a5fcbc0e55b13be164c9108cac0403f`。首个候选 `d05a78a…` 的 live region 通过，但小字号 token 组合对比度不足，未放行浏览器矩阵；同一分支追加最小返修后形成唯一候选 `0e354696ebe306c29b2be6ab265d4c93ff354dcc`，累计仍精确 4 文件。专项 `16/16`、全量 `717 passed / 7 expected skipped`、lint、31/31 build、diff check 和独立代码审计通过，小字号组合均达到 WCAG AA `>=4.5:1`。状态冻结为 `CODE_AUDIT_PASS / BROWSER_TEST_AUTHORIZED`；测试修改白名单为空，外部系统授权为无。测试 Agent 只能使用本地服务、隔离认证 fixture、进程级临时环境变量、API/高德 Mock、Git 忽略临时产物和截图；禁止真实数据库、Redis/Tair、高德、云服务、预生产、migration、部署、提交、推送和合并。
 
+**2026-08-25 P2 浏览器验收、退出与合入快照**：Chrome 151、Edge 151 × `360×800`、`390×844` 四组全部 `PASS`，无 P0/P1/P2 浏览器阻断；实际视口、无横向滚动、44px 点击目标、GPS live region 与拒收原因、九组 `>=4.5:1` 对比度、Marker 联动、轮询不重置视野、地图失败降级和干净控制台均通过。主控以 `--no-ff` 将 `0e354696…` 合入本地 develop，形成 `5c2760cea40b975b24d5d2201333ab5048ce1cf0`，父提交为 `78a708f…` 与 `0e354696…`；合入后全量 `717 passed / 7 expected skipped`、lint、31/31 build、diff check、4 文件边界和干净工作区通过。P2 状态为 `MERGED_LOCAL / POST_MERGE_PASS`；3A/3B 入口条件满足但尚未启动，不继承 P2 权限。
+
 ### 7.1 并行线 2A：调度员 Web
 
 建议分支：`feature/v2-admin-console`
@@ -727,7 +729,7 @@ flowchart TD
 - 后续追加发现 ETA Top-8 仍会裁掉本轮 A 槽新生成的 delivery cursor，导致可连续进入 B 的订单误报 `ETA_UNAVAILABLE`；已恢复计划池全部 delivery→pickup 必要组合，并补 `buildEtaMatrix()` → `runDispatchV2()` A/B 串联回归。
 - G3-3 本地开发已闭环：司机类事件按受影响门店加载全部活动司机参与比较；相同逻辑计划重试不回收/重建 Assignment 或递增 `planVersion`；outbox 只有持有当前租约的 worker 才计为处理成功；锁忙、Redis 不可用降级、过期快照重算均有独立编排测试。
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
-- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 与 Gate 3 `PASS` 证据保持不变；2C、2B、2A 均已本地合入并通过合入后回归。P2 唯一候选 `0e354696…` 已完成代码审计，浏览器矩阵已获授权。
+- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 与 Gate 3 `PASS` 证据保持不变；2C、2B、2A 与 P2 均已本地合入并通过合入后回归。3A/3B 入口条件满足、尚未启动。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
 - 当前执行限制：不得再次变更 app、worker 或 Nginx，不得执行 migration、重复基础资料、清理任何失败样本或直接写业务数据库。错误 helper 产生的独立 `G3FAULT` 订单必须保留并与冻结 10 单分开统计。
-- 下一动作：以正式代码基线 `446a36f…`、唯一候选 `0e354696…` 和本轮新文档 SHA 启动只读测试 Agent，执行 Chrome/Edge × `360×800`、`390×844`。修改白名单为空、外部系统授权为无；浏览器复验通过后再由主控裁决合入，随后才可启动 3A/3B。远程同步稍后处理。
+- 下一动作：提交本轮 5 份治理文档并形成新的统一 develop/文档 SHA；主控随后分别冻结 3A 迁移验证与 3B 端到端/故障验证的角色、分支、白名单、数据环境、验收命令和停止条件，再从同一新 SHA 创建验证分支。远程同步稍后处理。

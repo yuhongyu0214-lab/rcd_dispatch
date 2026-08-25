@@ -1,6 +1,6 @@
 # 人车单项目文档版本总入口
 
-> 版本戳：`RCD-DOC-REGISTRY-20260825-R47`
+> 版本戳：`RCD-DOC-REGISTRY-20260825-R48`
 > 建立日期：2026-07-13
 > 治理更新时间：2026-08-25
 > 归档方式：现行权威集中到 `v2.0/`；已融合或冲突的旧方案从工作树清场，历史由 Git 追溯
@@ -30,8 +30,8 @@
 | 构建、部署与回退 | V2.0-r13 | Gate 3 `PASS` 文档基线 `464ee5d…` 已远程核验；分阶段和禁止重复 migration 规则不变 | [部署指南 V2](v2.0/deployment-guide-v2.md) |
 | 生产运行与恢复 | V2.0-r6 | 最终运行资源、健康、10 单、outbox 和证据一致性通过；整机/RDS 灾备仍为独立演练 | [运维指南 V2](v2.0/operations-guide-v2.md) |
 | 基础设施决策与替代历史 | V2.0-r3 | INFRA-001～023 已登记；公网 IP 预生产演示获准，正式上线条件不变 | [基础设施决策日志](v2.0/infrastructure-decision-log.md) |
-| 项目当前状态 | 2026-08-25 | P2 唯一候选 `0e354696…` 已通过代码审计，浏览器测试获准启动 | [状态总览](../status/README.md) |
-| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260825-R46 | Layer 0；所有 Agent 必读；不超过 150 行；P2 `BROWSER_TEST_AUTHORIZED` 已登记 | [Agent 公共上下文](../context/agent-common-context.md) |
+| 项目当前状态 | 2026-08-25 | P2 已合入本地 develop 并通过合入后回归；3A/3B 入口条件满足、尚未启动 | [状态总览](../status/README.md) |
+| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260825-R47 | Layer 0；所有 Agent 必读；不超过 150 行；P2 `POST_MERGE_PASS` 已登记 | [Agent 公共上下文](../context/agent-common-context.md) |
 | V1 产品与开发主线 | V1.x | 历史只读 | [V1 历史索引](v1/README.md) |
 
 ## 文档权威顺序（按领域拆分，唯一权威口径）
@@ -169,7 +169,7 @@ remote commit: 958afca537b412fb972b6e180561a9b37022834d
 2. 新候选的 Schema/migration tree 与完成一次性空 PostgreSQL 演练的旧冻结候选完全相同；原有 9 个正向 migration、最终 Schema、8 个 rollback 和五类安全护栏结论继续有效。
 3. 冻结真实 10 单已完成：订单 1～6、8～10 共 9 单完成，订单 7 按预期为 `INFEASIBLE` 且保留 1 条开放预警；并发、旧版本、到达后改排拒绝与订单 10 幂等重放均通过。首轮失败、旧映射、边界抖动和错误 helper 现场继续保留，不得清理。
 4. 最终一致性审查确认本地/远程代码、ACR digest、ECS 运行身份、真实依赖、10 单结果和故障/回退证据一致；文档口径已返修，并以 `feature/v2-gate3-review-remediation @ 57ef86c43bf220f48774e130575c40b8c94a83d5` 形成可追溯基线，本地、upstream 与 GitHub 远程核验一致。
-5. 主控已于 2026-08-11 最终裁决 Gate 3 `PASS`。2026-08-16 串行 API 候选完成 T1 并合入。2026-08-23，2C 重放为 `04aba179…` 并 `--ff-only` 合入本地 develop，合入后回归通过。2026-08-24，2B `143a10a…` 和 2A `1c4f9f29…` 依序完成审计、浏览器验收、合入及合入后回归，统一代码树锚点为 `46813c3ecf4a0df1eaf99bfb3d8d72f7d450193b`。P2 正式代码基线为 `develop @ 446a36f16a5fcbc0e55b13be164c9108cac0403f`；2026-08-25，唯一候选 `feature/v2-round2-p2-remediation @ 0e354696ebe306c29b2be6ab265d4c93ff354dcc` 完成 4 文件返修、全量回归和独立代码审计，状态为 `CODE_AUDIT_PASS / BROWSER_TEST_AUTHORIZED`。测试修改白名单为空、外部系统授权为无；Chrome/Edge × `360×800`、`390×844` 通过前不得合入或启动 3A/3B。远程仍为 `ae471484…`。
+5. 主控已于 2026-08-11 最终裁决 Gate 3 `PASS`。2026-08-16 串行 API 候选完成 T1 并合入。2026-08-23，2C 重放为 `04aba179…` 并 `--ff-only` 合入本地 develop，合入后回归通过。2026-08-24，2B `143a10a…` 和 2A `1c4f9f29…` 依序完成审计、浏览器验收、合入及合入后回归。2026-08-25，P2 唯一候选 `0e354696…` 完成 4 文件返修、独立代码审计及 Chrome/Edge × `360×800`、`390×844` 验收，并以 `--no-ff` 合入 `develop @ 5c2760cea40b975b24d5d2201333ab5048ce1cf0`；合入后全量 `717 passed / 7 expected skipped`、lint、31/31 build、diff check 和干净工作区通过。P2 状态为 `MERGED_LOCAL / POST_MERGE_PASS`；3A/3B 入口条件满足但尚未启动，须等待本轮治理提交 SHA 与主控任务卡。远程仍为 `ae471484…`。
 
 状态事实和阻断项统一在[状态总览](../status/README.md)维护；状态文档不得修改领域契约。
 
