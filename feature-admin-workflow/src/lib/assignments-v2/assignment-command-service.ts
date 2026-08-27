@@ -440,7 +440,8 @@ export async function reassignAssignment(params: {
       select: {
         driverId: true,
         orderId: true,
-        driver: { select: { planVersion: true } }
+        driver: { select: { planVersion: true } },
+        order: { select: { executionStatus: true } }
       }
     }),
     prisma.driver.findFirst({
@@ -477,6 +478,13 @@ export async function reassignAssignment(params: {
           currentToPlanVersion: targetPreflight.planVersion
         }
       )
+    };
+  }
+
+  if (preflight.order.executionStatus === "IN_SERVICE") {
+    return {
+      success: false,
+      error: illegalTransition("IN_SERVICE", "PLANNED")
     };
   }
 

@@ -22,6 +22,9 @@ const tx = {
   operationLog: {
     create: vi.fn()
   },
+  orderServicePlan: {
+    create: vi.fn()
+  },
   dispatchAlert: {
     findFirst: vi.fn(),
     update: vi.fn(),
@@ -254,6 +257,7 @@ describe("commitDispatchPlan", () => {
   });
 
   it("still replaces the assignment when a real ETA plan field changed", async () => {
+    const servicePlanUpdatedAt = new Date("2026-07-26T05:55:00.000Z");
     const changedPlanSnapshot: DispatchInputV2 = {
       ...snapshot,
       orders: [
@@ -297,8 +301,16 @@ describe("commitDispatchPlan", () => {
       order: {
         executionStatus: "PLANNED",
         currentAssignmentId: "a-2"
+      },
+      servicePlan: {
+        modulesJson: ["REFUELING", "WASHING"],
+        totalModuleMinutes: 15,
+        revision: 2,
+        updatedByUserId: "driver-user",
+        updatedAt: servicePlanUpdatedAt
       }
     });
+    tx.assignment.create.mockResolvedValueOnce({ id: "a-3" });
 
     await expect(
       commitDispatchPlan(changedPlanSnapshot, output, "trace-2")
@@ -310,9 +322,251 @@ describe("commitDispatchPlan", () => {
 
     expect(tx.assignment.updateMany).toHaveBeenCalledTimes(1);
     expect(tx.assignment.create).toHaveBeenCalledTimes(1);
+    expect(tx.assignment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          plannedCompleteAt: new Date("2026-07-26T07:00:00.000Z"),
+          serviceEtaMinutes: 40
+        })
+      })
+    );
+    expect(tx.orderServicePlan.create).toHaveBeenCalledWith({
+      data: {
+        assignmentId: "a-3",
+        modulesJson: ["REFUELING", "WASHING"],
+        totalModuleMinutes: 15,
+        revision: 2,
+        updatedByUserId: "driver-user",
+        updatedAt: servicePlanUpdatedAt
+      }
+    });
     expect(tx.driver.update).toHaveBeenCalledWith({
       where: { id: "d-1" },
       data: { planVersion: 5 }
     });
+  });
+
+  it("copies each released service plan only to its own replacement assignment", async () => {
+    const firstPlanUpdatedAt = new Date("2026-07-26T05:50:00.000Z");
+    const secondPlanUpdatedAt = new Date("2026-07-26T05:55:00.000Z");
+    const multiOrderSnapshot: DispatchInputV2 = {
+      ...snapshot,
+      event: {
+        type: "ORDER_RECEIVED",
+        occurredAt: "2026-07-26T06:00:00.000Z",
+        orderId: "o-3"
+      },
+      orders: [
+        snapshot.orders[0],
+        {
+          ...snapshot.orders[1],
+          executionStatus: "PLANNED",
+          currentAssignmentId: "a-2"
+        },
+        {
+          ...snapshot.orders[1],
+          orderId: "o-3",
+          orderNo: "O-3",
+          executionStatus: "UNASSIGNED",
+          currentAssignmentId: undefined
+        }
+      ],
+      drivers: [
+        {
+          ...snapshot.drivers[0],
+          assignments: [
+            {
+              assignmentId: "a-1",
+              orderId: "o-1",
+              sequenceNo: 1,
+              lockType: "NONE",
+              executionStatus: "PLANNED",
+              serviceModuleMinutes: 10
+            },
+            {
+              assignmentId: "a-2",
+              orderId: "o-2",
+              sequenceNo: 2,
+              lockType: "NONE",
+              executionStatus: "PLANNED",
+              serviceModuleMinutes: 35
+            }
+          ]
+        }
+      ]
+    };
+    const multiOrderOutput: DispatchOutputV2 = {
+      calculatedAt: "2026-07-26T06:00:00.000Z",
+      proposals: [
+        {
+          driverId: "d-1",
+          expectedPlanVersion: 4,
+          assignments: [
+            {
+              assignmentId: null,
+              orderId: "o-1",
+              sequenceNo: 1,
+              slot: "A",
+              plannedDepartAt: "2026-07-26T06:00:00.000Z",
+              plannedPickupAt: "2026-07-26T06:10:00.000Z",
+              plannedCompleteAt: "2026-07-26T07:00:00.000Z",
+              deadheadEtaMinutes: 10,
+              serviceEtaMinutes: 40,
+              etaAvailable: true
+            },
+            {
+              assignmentId: null,
+              orderId: "o-2",
+              sequenceNo: 2,
+              slot: "B",
+              plannedDepartAt: "2026-07-26T07:00:00.000Z",
+              plannedPickupAt: "2026-07-26T07:10:00.000Z",
+              plannedCompleteAt: "2026-07-26T08:00:00.000Z",
+              deadheadEtaMinutes: 10,
+              serviceEtaMinutes: 40,
+              etaAvailable: true
+            },
+            {
+              assignmentId: null,
+              orderId: "o-3",
+              sequenceNo: 3,
+              slot: "C",
+              plannedDepartAt: "2026-07-26T08:00:00.000Z",
+              plannedPickupAt: "2026-07-26T08:10:00.000Z",
+              plannedCompleteAt: "2026-07-26T09:00:00.000Z",
+              deadheadEtaMinutes: 10,
+              serviceEtaMinutes: 40,
+              etaAvailable: true
+            }
+          ]
+        }
+      ],
+      evaluations: [
+        {
+          orderId: "o-1",
+          result: "PLANNED",
+          bestSlackMinutes: 120,
+          reason: "PLANNED"
+        },
+        {
+          orderId: "o-2",
+          result: "PLANNED",
+          bestSlackMinutes: 110,
+          reason: "PLANNED"
+        },
+        {
+          orderId: "o-3",
+          result: "PLANNED",
+          bestSlackMinutes: 100,
+          reason: "PLANNED"
+        }
+      ]
+    };
+
+    tx.assignment.findUnique.mockReset();
+    tx.assignment.findUnique
+      .mockResolvedValueOnce({
+        id: "a-1",
+        orderId: "o-1",
+        driverId: "d-1",
+        status: "ACTIVE",
+        lockType: "NONE",
+        sequenceNo: 1,
+        plannedDepartAt: new Date("2026-07-26T06:00:00.000Z"),
+        plannedPickupAt: new Date("2026-07-26T06:10:00.000Z"),
+        plannedCompleteAt: new Date("2026-07-26T07:05:00.000Z"),
+        deadheadEtaMinutes: 10,
+        serviceEtaMinutes: 40,
+        etaUnavailableReason: null,
+        order: {
+          executionStatus: "PLANNED",
+          currentAssignmentId: "a-1"
+        }
+      })
+      .mockResolvedValueOnce({
+        id: "a-2",
+        orderId: "o-2",
+        driverId: "d-1",
+        status: "ACTIVE",
+        lockType: "NONE",
+        sequenceNo: 2,
+        plannedDepartAt: new Date("2026-07-26T07:00:00.000Z"),
+        plannedPickupAt: new Date("2026-07-26T07:10:00.000Z"),
+        plannedCompleteAt: new Date("2026-07-26T08:05:00.000Z"),
+        deadheadEtaMinutes: 10,
+        serviceEtaMinutes: 40,
+        etaUnavailableReason: null,
+        order: {
+          executionStatus: "PLANNED",
+          currentAssignmentId: "a-2"
+        }
+      })
+      .mockResolvedValueOnce({
+        id: "a-1",
+        orderId: "o-1",
+        driverId: "d-1",
+        servicePlan: {
+          modulesJson: ["WASHING"],
+          totalModuleMinutes: 10,
+          revision: 1,
+          updatedByUserId: "driver-user-1",
+          updatedAt: firstPlanUpdatedAt
+        }
+      })
+      .mockResolvedValueOnce({
+        id: "a-2",
+        orderId: "o-2",
+        driverId: "d-1",
+        servicePlan: {
+          modulesJson: ["CHARGING", "RETURN_FORMALITIES"],
+          totalModuleMinutes: 35,
+          revision: 4,
+          updatedByUserId: "driver-user-2",
+          updatedAt: secondPlanUpdatedAt
+        }
+      });
+    tx.assignment.create.mockReset();
+    tx.assignment.create
+      .mockResolvedValueOnce({ id: "new-a-1" })
+      .mockResolvedValueOnce({ id: "new-a-2" })
+      .mockResolvedValueOnce({ id: "new-a-3" });
+
+    await expect(
+      commitDispatchPlan(multiOrderSnapshot, multiOrderOutput, "trace-multi")
+    ).resolves.toEqual({
+      changedDriverIds: ["d-1"],
+      releasedAssignments: 2,
+      createdAssignments: 3
+    });
+
+    expect(tx.orderServicePlan.create.mock.calls.map(([write]) => write)).toEqual(
+      [
+        {
+          data: {
+            assignmentId: "new-a-1",
+            modulesJson: ["WASHING"],
+            totalModuleMinutes: 10,
+            revision: 1,
+            updatedByUserId: "driver-user-1",
+            updatedAt: firstPlanUpdatedAt
+          }
+        },
+        {
+          data: {
+            assignmentId: "new-a-2",
+            modulesJson: ["CHARGING", "RETURN_FORMALITIES"],
+            totalModuleMinutes: 35,
+            revision: 4,
+            updatedByUserId: "driver-user-2",
+            updatedAt: secondPlanUpdatedAt
+          }
+        }
+      ]
+    );
+    expect(tx.orderServicePlan.create).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ assignmentId: "new-a-3" })
+      })
+    );
   });
 });

@@ -61,6 +61,7 @@ import {
   triggerAssignmentReassigned,
   triggerAssignmentWithdrawn
 } from "@/lib/triggers/gate3-triggers";
+import type { DispatchPlannedAssignmentV2 } from "@/types/v2";
 
 import {
   assignOrder,
@@ -95,7 +96,10 @@ function createTransactionMock() {
 
 const calculatedAt = "2026-08-16T08:00:00.000Z";
 
-function completePlan(orderId: string, sequenceNo: 1 | 2 | 3) {
+function completePlan(
+  orderId: string,
+  sequenceNo: 1 | 2 | 3
+): DispatchPlannedAssignmentV2 {
   return {
     assignmentId: null,
     orderId,
@@ -328,7 +332,8 @@ beforeEach(() => {
   vi.mocked(prisma.assignment.findUnique).mockResolvedValue({
     driverId: "driver-1",
     orderId: "order-1",
-    driver: { planVersion: 7 }
+    driver: { planVersion: 7 },
+    order: { executionStatus: "PLANNED" }
   } as never);
 });
 
@@ -692,7 +697,61 @@ describe("reassignAssignment", () => {
     expect(triggerAssignmentReassigned).not.toHaveBeenCalled();
   });
 
-  it("rejects reassignment after arrival", async () => {
+  it("rejects IN_SERVICE with current versions before target availability or ETA work", async () => {
+    vi.mocked(prisma.assignment.findUnique).mockResolvedValueOnce({
+      driverId: "driver-1",
+      orderId: "order-1",
+      driver: { planVersion: 7 },
+      order: { executionStatus: "IN_SERVICE" }
+    } as never);
+
+    const result = await reassignAssignment(command());
+
+    expect(result).toEqual({
+      success: false,
+      error: expect.objectContaining({
+        code: "ILLEGAL_TRANSITION",
+        details: { currentStatus: "IN_SERVICE", targetStatus: "PLANNED" }
+      })
+    });
+    expect(buildDispatchSnapshot).not.toHaveBeenCalled();
+    expect(buildEtaMatrix).not.toHaveBeenCalled();
+    expect(runDispatchV2).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(triggerAssignmentReassigned).not.toHaveBeenCalled();
+  });
+
+  it("keeps version conflict precedence when an IN_SERVICE command is stale", async () => {
+    vi.mocked(prisma.assignment.findUnique).mockResolvedValueOnce({
+      driverId: "driver-1",
+      orderId: "order-1",
+      driver: { planVersion: 7 },
+      order: { executionStatus: "IN_SERVICE" }
+    } as never);
+
+    const result = await reassignAssignment({
+      ...command(),
+      expectedFromPlanVersion: 6
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: expect.objectContaining({
+        code: "PLAN_VERSION_CONFLICT",
+        details: {
+          currentFromPlanVersion: 7,
+          currentToPlanVersion: 3
+        }
+      })
+    });
+    expect(buildDispatchSnapshot).not.toHaveBeenCalled();
+    expect(buildEtaMatrix).not.toHaveBeenCalled();
+    expect(runDispatchV2).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(triggerAssignmentReassigned).not.toHaveBeenCalled();
+  });
+
+  it("rechecks arrival state inside the transaction", async () => {
     const tx = setupReassignTx("IN_SERVICE");
 
     const result = await reassignAssignment(command());

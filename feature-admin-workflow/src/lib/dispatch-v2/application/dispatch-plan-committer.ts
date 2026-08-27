@@ -294,12 +294,35 @@ export async function commitDispatchPlan(
 
       let releasedAssignments = 0;
       let createdAssignments = 0;
+      const releasedServicePlans = new Map<
+        string,
+        {
+          modulesJson: Prisma.JsonValue;
+          totalModuleMinutes: number;
+          revision: number;
+          updatedByUserId: string | null;
+          updatedAt: Date;
+        }
+      >();
 
       for (const change of changes) {
         for (const assignmentId of change.releasedAssignmentIds) {
           const assignment = await tx.assignment.findUnique({
             where: { id: assignmentId },
-            select: { id: true, orderId: true, driverId: true }
+            select: {
+              id: true,
+              orderId: true,
+              driverId: true,
+              servicePlan: {
+                select: {
+                  modulesJson: true,
+                  totalModuleMinutes: true,
+                  revision: true,
+                  updatedByUserId: true,
+                  updatedAt: true
+                }
+              }
+            }
           });
           if (!assignment || assignment.driverId !== change.driverId) {
             throw new Error(STALE_DISPATCH_SNAPSHOT);
@@ -334,6 +357,13 @@ export async function commitDispatchPlan(
             }
           });
           if (detach.count !== 1) throw new Error(STALE_DISPATCH_SNAPSHOT);
+
+          if (assignment.servicePlan) {
+            releasedServicePlans.set(
+              assignment.orderId,
+              assignment.servicePlan
+            );
+          }
 
           releasedAssignments += 1;
           await tx.operationLog.create({
@@ -379,6 +409,23 @@ export async function commitDispatchPlan(
               lockType: "NONE"
             }
           });
+          const releasedServicePlan = releasedServicePlans.get(
+            planned.orderId
+          );
+          if (releasedServicePlan) {
+            await tx.orderServicePlan.create({
+              data: {
+                assignmentId: assignment.id,
+                modulesJson: (releasedServicePlan.modulesJson ??
+                  []) as Prisma.InputJsonValue,
+                totalModuleMinutes:
+                  releasedServicePlan.totalModuleMinutes,
+                revision: releasedServicePlan.revision,
+                updatedByUserId: releasedServicePlan.updatedByUserId,
+                updatedAt: releasedServicePlan.updatedAt
+              }
+            });
+          }
 
           const attach = await tx.order.updateMany({
             where: {
