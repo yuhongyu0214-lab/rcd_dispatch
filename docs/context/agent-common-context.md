@@ -1,7 +1,7 @@
 # 人车单 V2 Agent 公共上下文（Layer 0）
 
 > 文档类型：`DERIVED / LAYER_0`
-> 上下文版本：`RCD-AGENT-CONTEXT-20260825-R48`
+> 上下文版本：`RCD-AGENT-CONTEXT-20260827-R49`
 > 适用范围：所有新建或重新启动的 Agent
 > 权威范围：仅提供项目目标、当前阶段、公共纪律、模块边界和命令入口
 > 非权威范围：产品行为、Schema、HTTP DTO、枚举、基础设施细节和任务验收标准
@@ -12,7 +12,7 @@
 
 人车单调度系统 V2 面向汽车租赁调度，主线是订单接入、实时位置、司机班次、A/B/C 工单时间轴、真实 ETA、调度事务和执行闭环。
 
-Gate 3、第二轮 2C/2B/2A 与 P2 均已退出并通过合入后回归。治理前 `HEAD == develop == 3464d15f8c60c01acef306a6c8d10bd4430ed2a5`，业务代码锚点为 `5c2760cea40b975b24d5d2201333ab5048ce1cf0`；`origin/develop @ ae4714849fa965940b0df1c6766638cf398ac0ce`，未推送。当前状态为 `3A_3B_AUTHORIZED / PREFLIGHT_FROZEN / NOT_STARTED`。
+Gate 3、第二轮 2C/2B/2A 与 P2 均已退出。3A 首轮发现的 Gate 2 兼容窗口缺口已由 `8fdfad7a35a287476572ef848630c23b4fd4da83` 修复并以 `--no-ff` 合入本地 `develop @ a852c4fc52005748c2f3f4f9619d44f8f7513ff8`；合入后 `808 passed / 7 expected skipped`、lint、31/31 build 和 diff check 通过。当前状态为 `GATE2_REMEDIATION_MERGED_LOCAL / NEW_BASELINE_FROZEN / 3A_3B_REVALIDATION_PENDING`，未推送。
 
 ## 2. 当前版本与闸门
 
@@ -24,21 +24,21 @@ Gate 3、第二轮 2C/2B/2A 与 P2 均已退出并通过合入后回归。治理
 | 文档基线 | Gate 3 `PASS` 内容基线 `feature/v2-gate3-review-remediation @ 464ee5d6ffdb435d76b65f9814d82e4666fd84a9`，本地/upstream/GitHub 远程一致 |
 | Gate 3→develop | 交接分支 `b853a7af245942758de1cd46c9a25c384c08ec62`；代码交接合并点 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`，本地/upstream/GitHub 远程一致 |
 | 第二轮与 P2 退出基线 | 2A/2B/2C 代码树锚点 `46813c3ecf4a0df1eaf99bfb3d8d72f7d450193b`；P2 候选 `0e354696…` 已合入 `develop @ 5c2760cea40b975b24d5d2201333ab5048ce1cf0`，合并父提交为 `78a708f…` 与 `0e354696…` |
-| 3A/3B 治理前基线 | `HEAD == develop == 3464d15f8c60c01acef306a6c8d10bd4430ed2a5`；新统一基线为本治理文档所在提交，其完整 SHA 由主控提交后下发（同一提交内不自引用） |
+| 3A/3B 新基线前置 | Gate 2 合并点 `a852c4fc52005748c2f3f4f9619d44f8f7513ff8`；新的统一代码/文档基线为本治理提交，其完整 SHA 由主控提交后下发（同一提交内不自引用） |
 | 数据库实施 | 空 PostgreSQL 演练已验证 9 个 migration、最终 Schema、8 个 rollback 和 5 类护栏；真实预生产已完成备份、9 个 migration、最小权限和 G3E2E R2.2 基础资料 `3/6/5/8` 核验，owner 已关闭；首轮失败样本与本轮通过/失败事实均保留，禁止重复 bootstrap 或清理 |
 | 候选状态 | `DEPLOYED / REAL_E2E_PASS / FAULT_ROLLBACK_PASS / FINAL_CONSISTENCY_RUNTIME_PASS`：代码、镜像、运行资源、真实 10 单和故障/回退证据一致 |
 | 镜像 | app/worker 运行 `958afca…` → `sha256:13e0…5bff`；Nginx 原镜像/配置/证书/端口不变且 release revision 对齐；更早运行/回退候选继续保留，不得混用 |
 | 基础设施 | 阿里云主线；ECS 上 app/worker/Nginx、自签名 HTTPS、结构化日志、`json-file` 轮转与 LoongCollector `3.2.6` 已验收；SLS 运行/安全日志、查询、脱敏、30/180 天留存、告警、通知和预算通过；正式域名/备案/可信证书延后 |
 | Gate 3 | `PASS`（2026-08-11 最终裁决） |
-| 并行验证 | `3A_3B_AUTHORIZED / PREFLIGHT_FROZEN / NOT_STARTED`；两线必须从同一本次治理提交 SHA 创建，创建后仍等待主控下发最终 SHA 与环境授权 |
+| 并行验证 | `NEW_BASELINE_FROZEN / REVALIDATION_PENDING`；旧 `50525878…` 验收起点失效，3A/3B/T0 必须统一到本治理提交后重新验收 |
 | Railway | 仅历史 Demo 证据，不是生产基线 |
 
 状态变化只认 [项目状态总览](../status/README.md)；文档入口只认 [文档版本总入口](../versions/README.md)。
 
-当前 Gate 3 运行候选与预生产证据保持不可变。3A/3B 不继承 P2 白名单或授权，Agent 不更新治理文档；本治理文档所在提交是两条线唯一共同 `BASELINE_SHA`，由主控在提交后下发并据此创建分支。分支创建不等于启动，仍为 `NOT_STARTED`，等待主控分别下发 T0 环境授权。
+当前 Gate 3 运行候选与预生产证据保持不可变。3A/3B 不继承此前白名单或授权，Agent 不更新治理文档；旧基线 `50525878ebe2b0b01ebc63dee782371a532f7cf5` 上的首轮结果不得作为 Gate 4 入口证据。本治理文档所在提交是两条线新的唯一共同 `BASELINE_SHA`，由主控提交后下发并把现有干净 worktree 快进到该 SHA。
 
-- 3A：数据库验证 Agent；`feature/v2-migration-validation` / `.worktrees/v2-migration-validation`；初始修改白名单为空；隔离候选为 PostgreSQL 18.3 `127.0.0.1:55437`；只读 T0 后如需验证脚本，由主控另发精确白名单。目标为 10 个 migration、V1/V2 映射与双读/兼容窗口、数据核对、rollback 阻断与安全回退、Schema 零漂移。
-- 3B：测试 Agent；`feature/v2-e2e-validation` / `.worktrees/v2-e2e-validation`；初始修改白名单为空；隔离候选为 PostgreSQL 18.3 `127.0.0.1:55438`、app `3048`、Mock `3049`；Redis/Tair、高德和订单源仅使用进程级或本地 Mock。目标为 PRD §13 完整 14 项、并发幂等、依赖故障、无假 ETA/位置、API 安全/trace、Chrome/Edge 桌面 100%/125% 与 H5 `360×800`/`390×844` 矩阵，以及 test/lint/tsc/build/diff check。
+- 3A：数据库验证 Agent；`feature/v2-migration-validation` / `.worktrees/v2-migration-validation`；首轮发现的 V1 写兼容缺口已转 Gate 2 返修并合入。新基线上重新验证 10 个 migration、V1/V2 映射与双读/兼容窗口、数据核对、rollback 阻断与安全回退、Schema 零漂移。
+- 3B：测试 Agent；`feature/v2-e2e-validation` / `.worktrees/v2-e2e-validation`；首轮 `FAIL` 证据保留，T0 单一稳定化返修线负责计划模块保留、改派错误优先级、班次状态和 4 处测试类型债务。返修合入统一基线后，重新执行 PRD §13 完整 14 项及全部故障、浏览器和工程验证。
 - 两线均无外部系统授权：不得连接真实 RDS/Tair/高德、预生产或云资源。HEAD/基线不一致、工作区不干净、端口/数据库身份/空库不明、需改 Schema/migration/API 契约/业务代码、需外部连接/新依赖/跨域文件、权威冲突或 rollback 需删除事实绕过保护时立即停止。
 
 ## 3. 公共模块边界

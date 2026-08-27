@@ -433,6 +433,8 @@ Gate 3 若因事务 outbox 必须修改上游业务写入点，仍由同一实�
 
 **2026-08-25 P2 浏览器验收、退出与合入快照**：Chrome 151、Edge 151 × `360×800`、`390×844` 四组全部 `PASS`，无 P0/P1/P2 浏览器阻断；实际视口、无横向滚动、44px 点击目标、GPS live region 与拒收原因、九组 `>=4.5:1` 对比度、Marker 联动、轮询不重置视野、地图失败降级和干净控制台均通过。主控以 `--no-ff` 将 `0e354696…` 合入本地 develop，形成 `5c2760cea40b975b24d5d2201333ab5048ce1cf0`，父提交为 `78a708f…` 与 `0e354696…`；合入后全量 `717 passed / 7 expected skipped`、lint、31/31 build、diff check、4 文件边界和干净工作区通过。P2 状态为 `MERGED_LOCAL / POST_MERGE_PASS`；3A/3B 入口条件满足但尚未启动，不继承 P2 权限。
 
+**2026-08-27 Gate 2 兼容返修与验证重置快照**：3A 在旧统一基线 `50525878ebe2b0b01ebc63dee782371a532f7cf5` 上发现 V1 写兼容窗口缺口；唯一候选 `feature/v2-v1-write-compat-remediation @ 8fdfad7a35a287476572ef848630c23b4fd4da83` 经 Gate 2 复验 `PASS` 后，以 `--no-ff` 合入本地 `develop @ a852c4fc52005748c2f3f4f9619d44f8f7513ff8`。合入后全量 `808 passed / 7 expected skipped`、lint、31/31 build 和 diff check 通过；独立 `tsc --noEmit` 仍只有 3B 首轮已登记的 4 处测试类型债务。旧基线上的 3A/3B 结果不得作为 Gate 4 入口证据；本轮治理提交形成新统一 `BASELINE_SHA` 后，3A 重新验收，3B 先闭合 T0 稳定化返修再重新验收。
+
 ### 7.1 并行线 2A：调度员 Web
 
 建议分支：`feature/v2-admin-console`
@@ -582,10 +584,10 @@ flowchart TD
 
 ### 8.3.1 共同基线、启动和停止边界
 
-- 治理前统一事实：`HEAD == develop == 3464d15f8c60c01acef306a6c8d10bd4430ed2a5`；业务代码锚点 `5c2760cea40b975b24d5d2201333ab5048ce1cf0`；`origin/develop @ ae4714849fa965940b0df1c6766638cf398ac0ce`，未推送。
-- 新统一基线定义为本治理文档所在提交，其完整 SHA 由主控提交后下发（同一提交内不自引用），不得猜测；两条分支必须从该同一 SHA 创建。
-- 分支创建后仍为 `NOT_STARTED`；必须等待主控分别下发角色上下文、空白名单确认、验收命令和 T0 环境授权。
-- 两条线不继承 P2 的文件白名单或外部系统授权；验证 Agent 不更新治理文档，也不得互相合并或 cherry-pick。
+- Gate 2 返修合并点为 `develop @ a852c4fc52005748c2f3f4f9619d44f8f7513ff8`；`origin/develop @ ae4714849fa965940b0df1c6766638cf398ac0ce`，未推送。
+- 新统一基线定义为本治理文档所在提交，其完整 SHA 由主控提交后下发（同一提交内不自引用），不得猜测；3A、3B 和 T0 稳定化 worktree 必须统一到该 SHA。
+- 旧 `50525878…` 上的 3A Gate 2 发现与 3B FAIL 只保留为问题证据。3A 从新基线重新验收；3B 必须先完成 T0 返修、审计并合入新的统一 develop，再从再次公布的 SHA 重验。
+- 两条线不继承旧文件白名单或外部系统授权；验证 Agent 不更新治理文档，也不得互相合并或 cherry-pick。
 - 立即停止：HEAD/基线不一致、工作区不干净、端口/数据库身份/空库状态不明、需要修改 Schema/migration/API 契约/业务代码、需要外部连接/新依赖/跨域文件、权威文档冲突，或 rollback 需要删除事实绕过保护。
 
 ### 8.4 Gate 4：稳定化与发布验收
@@ -751,7 +753,7 @@ flowchart TD
 - 后续追加发现 ETA Top-8 仍会裁掉本轮 A 槽新生成的 delivery cursor，导致可连续进入 B 的订单误报 `ETA_UNAVAILABLE`；已恢复计划池全部 delivery→pickup 必要组合，并补 `buildEtaMatrix()` → `runDispatchV2()` A/B 串联回归。
 - G3-3 本地开发已闭环：司机类事件按受影响门店加载全部活动司机参与比较；相同逻辑计划重试不回收/重建 Assignment 或递增 `planVersion`；outbox 只有持有当前租约的 worker 才计为处理成功；锁忙、Redis 不可用降级、过期快照重算均有独立编排测试。
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
-- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 与 Gate 3 `PASS` 证据保持不变；2C、2B、2A 与 P2 均已本地合入并通过合入后回归。3A/3B 已获授权并完成前置冻结，仍为 `NOT_STARTED`。
+- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 与 Gate 3 `PASS` 证据保持不变；2C、2B、2A 与 P2 均已退出。Gate 2 兼容返修已合入本地 `develop @ a852c4f…` 并回归通过；3A/3B 为 `NEW_BASELINE_FROZEN / REVALIDATION_PENDING`。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
 - 当前执行限制：不得再次变更 app、worker 或 Nginx，不得执行 migration、重复基础资料、清理任何失败样本或直接写业务数据库。错误 helper 产生的独立 `G3FAULT` 订单必须保留并与冻结 10 单分开统计。
-- 下一动作：主控以本治理文档所在提交作为统一 develop/文档 `BASELINE_SHA`，从该同一 SHA 创建并核验 3A/3B 分支与 worktree。分支创建后继续保持 `NOT_STARTED`，等待主控分别下发 T0 环境授权；远程同步稍后处理。
+- 下一动作：主控提交本轮 5 份治理文档，公布新的统一 `BASELINE_SHA`，把 3A、3B 与空白 T0 worktree 快进到该 SHA。3A 随后重验；3B 先完成 T0 返修并再次形成统一基线后重验。两线全部 `PASS` 前不得进入 Gate 4；远程同步稍后处理。
