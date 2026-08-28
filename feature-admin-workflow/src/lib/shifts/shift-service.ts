@@ -379,17 +379,27 @@ export async function endShift(
                 executionStatus: { in: ["EN_ROUTE", "IN_SERVICE"] }
               }
             },
-            select: { id: true, orderId: true }
+            select: {
+              id: true,
+              orderId: true,
+              order: { select: { executionStatus: true } }
+            }
           });
 
           if (blockingAssignments.length > 0) {
+            const blockingStatus = blockingAssignments.some(
+              (assignment) =>
+                assignment.order.executionStatus === "IN_SERVICE"
+            )
+              ? "IN_SERVICE"
+              : "EN_ROUTE";
             return {
               kind: "rejected",
               error: createApiErrorV2(
                 "ILLEGAL_TRANSITION",
                 "Cannot end shift with active EN_ROUTE or IN_SERVICE orders",
                 {
-                  currentStatus: "IN_SERVICE",
+                  currentStatus: blockingStatus,
                   targetStatus: "UNASSIGNED"
                 }
               )

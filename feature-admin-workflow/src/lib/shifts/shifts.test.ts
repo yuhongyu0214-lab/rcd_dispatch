@@ -356,28 +356,45 @@ describe("endShift", () => {
     expect(result.error.code).toBe("ILLEGAL_TRANSITION");
   });
 
-  it("rejects end when driver has EN_ROUTE or IN_SERVICE orders", async () => {
-    mockDriver({ onShift: true });
-    setupOpenShift();
-    vi.mocked(prisma.assignment.findMany).mockResolvedValue([
-      { id: "a-1", orderId: "o-1" } as unknown as Awaited<
-        ReturnType<typeof prisma.assignment.findMany>
-      >[number]
-    ]);
+  it.each(["EN_ROUTE", "IN_SERVICE"] as const)(
+    "rejects end with the actual %s order status",
+    async (executionStatus) => {
+      mockDriver({ onShift: true });
+      setupOpenShift();
+      vi.mocked(prisma.assignment.findMany).mockResolvedValue([
+        {
+          id: "a-1",
+          orderId: "o-1",
+          order: { executionStatus }
+        } as unknown as Awaited<
+          ReturnType<typeof prisma.assignment.findMany>
+        >[number]
+      ]);
 
-    const result = await endShift("d-1", "trace-1");
+      const result = await endShift("d-1", "trace-1");
 
-    expect(result.success).toBe(false);
-    if (result.success) throw new Error("Expected failure");
-    expect(result.error.code).toBe("ILLEGAL_TRANSITION");
-    expect(prisma.assignment.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          status: { in: ["ACTIVE", "ACCEPTED"] }
+      expect(result.success).toBe(false);
+      if (result.success) throw new Error("Expected failure");
+      expect(result.error).toEqual(
+        expect.objectContaining({
+          code: "ILLEGAL_TRANSITION",
+          details: {
+            currentStatus: executionStatus,
+            targetStatus: "UNASSIGNED"
+          }
         })
-      })
-    );
-  });
+      );
+      expect(prisma.assignment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            status: { in: ["ACTIVE", "ACCEPTED"] }
+          })
+        })
+      );
+      expect(prisma.assignment.update).not.toHaveBeenCalled();
+      expect(prisma.order.update).not.toHaveBeenCalled();
+    }
+  );
 
   it("rolls back and returns INTERNAL_ERROR when a write step fails mid-transaction", async () => {
     mockDriver({ onShift: true });

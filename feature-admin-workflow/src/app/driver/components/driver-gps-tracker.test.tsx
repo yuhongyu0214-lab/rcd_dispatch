@@ -128,7 +128,9 @@ describe("driver GPS sampling", () => {
     const samples: Array<{ capturedAt: string }> = [];
     const stop = startDriverGpsSampling({
       geolocation: { getCurrentPosition } as unknown as Geolocation,
-      onSample: (sample) => samples.push(sample),
+      onSample: (sample) => {
+        samples.push(sample);
+      },
       onError: vi.fn()
     });
 
@@ -164,7 +166,9 @@ describe("driver GPS sampling", () => {
           callbacks.push(success);
         })
       } as unknown as Geolocation,
-      onSample: (sample) => samples.push(sample),
+      onSample: (sample) => {
+        samples.push(sample);
+      },
       onError: vi.fn()
     });
 
