@@ -1,7 +1,7 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。第二轮与 P2 已退出；T0 已以 `--no-ff` 合入本地 `develop @ 8ff70cccf29371229818058055d45de376eebdf7` 并通过合入后回归。3A、3B 均为 `PASS / WARN`，Gate 4 为 `ENTRY_READY / NOT_STARTED`；Edge 125% 仅有等效布局证据，未伪装为原生缩放。
+> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。第二轮与 P2 已退出；T0 已以 `--no-ff` 合入本地 `develop @ 8ff70cccf29371229818058055d45de376eebdf7` 并通过合入后回归。3A、3B 均为 `PASS / WARN`，5 份退出治理文档已形成 Gate 4 筹备来源 `develop @ f835302d555fc0481a37dfc388bf8e4e382a6230`，Gate 4 为 `PREFLIGHT / NOT_STARTED`；Edge 125% 仅有等效布局证据，未伪装为原生缩放。
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
@@ -587,15 +587,15 @@ flowchart TD
 
 ### 8.3.1 共同基线、启动和停止边界
 
-- 当前验证代码基线为 `develop @ 8ff70cccf29371229818058055d45de376eebdf7`；`origin/develop @ ae4714849fa965940b0df1c6766638cf398ac0ce`，未推送。
-- 3A 为 `PASS / WARN`；3B worktree 已快进到 `8ff70ccc…` 并为 `PASS / WARN`。本轮治理提交形成正式文档基线，完整 SHA 由主控提交后下发。
+- 当前验证代码基线为 `develop @ 8ff70cccf29371229818058055d45de376eebdf7`；5 份退出治理文档已形成 Gate 4 筹备来源 `develop @ f835302d555fc0481a37dfc388bf8e4e382a6230`；`origin/develop @ ae4714849fa965940b0df1c6766638cf398ac0ce`，未推送。
+- 3A 为 `PASS / WARN`；3B worktree 已快进到 `8ff70ccc…` 并为 `PASS / WARN`。Gate 4 只接受主控下发的、包含本次激活同步的完整统一基线 SHA。
 - 旧 `50525878…` 上的 3A Gate 2 发现与 3B FAIL 只保留为问题证据，不再代表当前状态。
 - 两条线不继承旧文件白名单或外部系统授权；验证 Agent 不更新治理文档，也不得互相合并或 cherry-pick。
 - 立即停止：HEAD/基线不一致、工作区不干净、端口/数据库身份/空库状态不明、需要修改 Schema/migration/API 契约/业务代码、需要外部连接/新依赖/跨域文件、权威文档冲突，或 rollback 需要删除事实绕过保护。
 
 ### 8.4 Gate 4：稳定化与发布验收
 
-当前入口状态：`ENTRY_READY / NOT_STARTED`。只有本轮治理文档形成可追溯提交并下发正式文档基线后，才能创建 Gate 4 任务；不得继承 3A/3B 的数据库、端口、Mock 或浏览器 fixture 权限。
+当前入口状态：`PREFLIGHT / NOT_STARTED`。Gate 4 以 `f835302d555fc0481a37dfc388bf8e4e382a6230` 为筹备来源；只有本次激活同步形成可追溯提交、且主控下发该完整统一基线 SHA 后，才能创建 Gate 4 任务；不得继承 3A/3B 的数据库、端口、Mock 或浏览器 fixture 权限。
 
 建议分支：`feature/v2-stabilization`
 
@@ -758,7 +758,7 @@ flowchart TD
 - 后续追加发现 ETA Top-8 仍会裁掉本轮 A 槽新生成的 delivery cursor，导致可连续进入 B 的订单误报 `ETA_UNAVAILABLE`；已恢复计划池全部 delivery→pickup 必要组合，并补 `buildEtaMatrix()` → `runDispatchV2()` A/B 串联回归。
 - G3-3 本地开发已闭环：司机类事件按受影响门店加载全部活动司机参与比较；相同逻辑计划重试不回收/重建 Assignment 或递增 `planVersion`；outbox 只有持有当前租约的 worker 才计为处理成功；锁忙、Redis 不可用降级、过期快照重算均有独立编排测试。
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
-- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 与 Gate 3 `PASS` 证据保持不变；2C、2B、2A 与 P2 均已退出。T0 已合入本地 `develop @ 8ff70ccc…` 并回归通过；3A/3B 均为 `PASS / WARN`，Gate 4 为 `ENTRY_READY / NOT_STARTED`。
+- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 与 Gate 3 `PASS` 证据保持不变；2C、2B、2A 与 P2 均已退出。T0 已合入本地 `develop @ 8ff70ccc…` 并回归通过；3A/3B 均为 `PASS / WARN`；`develop @ f835302…` 为 Gate 4 筹备来源，Gate 4 为 `PREFLIGHT / NOT_STARTED`。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
 - 当前执行限制：不得再次变更 app、worker 或 Nginx，不得执行 migration、重复基础资料、清理任何失败样本或直接写业务数据库。错误 helper 产生的独立 `G3FAULT` 订单必须保留并与冻结 10 单分开统计。
-- 下一动作：主控提交本轮 5 份治理文档并公布正式文档基线 SHA；随后按 Gate 4 独立任务卡启动稳定化与发布验收。远程同步、部署、migration 与云资源操作仍未授权。
+- 下一动作：主控提交 Gate 4 激活同步并公布新的完整统一基线 SHA；随后按 Gate 4 独立任务卡启动稳定化与发布验收。远程同步、部署、migration 与云资源操作仍未授权。

@@ -30,8 +30,8 @@
 | 构建、部署与回退 | V2.0-r13 | Gate 3 `PASS` 文档基线 `464ee5d…` 已远程核验；分阶段和禁止重复 migration 规则不变 | [部署指南 V2](v2.0/deployment-guide-v2.md) |
 | 生产运行与恢复 | V2.0-r6 | 最终运行资源、健康、10 单、outbox 和证据一致性通过；整机/RDS 灾备仍为独立演练 | [运维指南 V2](v2.0/operations-guide-v2.md) |
 | 基础设施决策与替代历史 | V2.0-r3 | INFRA-001～023 已登记；公网 IP 预生产演示获准，正式上线条件不变 | [基础设施决策日志](v2.0/infrastructure-decision-log.md) |
-| 项目当前状态 | 2026-08-29 | T0 已合入 `develop @ 8ff70ccc…`；3A/3B 均 `PASS / WARN`，Gate 4 入口就绪但未启动 | [状态总览](../status/README.md) |
-| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260829-R50 | Layer 0；所有 Agent 必读；不超过 150 行；登记 3A/3B 退出与 Gate 4 入口 | [Agent 公共上下文](../context/agent-common-context.md) |
+| 项目当前状态 | 2026-08-29 | `develop @ f835302…` 为 Gate 4 筹备来源；3A/3B 均 `PASS / WARN`，Gate 4 为 `PREFLIGHT / NOT_STARTED` | [状态总览](../status/README.md) |
+| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260829-R51 | Layer 0；所有 Agent 必读；不超过 150 行；登记 Gate 4 筹备来源与启动边界 | [Agent 公共上下文](../context/agent-common-context.md) |
 | V1 产品与开发主线 | V1.x | 历史只读 | [V1 历史索引](v1/README.md) |
 
 ## 文档权威顺序（按领域拆分，唯一权威口径）
@@ -117,14 +117,14 @@ HTTP 契约               → v2.0/api-contract-v2.md
 
 ### 3A/3B 冻结任务入口
 
-状态统一为 `3A_PASS_WARN / 3B_PASS_WARN / GATE4_ENTRY_READY / NOT_STARTED`。T0 候选 `72cb11b…` 已合入本地 `develop @ 8ff70cccf29371229818058055d45de376eebdf7`，合入后 `812/7`、lint、tsc、31/31 build 与 diff check 通过；3B worktree 已快进到该 SHA。`origin/develop @ ae471484…` 未推送。
+状态统一为 `3A_PASS_WARN / 3B_PASS_WARN / GATE4_PREFLIGHT / NOT_STARTED`。T0 候选 `72cb11b…` 已合入本地 `develop @ 8ff70cccf29371229818058055d45de376eebdf7`，合入后 `812/7`、lint、tsc、31/31 build 与 diff check 通过；5 份退出治理文档随后形成 Gate 4 筹备来源 `develop @ f835302d555fc0481a37dfc388bf8e4e382a6230`。`origin/develop @ ae471484…` 未推送。
 
 | 验证线 | 角色与入口 | 初始边界 | 隔离候选与结果摘要 |
 |---|---|---|---|
 | 3A | 数据库验证 Agent；`feature/v2-migration-validation`；`.worktrees/v2-migration-validation` | `PASS / WARN`；T0 7 文件差异不触及数据/迁移/兼容权威域 | 10 个 migration、迁移映射、双读/兼容窗口、数据核对、rollback 和零漂移通过 |
 | 3B | 测试 Agent；`feature/v2-e2e-validation @ 8ff70ccc…`；`.worktrees/v2-e2e-validation` | `PASS / WARN`；修改白名单为空 | PRD §13 14 项、故障、数据库/API、安全、Chrome/Edge 和工程命令通过；Edge 125% 为 `952×800` 等效布局证据 |
 
-3A/3B 的临时 PostgreSQL、端口、fixture、Mock 和构建产物均已清理，外部系统授权仍为无。本轮治理提交形成正式文档基线；提交前不得创建 Gate 4 任务。
+3A/3B 的临时 PostgreSQL、端口、fixture、Mock 和构建产物均已清理，外部系统授权仍为无。Gate 4 只接受主控下发的、包含本次激活同步的完整提交 SHA；在该 SHA 公布前不得创建 Gate 4 任务、分支或 worktree。
 
 共同停止条件：HEAD/基线不一致、工作区不干净、端口/数据库身份/空库状态不明、需要修改 Schema/migration/API 契约/业务代码、需要外部连接/新依赖/跨域文件、权威文档冲突，或 rollback 需要删除事实绕过保护。详细验收以[并行开发主计划 §8.2～§8.3](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md)为准。
 
@@ -182,7 +182,7 @@ remote commit: 958afca537b412fb972b6e180561a9b37022834d
 2. 新候选的 Schema/migration tree 与完成一次性空 PostgreSQL 演练的旧冻结候选完全相同；原有 9 个正向 migration、最终 Schema、8 个 rollback 和五类安全护栏结论继续有效。
 3. 冻结真实 10 单已完成：订单 1～6、8～10 共 9 单完成，订单 7 按预期为 `INFEASIBLE` 且保留 1 条开放预警；并发、旧版本、到达后改排拒绝与订单 10 幂等重放均通过。首轮失败、旧映射、边界抖动和错误 helper 现场继续保留，不得清理。
 4. 最终一致性审查确认本地/远程代码、ACR digest、ECS 运行身份、真实依赖、10 单结果和故障/回退证据一致；文档口径已返修，并以 `feature/v2-gate3-review-remediation @ 57ef86c43bf220f48774e130575c40b8c94a83d5` 形成可追溯基线，本地、upstream 与 GitHub 远程核验一致。
-5. 主控已于 2026-08-11 最终裁决 Gate 3 `PASS`；第二轮与 P2 随后退出。Gate 2 兼容返修与 T0 已依次进入本地 develop，最终代码基线为 `8ff70ccc…`。3A/3B 均完成重验并为 `PASS / WARN`；Edge 原生 125% 缩放仅缺工具级证据，等效布局与精确 H5 尺寸已通过。Gate 4 为 `ENTRY_READY / NOT_STARTED`，须等待本轮治理提交形成正式文档基线。远程仍为 `ae471484…`。
+5. 主控已于 2026-08-11 最终裁决 Gate 3 `PASS`；第二轮与 P2 随后退出。Gate 2 兼容返修与 T0 已依次进入本地 develop，应用代码树锚点为 `8ff70ccc…`。3A/3B 均完成重验并为 `PASS / WARN`；Edge 原生 125% 缩放仅缺工具级证据，等效布局与精确 H5 尺寸已通过。5 份退出治理文档已形成 Gate 4 筹备来源 `f835302…`，当前为 `PREFLIGHT / NOT_STARTED`；本次激活同步提交并由主控公布完整 SHA 后，才可创建 Gate 4 独立任务。远程仍为 `ae471484…`。
 
 状态事实和阻断项统一在[状态总览](../status/README.md)维护；状态文档不得修改领域契约。
 
