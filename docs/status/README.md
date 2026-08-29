@@ -1,18 +1,18 @@
 # 人车单项目状态总览
 
-> 状态快照：2026-08-27
+> 状态快照：2026-08-29
 > 用途：说明项目做到哪一步、还差什么
 > 非权威范围：产品行为、状态机、Schema、枚举、HTTP 契约、技术栈和生产架构
 
 ## 一句话结论
 
-Gate 3、第二轮和 P2 保持 `PASS`。3A 首轮发现的 Gate 2 兼容窗口缺口已由 `8fdfad7…` 修复并合入本地 `develop @ a852c4f…`；合入后 `808 passed / 7 expected skipped`、lint、31/31 build 和 diff check 通过。3A/3B 旧 `50525878…` 验收起点失效，当前为 `GATE2_REMEDIATION_MERGED_LOCAL / NEW_BASELINE_FROZEN / 3A_3B_REVALIDATION_PENDING`；新统一基线是本治理文档所在提交，未推送。
+Gate 3、第二轮和 P2 保持 `PASS`。T0 候选 `72cb11b…` 经独立代码审计和测试验收后，以 `--no-ff` 合入本地 `develop @ 8ff70cccf29371229818058055d45de376eebdf7`；合入后 `812 passed / 7 expected skipped`、lint、`tsc --noEmit`、31/31 build 和 diff check 通过。3A 为 `PASS / WARN`，3B 为 `PASS / WARN`；Edge 原生 125% 缩放未取得工具证据，但 `952×800` 等效布局与两个精确 H5 尺寸均通过。当前为 `3A_PASS_WARN / 3B_PASS_WARN / GATE4_ENTRY_READY / NOT_STARTED`，未推送。
 
 ## 当前工作流状态
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
-| 文档治理 | `GATE2_REMEDIATION_MERGED_LOCAL / NEW_BASELINE_FROZEN` | Gate 2 合并点 `a852c4f…`；本轮仅同步 5 份治理文件 | 由主控公布本治理提交的完整 `BASELINE_SHA` |
+| 文档治理 | `3A_3B_RESULTS_SYNCED / COMMIT_PENDING` | 本地代码基线 `8ff70ccc…`；本轮仅同步 5 份治理文件 | 提交治理文档后公布完整文档基线 SHA |
 | 应用候选 | `958AFCA_GATE3_ACCEPTED_DEVELOP_HANDOFF_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变运行身份；代码历史交接点为 `develop @ 51ddb5f…`，最终状态激活 HEAD 为 `ae471484…` |
 | 依赖安全 | `COMPLETED` | [依赖安全返修](2026-08-01-gate3-dependency-security-remediation.md) | 依赖变化时重跑全套审计 |
 | migration 指纹 | `PREPROD_9_APPLIED_LOCAL_10_PASS` | 第 10 个 migration 提交 `c6850df0a85aab601c3034e542a0f0b575c9053e` | 隔离 PostgreSQL 已通过；预生产 9 个保持不变，未经授权不实施第 10 个 |
@@ -27,18 +27,18 @@ Gate 3、第二轮和 P2 保持 `PASS`。3A 首轮发现的 Gate 2 兼容窗口�
 | Gate 3 总闸门 | `PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变候选与证据，进入受控阶段交接 |
 | 串行调度员 V2 API 接线 | `T1_PASS / MERGED_LOCAL / POST_MERGE_PASS` | 候选 `152f7c5…` 已合入 `develop @ 8cfed6ad…`；T1 与合并后全量回归通过 | 串行前置退出；保持本地合并且暂不推送 |
 | 第二轮并行 | `MERGED_LOCAL / POST_MERGE_PASS / P2_EXIT_PASS` | P2 候选 `0e354696…` 已合入 `develop @ 5c2760c…` | 第二轮退出；进入 3A/3B 并行验证前置 |
-| 并行验证 3A/3B | `NEW_BASELINE_FROZEN / REVALIDATION_PENDING` | 旧基线首轮：3A 触发 Gate 2 返修；3B FAIL 证据保留 | 两 worktree 对齐新基线；3A 重验，3B 先闭合 T0 返修再重验 |
+| 并行验证 3A/3B | `PASS_WARN / GATE4_ENTRY_READY` | 3A migration/兼容/rollback/零漂移通过；3B PRD 14 项、故障、API、数据库和浏览器通过 | 提交治理基线后启动 Gate 4；不把 Edge 等效布局写成原生 125% 证据 |
 
-## 3A/3B 冻结任务卡
+## 3A/3B 退出记录
 
-新统一基线定义为本治理文档所在提交，其完整 SHA 由主控提交后下发（同一提交内不自引用），不得猜测。两条现有干净 worktree 必须快进到该同一 SHA，旧 `50525878…` 结果只能作为问题证据，不能作为 Gate 4 入口证据。
+当前统一代码基线为 `develop @ 8ff70cccf29371229818058055d45de376eebdf7`。T0 合并提交的代码树与已验收候选 `72cb11baad851f3a2fc2bf1ea6367affac679c96` 完全相同；3B worktree 已快进到该 SHA 且保持干净。本轮治理提交形成正式文档基线，完整 SHA 在提交后由主控下发。
 
-| 验证线 | 角色、分支与 worktree | 初始修改边界 | 隔离候选与外部边界 | 必须达成 |
+| 验证线 | 角色、分支与 worktree | 退出状态 | 隔离与外部边界 | 已达成 |
 |---|---|---|---|---|
-| 3A | 数据库验证 Agent；`feature/v2-migration-validation`；`.worktrees/v2-migration-validation` | 新基线白名单重新归零 | PostgreSQL 18.3 `127.0.0.1:55437`；禁止外部系统、预生产和真实 RDS/Tair/高德 | 重新验证 V1/V2 映射、兼容窗口、10 个 migration、数据、rollback 与零漂移 |
-| 3B | 测试 Agent；`feature/v2-e2e-validation`；`.worktrees/v2-e2e-validation` | 首轮 FAIL；T0 稳定化返修独立执行，未获新授权前不得改业务文件 | PostgreSQL 18.3 `127.0.0.1:55438`、app `3048`、Mock `3049`；仅本地 Mock，无外部授权 | T0 返修进入统一基线后，重验 PRD §13 14 项、故障、浏览器与全部工程命令 |
+| 3A | 数据库验证 Agent；`feature/v2-migration-validation`；`.worktrees/v2-migration-validation` | `PASS / WARN` | PostgreSQL 18.3 `127.0.0.1:55437`；无真实外部系统 | 10 个 migration、V1/V2 映射、兼容窗口、数据核对、rollback 保护/安全回退和 Schema 零漂移均通过；T0 的 7 文件差异未触及 Schema、migration 或兼容域 |
+| 3B | 测试 Agent；`feature/v2-e2e-validation @ 8ff70ccc…`；`.worktrees/v2-e2e-validation` | `PASS / WARN` | PostgreSQL 18.3 `127.0.0.1:55438`、app `3048`、Mock `3049`；均已清理，无外部授权 | PRD §13 14 项、并发幂等、故障、数据库/API、安全、Chrome 与 Edge 均通过；Edge 125% 仅为 `952×800` 等效布局证据 |
 
-分支创建后仍为 `NOT_STARTED`。任一出现 HEAD/基线不一致、工作区不干净、端口/数据库身份/空库状态不明、需要修改 Schema/migration/API 契约/业务代码、需要外部连接/新依赖/跨域文件、权威文档冲突，或 rollback 需要删除事实绕过保护，必须停止并回报主控。
+Gate 4 当前仅为 `ENTRY_READY / NOT_STARTED`。新任务必须使用本轮治理提交后的正式文档基线；不得继承 3A/3B 的临时端口、fixture、Mock 或数据库授权。
 
 ## 唯一代码、文档与迁移基线
 
@@ -95,10 +95,11 @@ Gate 2 compatibility remediation candidate: 8fdfad7a35a287476572ef848630c23b4fd4
 Gate 2 compatibility remediation merge: local develop @ a852c4fc52005748c2f3f4f9619d44f8f7513ff8
 Gate 2 post-merge verification: 808 passed / 7 expected skipped | lint PASS | build 31/31 PASS | diff check PASS
 3A/3B superseded baseline: 50525878ebe2b0b01ebc63dee782371a532f7cf5
-3A/3B new unified baseline: 本治理文档所在提交（完整 SHA 由主控提交后下发，同一提交内不自引用）
+3A/3B validated code baseline: local develop @ 8ff70cccf29371229818058055d45de376eebdf7
 3A branch/worktree: feature/v2-migration-validation | .worktrees/v2-migration-validation
 3B branch/worktree: feature/v2-e2e-validation | .worktrees/v2-e2e-validation
-3A/3B status: NEW_BASELINE_FROZEN / REVALIDATION_PENDING
+T0 candidate/merge: 72cb11baad851f3a2fc2bf1ea6367affac679c96 | local develop @ 8ff70cccf29371229818058055d45de376eebdf7
+3A/3B status: PASS_WARN / GATE4_ENTRY_READY / NOT_STARTED
 rejected dispatcher API candidate: feature/v2-dispatcher-api-wiring @ 319f73401359ef4a232a2217afaaef2ef4212af2
 superseded unaligned API remediation candidate: feature/v2-dispatcher-api-wiring @ 5b84ab4881e1a8da12672c19d87098674798e60c
 superseded API remediation candidate: feature/v2-dispatcher-api-wiring @ 60f03af3c73bb867a7139b705741135d276b50ab
@@ -163,10 +164,13 @@ parallel worktrees: .worktrees/round2-admin-console | .worktrees/round2-driver-w
   合入 `develop @ 5c2760c…`；合入后全量 `717 passed / 7 expected skipped`、lint、31/31 build、
   diff check 和干净工作区再次通过。随后 3A/3B 已从统一治理基线创建，但旧 `50525878…`
   首轮验收被 Gate 2 返修取代；两线必须从本轮新统一基线重新验收。
-- 3A 首轮复验发现 V1 写接口切换缺口；返修候选 `8fdfad7…` 仅改 5 个批准文件，专项、全量、
-  lint、build 与运行态路由验证通过，并以 `--no-ff` 合入本地 `develop @ a852c4f…`。
-- 3B 首轮 `FAIL` 证据保留：重排后服务模块丢失、改派错误优先级、下班状态回报及 4 处测试类型
-  债务。T0 单一稳定化 worktree 已建立但尚无代码改动；必须对齐新基线、完成返修和审计后再重验。
+- 3A 在 Gate 2 返修后的统一基线上完成迁移与兼容重验，10 个 migration、映射、数据核对、
+  rollback 保护/安全回退、再次 Forward 和 Schema 零漂移均通过，结论为 `PASS / WARN`。
+- 3B 首轮发现的服务模块保留、改派错误优先级、下班状态回报和 4 处测试类型问题，已由候选
+  `72cb11b…` 闭合并经代码审计、独立测试后合入 `develop @ 8ff70ccc…`。3B 随后完成 PRD §13
+  14 项、真实隔离 PostgreSQL/API、故障与浏览器验收，结论为 `PASS / WARN`；Edge 调度台
+  125% 是 `952×800` 等效布局证据，不是原生浏览器缩放证据。Chrome/Edge 控制台无错误，
+  H5 `360×800`、`390×844` 为精确视口，全部临时资源已清理。
 - 2C 原候选 `99d6909…` 在不改变 patch 的前提下线性重放到文档基线 `1e83782…`，修正提交
   说明后形成 `04aba179…`；稳定 patch-id 一致，精确 9 个白名单文件。专项及共享契约 `35/35`，
   合入前后全量均为 `648 passed / 7 expected skipped`，lint、29/29 build 和 diff check 通过；

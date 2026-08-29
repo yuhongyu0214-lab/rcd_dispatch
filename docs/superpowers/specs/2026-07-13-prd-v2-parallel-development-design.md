@@ -1,7 +1,7 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。代码、镜像、运行资源、真实 10 单、worker 故障恢复、应用回退、migration 指纹和文档追溯全部通过，主控于 2026-08-11 最终裁决 Gate 3 `PASS`。第二轮 2C、2B、2A 与 P2 均已合入本地 develop 并通过合入后回归；当前为 `3A_3B_AUTHORIZED / PREFLIGHT_FROZEN / NOT_STARTED`，本治理文档所在提交是两线唯一共同基线。
+> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。第二轮与 P2 已退出；T0 已以 `--no-ff` 合入本地 `develop @ 8ff70cccf29371229818058055d45de376eebdf7` 并通过合入后回归。3A、3B 均为 `PASS / WARN`，Gate 4 为 `ENTRY_READY / NOT_STARTED`；Edge 125% 仅有等效布局证据，未伪装为原生缩放。
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
@@ -435,6 +435,8 @@ Gate 3 若因事务 outbox 必须修改上游业务写入点，仍由同一实�
 
 **2026-08-27 Gate 2 兼容返修与验证重置快照**：3A 在旧统一基线 `50525878ebe2b0b01ebc63dee782371a532f7cf5` 上发现 V1 写兼容窗口缺口；唯一候选 `feature/v2-v1-write-compat-remediation @ 8fdfad7a35a287476572ef848630c23b4fd4da83` 经 Gate 2 复验 `PASS` 后，以 `--no-ff` 合入本地 `develop @ a852c4fc52005748c2f3f4f9619d44f8f7513ff8`。合入后全量 `808 passed / 7 expected skipped`、lint、31/31 build 和 diff check 通过；独立 `tsc --noEmit` 仍只有 3B 首轮已登记的 4 处测试类型债务。旧基线上的 3A/3B 结果不得作为 Gate 4 入口证据；本轮治理提交形成新统一 `BASELINE_SHA` 后，3A 重新验收，3B 先闭合 T0 稳定化返修再重新验收。
 
+**2026-08-29 T0 与 3A/3B 退出快照**：T0 候选 `feature/v2-t0-stabilization-remediation @ 72cb11baad851f3a2fc2bf1ea6367affac679c96` 精确修改 7 个批准文件，闭合重排服务模块保留、改派错误优先级、下班真实状态和测试类型债务；代码审计与独立测试通过后以 `--no-ff` 合入本地 `develop @ 8ff70cccf29371229818058055d45de376eebdf7`。合入后 `812 passed / 7 expected skipped`、lint、`tsc --noEmit`、31/31 build、diff check 和干净工作区通过。3A 的 10 个 migration、兼容映射、rollback 与零漂移重验为 `PASS / WARN`；T0 差异未触及其权威域。3B 在与 merge commit 完全相同的代码树完成 PRD §13 14 项、隔离数据库/API、并发幂等、依赖故障、安全和 Chrome/Edge 验收，并把 worktree 快进到 `8ff70ccc…`，结论为 `PASS / WARN`。Edge 原生 125% 缩放受控制工具限制，实际登记为 `952×800` 等效布局 `PASS`；H5 `360×800`、`390×844` 为精确视口。该限制不构成代码阻断，但不得改写成原生缩放证据。
+
 ### 7.1 并行线 2A：调度员 Web
 
 建议分支：`feature/v2-admin-console`
@@ -580,17 +582,20 @@ flowchart TD
 - 无假 ETA、假位置或最后写入者无条件覆盖。
 - API 鉴权、安全边界、统一错误和 body/header `traceId` 一致性通过。
 - Chrome 和 Edge 的调度员桌面 100%/125% 与司机 H5 `360×800`/`390×844` 矩阵通过。
+- 若自动化控制器无法操作 Edge 浏览器顶栏缩放，必须明确记录为等效布局宽度验收，不得伪称原生 125%；本轮等效布局为 `952×800`，结论 `PASS / WARN`。
 - `pnpm test`、`pnpm lint`、`pnpm exec tsc --noEmit`、`pnpm build` 和 `git diff --check` 通过。
 
 ### 8.3.1 共同基线、启动和停止边界
 
-- Gate 2 返修合并点为 `develop @ a852c4fc52005748c2f3f4f9619d44f8f7513ff8`；`origin/develop @ ae4714849fa965940b0df1c6766638cf398ac0ce`，未推送。
-- 新统一基线定义为本治理文档所在提交，其完整 SHA 由主控提交后下发（同一提交内不自引用），不得猜测；3A、3B 和 T0 稳定化 worktree 必须统一到该 SHA。
-- 旧 `50525878…` 上的 3A Gate 2 发现与 3B FAIL 只保留为问题证据。3A 从新基线重新验收；3B 必须先完成 T0 返修、审计并合入新的统一 develop，再从再次公布的 SHA 重验。
+- 当前验证代码基线为 `develop @ 8ff70cccf29371229818058055d45de376eebdf7`；`origin/develop @ ae4714849fa965940b0df1c6766638cf398ac0ce`，未推送。
+- 3A 为 `PASS / WARN`；3B worktree 已快进到 `8ff70ccc…` 并为 `PASS / WARN`。本轮治理提交形成正式文档基线，完整 SHA 由主控提交后下发。
+- 旧 `50525878…` 上的 3A Gate 2 发现与 3B FAIL 只保留为问题证据，不再代表当前状态。
 - 两条线不继承旧文件白名单或外部系统授权；验证 Agent 不更新治理文档，也不得互相合并或 cherry-pick。
 - 立即停止：HEAD/基线不一致、工作区不干净、端口/数据库身份/空库状态不明、需要修改 Schema/migration/API 契约/业务代码、需要外部连接/新依赖/跨域文件、权威文档冲突，或 rollback 需要删除事实绕过保护。
 
 ### 8.4 Gate 4：稳定化与发布验收
+
+当前入口状态：`ENTRY_READY / NOT_STARTED`。只有本轮治理文档形成可追溯提交并下发正式文档基线后，才能创建 Gate 4 任务；不得继承 3A/3B 的数据库、端口、Mock 或浏览器 fixture 权限。
 
 建议分支：`feature/v2-stabilization`
 
@@ -753,7 +758,7 @@ flowchart TD
 - 后续追加发现 ETA Top-8 仍会裁掉本轮 A 槽新生成的 delivery cursor，导致可连续进入 B 的订单误报 `ETA_UNAVAILABLE`；已恢复计划池全部 delivery→pickup 必要组合，并补 `buildEtaMatrix()` → `runDispatchV2()` A/B 串联回归。
 - G3-3 本地开发已闭环：司机类事件按受影响门店加载全部活动司机参与比较；相同逻辑计划重试不回收/重建 Assignment 或递增 `planVersion`；outbox 只有持有当前租约的 worker 才计为处理成功；锁忙、Redis 不可用降级、过期快照重算均有独立编排测试。
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
-- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 与 Gate 3 `PASS` 证据保持不变；2C、2B、2A 与 P2 均已退出。Gate 2 兼容返修已合入本地 `develop @ a852c4f…` 并回归通过；3A/3B 为 `NEW_BASELINE_FROZEN / REVALIDATION_PENDING`。
+- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 与 Gate 3 `PASS` 证据保持不变；2C、2B、2A 与 P2 均已退出。T0 已合入本地 `develop @ 8ff70ccc…` 并回归通过；3A/3B 均为 `PASS / WARN`，Gate 4 为 `ENTRY_READY / NOT_STARTED`。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
 - 当前执行限制：不得再次变更 app、worker 或 Nginx，不得执行 migration、重复基础资料、清理任何失败样本或直接写业务数据库。错误 helper 产生的独立 `G3FAULT` 订单必须保留并与冻结 10 单分开统计。
-- 下一动作：主控提交本轮 5 份治理文档，公布新的统一 `BASELINE_SHA`，把 3A、3B 与空白 T0 worktree 快进到该 SHA。3A 随后重验；3B 先完成 T0 返修并再次形成统一基线后重验。两线全部 `PASS` 前不得进入 Gate 4；远程同步稍后处理。
+- 下一动作：主控提交本轮 5 份治理文档并公布正式文档基线 SHA；随后按 Gate 4 独立任务卡启动稳定化与发布验收。远程同步、部署、migration 与云资源操作仍未授权。
