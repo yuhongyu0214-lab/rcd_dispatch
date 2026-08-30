@@ -33,6 +33,11 @@ describe("deployment artifacts", () => {
     expect(dockerfile).toContain(
       "COPY --from=production-dependencies --chown=nextjs:nodejs /app/node_modules ./node_modules"
     );
+    expect(dockerfile).toContain("FROM builder AS standalone-artifacts");
+    expect(dockerfile).toContain("rm -rf /app/.next/standalone/node_modules");
+    expect(dockerfile).toContain(
+      "COPY --from=standalone-artifacts --chown=nextjs:nodejs /app/.next/standalone ./"
+    );
     expect(dockerfile).not.toContain(
       "COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules"
     );

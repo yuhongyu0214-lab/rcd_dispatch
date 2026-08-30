@@ -48,6 +48,10 @@ RUN test -n "$GIT_COMMIT_SHA" \
   && pnpm exec prisma generate \
   && pnpm build
 
+FROM builder AS standalone-artifacts
+
+RUN rm -rf /app/.next/standalone/node_modules
+
 FROM node:22.23.1-bookworm-slim@sha256:8607a9064d4a571140998ae9e52a3b3fcf9cff361d04642d5971e6cd76d39e27 AS runner
 
 ARG GIT_COMMIT_SHA
@@ -79,8 +83,8 @@ RUN apt-get update \
     /usr/local/bin/yarn \
     /usr/local/bin/yarnpkg
 
+COPY --from=standalone-artifacts --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=production-dependencies --chown=nextjs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
