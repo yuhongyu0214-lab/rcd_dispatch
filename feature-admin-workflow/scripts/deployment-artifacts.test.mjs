@@ -6,22 +6,41 @@ const readProjectFile = (path) => readFile(new URL(`../${path}`, import.meta.url
 
 describe("deployment artifacts", () => {
   it("builds a non-root standalone image without embedding runtime secrets", async () => {
-    const [dockerfile, dockerignore, nextConfigSource] = await Promise.all([
+    const [dockerfile, dockerignore, nextConfigSource, packageJsonSource] = await Promise.all([
       readProjectFile("Dockerfile"),
       readProjectFile(".dockerignore"),
-      readProjectFile("next.config.mjs")
+      readProjectFile("next.config.mjs"),
+      readProjectFile("package.json")
     ]);
+    const packageJson = JSON.parse(packageJsonSource);
+    const pinnedNodeImage =
+      "node:22.23.1-bookworm-slim@sha256:8607a9064d4a571140998ae9e52a3b3fcf9cff361d04642d5971e6cd76d39e27";
 
     expect(nextConfigSource).toContain("NEXT_OUTPUT_STANDALONE");
     expect(nextConfigSource).toContain('output: "standalone"');
+    expect(dockerfile.split(`FROM ${pinnedNodeImage}`).length - 1).toBe(2);
     expect(dockerfile).toContain("NEXT_OUTPUT_STANDALONE=true");
     expect(dockerfile).toContain("pnpm install --frozen-lockfile");
+    expect(dockerfile).toContain("pnpm install --prod --no-optional --frozen-lockfile");
     expect(dockerfile).toContain("pnpm exec prisma generate");
     expect(
       dockerfile.match(
         /apt-get install --yes --no-install-recommends ca-certificates openssl/g
       )
     ).toHaveLength(2);
+    expect(dockerfile.match(/apt-get upgrade --yes/g)).toHaveLength(2);
+    expect(dockerfile).toContain("ge '3.7.9-2+deb12u7'");
+    expect(dockerfile).toContain(
+      "COPY --from=production-dependencies --chown=nextjs:nodejs /app/node_modules ./node_modules"
+    );
+    expect(dockerfile).not.toContain(
+      "COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules"
+    );
+    expect(dockerfile).toContain("rm -rf /usr/local/lib/node_modules/npm");
+    expect(dockerfile).toContain("/usr/local/lib/node_modules/corepack");
+    expect(dockerfile).not.toContain("esbuild");
+    expect(packageJson.dependencies.prisma).toBe("^6.7.0");
+    expect(packageJson.devDependencies.prisma).toBeUndefined();
     expect(dockerfile).toContain("USER nextjs");
     expect(dockerfile).toContain("/api/v2/health");
     expect(dockerfile).not.toContain("DATABASE_URL");

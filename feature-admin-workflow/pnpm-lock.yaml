@@ -34,6 +34,9 @@ importers:
       pino:
         specifier: 9.6.0
         version: 9.6.0
+      prisma:
+        specifier: ^6.7.0
+        version: 6.19.3(typescript@5.9.3)
       react:
         specifier: 19.2.8
         version: 19.2.8
@@ -74,9 +77,6 @@ importers:
       prettier:
         specifier: ^3.4.2
         version: 3.8.3
-      prisma:
-        specifier: ^6.7.0
-        version: 6.19.3(typescript@5.9.3)
       tailwindcss:
         specifier: ^3.4.17
         version: 3.4.19(tsx@4.21.0)
