@@ -1,7 +1,7 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。第二轮与 P2 已退出；T0 已以 `--no-ff` 合入本地 `develop @ 8ff70cccf29371229818058055d45de376eebdf7` 并通过合入后回归。3A、3B 均为 `PASS / WARN`，5 份退出治理文档已形成 Gate 4 筹备来源 `develop @ f835302d555fc0481a37dfc388bf8e4e382a6230`，Gate 4 为 `PREFLIGHT / NOT_STARTED`；Edge 125% 仅有等效布局证据，未伪装为原生缩放。
+> 状态：总体架构已批准；Gate -1～Gate 3、第二轮、P2 与 3A/3B 已完成。Gate 4 已在 `feature/v2-stabilization` 启动：G4-1～G4-3 已通过；G4-4 首个远端 RC 已拒绝并禁止部署，本地返修代码锚点 `c3b554ec579c88d544eb05447babeadca3abfd6c` 的全量回归、精确镜像复扫与独立代码审计通过。当前为 `G4-4_REMOTE_RC_BUILD_RESCAN_READY / DEPLOYMENT_DENIED`；必须先以本次治理同步提交形成新的统一基线，后续远端 RC 才能使用该完整 SHA 作为 tag 与 OCI revision。
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
@@ -595,7 +595,7 @@ flowchart TD
 
 ### 8.4 Gate 4：稳定化与发布验收
 
-当前入口状态：`PREFLIGHT / NOT_STARTED`。Gate 4 以 `f835302d555fc0481a37dfc388bf8e4e382a6230` 为筹备来源；只有本次激活同步形成可追溯提交、且主控下发该完整统一基线 SHA 后，才能创建 Gate 4 任务；不得继承 3A/3B 的数据库、端口、Mock 或浏览器 fixture 权限。
+当前状态：`IN_PROGRESS / G4-4_REMOTE_RC_BUILD_RESCAN_READY / DEPLOYMENT_DENIED`。Gate 4 已从统一初始基线 `4102ee1f85f89f363aeaa42f829a9c6d535f6d31` 创建 `feature/v2-stabilization` 与 `.worktrees/v2-stabilization`。本地返修代码锚点为 `c3b554ec579c88d544eb05447babeadca3abfd6c`；本次治理同步提交形成新的完整统一基线后，后续 Git 推送、ACR 新 RC 和精确 digest 复扫才可按单独任务卡继续。不得继承 3A/3B 或已结束 Gate 4 子任务的数据库、端口、Mock、浏览器 fixture、云资源或密钥权限。
 
 建议分支：`feature/v2-stabilization`
 
@@ -618,6 +618,15 @@ flowchart TD
 - 数据迁移、回滚、并发和故障场景验证通过。
 - `develop` 可运行、可演示、可回滚。
 - 用户批准后才允许 `develop → main`。
+
+#### 8.4.1 Gate 4 执行快照（2026-08-31）
+
+1. **T0/G4-1 `PASS`**：初始 `feature/v2-stabilization @ 4102ee1…` 与 worktree 干净；在不安装或升级依赖的前提下完成全量 test、lint、`tsc --noEmit`、build、Prisma validate 和 diff check。工程验收矩阵、正式演示脚本草案、证据复用/重验矩阵与缺陷归属已形成。
+2. **G4-2 `PASS`**：完成脱敏资源与权限盘点。ACR、ECS、RDS、Tair、SLS、Nginx、自签名证书、安全组和责任人已确认；RDS/Tair 无公网入口，数据库/Redis 无需对公网开放。SLS 告警中心与内部存储已初始化，runtime/security 分别保留 30/180 天；自签名证书已轮换至 2026-10-06，只允许预生产公网 IP 演示，不代表正式生产可信 HTTPS。
+3. **G4-3 `PASS`**：2026-08-30 全量快照恢复点可用。隔离恢复库 `rcd_v2_g43_restore_20260830` 的 9 个历史 migration 与制品 checksum 匹配；第 10 个 migration 完成 Forward 后约束正确、业务行数不变，随后 rollback 与单条 migration 元数据复位恢复到 9 个。无非预期 DDL、漂移或业务数据删除，源预生产库写入为零。
+4. **G4-4 首个 RC `REJECTED_DO_NOT_DEPLOY`**：SHA tag `4102ee1…`、index digest `sha256:5d9685…`、amd64 digest `sha256:c41161…` 可追溯，但精确 digest 扫描发现未裁决 Critical/High；该 tag/digest 作为失败证据保留，禁止覆盖、删除或部署。
+5. **G4-4 本地返修 `PASS`**：同一分支的 `5f5104f…` 与 `c3b554e…` 只修改 Dockerfile、package/lock 和部署制品测试；Node 22/Bookworm 保持，最终镜像移除完整开发依赖，GnuTLS 达到修复版本。`812 passed / 7 expected skipped`、lint、tsc、build、专项测试、app/worker/Prisma CLI 运行探针与 Trivy 0.74.0 精确扫描通过；独立审计确认未解决 P0/P1 为 0。
+6. **远端 RC 尚未完成**：本地镜像使用显式占位高德构建参数，不是部署制品。必须先提交本次 5 份治理文档并以该提交形成新的统一 `BASELINE_SHA`，再在单独授权下快进推送；新 RC 必须使用该完整 SHA 作为唯一 tag/OCI revision，app、worker、migration 使用同一 `repository@index-digest`，按 amd64 digest 复扫且不得出现 `latest`。远端扫描通过也只能裁决 G4-4，不自动部署或宣布 Gate 4 总 PASS。
 
 ## 9. 并行开发纪律
 
@@ -758,7 +767,7 @@ flowchart TD
 - 后续追加发现 ETA Top-8 仍会裁掉本轮 A 槽新生成的 delivery cursor，导致可连续进入 B 的订单误报 `ETA_UNAVAILABLE`；已恢复计划池全部 delivery→pickup 必要组合，并补 `buildEtaMatrix()` → `runDispatchV2()` A/B 串联回归。
 - G3-3 本地开发已闭环：司机类事件按受影响门店加载全部活动司机参与比较；相同逻辑计划重试不回收/重建 Assignment 或递增 `planVersion`；outbox 只有持有当前租约的 worker 才计为处理成功；锁忙、Redis 不可用降级、过期快照重算均有独立编排测试。
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
-- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 与 Gate 3 `PASS` 证据保持不变；2C、2B、2A 与 P2 均已退出。T0 已合入本地 `develop @ 8ff70ccc…` 并回归通过；3A/3B 均为 `PASS / WARN`；`develop @ f835302…` 为 Gate 4 筹备来源，Gate 4 为 `PREFLIGHT / NOT_STARTED`。
+- 当前工作阶段：Gate 4 `IN_PROGRESS`。G4-1～G4-3 已 `PASS`；G4-4 旧远端 RC 为 `REJECTED_DO_NOT_DEPLOY`，本地返修 `c3b554e…` 与独立代码审计 `PASS`，当前仅放行到远端 RC 构建和精确 digest 复扫准备。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
 - 当前执行限制：不得再次变更 app、worker 或 Nginx，不得执行 migration、重复基础资料、清理任何失败样本或直接写业务数据库。错误 helper 产生的独立 `G3FAULT` 订单必须保留并与冻结 10 单分开统计。
-- 下一动作：主控提交 Gate 4 激活同步并公布新的完整统一基线 SHA；随后按 Gate 4 独立任务卡启动稳定化与发布验收。远程同步、部署、migration 与云资源操作仍未授权。
+- 下一动作：提交本次 5 份 Gate 4 治理同步并公布新的完整统一基线 SHA；随后另行授权快进推送、使用该完整 SHA 制作远端 RC、核验 index/amd64 digest 与 OCI revision 并运行精确 digest 扫描。部署、预生产 migration 和云资源变更仍未授权。

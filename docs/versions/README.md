@@ -1,8 +1,8 @@
 # 人车单项目文档版本总入口
 
-> 版本戳：`RCD-DOC-REGISTRY-20260829-R51`
+> 版本戳：`RCD-DOC-REGISTRY-20260831-R52`
 > 建立日期：2026-07-13
-> 治理更新时间：2026-08-29
+> 治理更新时间：2026-08-31
 > 归档方式：现行权威集中到 `v2.0/`；已融合或冲突的旧方案从工作树清场，历史由 Git 追溯
 > 可视化导航：[Obsidian 项目全景白板](../rcd-v2-project-map.canvas)（仅作导航，不替代下方权威文档）
 
@@ -30,8 +30,8 @@
 | 构建、部署与回退 | V2.0-r13 | Gate 3 `PASS` 文档基线 `464ee5d…` 已远程核验；分阶段和禁止重复 migration 规则不变 | [部署指南 V2](v2.0/deployment-guide-v2.md) |
 | 生产运行与恢复 | V2.0-r6 | 最终运行资源、健康、10 单、outbox 和证据一致性通过；整机/RDS 灾备仍为独立演练 | [运维指南 V2](v2.0/operations-guide-v2.md) |
 | 基础设施决策与替代历史 | V2.0-r3 | INFRA-001～023 已登记；公网 IP 预生产演示获准，正式上线条件不变 | [基础设施决策日志](v2.0/infrastructure-decision-log.md) |
-| 项目当前状态 | 2026-08-29 | `develop @ f835302…` 为 Gate 4 筹备来源；3A/3B 均 `PASS / WARN`，Gate 4 为 `PREFLIGHT / NOT_STARTED` | [状态总览](../status/README.md) |
-| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260829-R51 | Layer 0；所有 Agent 必读；不超过 150 行；登记 Gate 4 筹备来源与启动边界 | [Agent 公共上下文](../context/agent-common-context.md) |
+| 项目当前状态 | 2026-08-31 | Gate 4 已启动；G4-1～G4-3 `PASS`，G4-4 本地返修与独立审计 `PASS`，远端 RC 构建复扫待新的统一基线，部署禁止 | [状态总览](../status/README.md) |
+| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260831-R52 | Layer 0；所有 Agent 必读；不超过 150 行；登记 Gate 4 当前代码锚点、旧 RC 拒绝和远端复扫边界 | [Agent 公共上下文](../context/agent-common-context.md) |
 | V1 产品与开发主线 | V1.x | 历史只读 | [V1 历史索引](v1/README.md) |
 
 ## 文档权威顺序（按领域拆分，唯一权威口径）
@@ -115,16 +115,16 @@ HTTP 契约               → v2.0/api-contract-v2.md
 - 本轮追加：指定测试文件、用例、Mock 条件、回归范围和失败判定。
 - 不进入上下文：决策日志全文、无关实现和云资源建设细节。
 
-### 3A/3B 冻结任务入口
+### Gate 4 当前任务入口（3A/3B 证据已冻结）
 
-状态统一为 `3A_PASS_WARN / 3B_PASS_WARN / GATE4_PREFLIGHT / NOT_STARTED`。T0 候选 `72cb11b…` 已合入本地 `develop @ 8ff70cccf29371229818058055d45de376eebdf7`，合入后 `812/7`、lint、tsc、31/31 build 与 diff check 通过；5 份退出治理文档随后形成 Gate 4 筹备来源 `develop @ f835302d555fc0481a37dfc388bf8e4e382a6230`。`origin/develop @ ae471484…` 未推送。
+3A/3B 保持 `PASS / WARN`，只作为 Gate 4 历史入口证据。Gate 4 已在 `feature/v2-stabilization`、`.worktrees/v2-stabilization` 启动，初始统一基线与远端来源均为 `4102ee1f85f89f363aeaa42f829a9c6d535f6d31`。G4-1～G4-3 已 `PASS`；G4-4 首个远端 RC 已拒绝且禁止部署，本地返修代码锚点 `c3b554ec579c88d544eb05447babeadca3abfd6c` 与独立代码审计已 `PASS`。本次治理同步提交后产生新的统一基线，后续远端 RC 必须使用该完整 SHA 作为 tag 与 OCI revision。
 
 | 验证线 | 角色与入口 | 初始边界 | 隔离候选与结果摘要 |
 |---|---|---|---|
 | 3A | 数据库验证 Agent；`feature/v2-migration-validation`；`.worktrees/v2-migration-validation` | `PASS / WARN`；T0 7 文件差异不触及数据/迁移/兼容权威域 | 10 个 migration、迁移映射、双读/兼容窗口、数据核对、rollback 和零漂移通过 |
 | 3B | 测试 Agent；`feature/v2-e2e-validation @ 8ff70ccc…`；`.worktrees/v2-e2e-validation` | `PASS / WARN`；修改白名单为空 | PRD §13 14 项、故障、数据库/API、安全、Chrome/Edge 和工程命令通过；Edge 125% 为 `952×800` 等效布局证据 |
 
-3A/3B 的临时 PostgreSQL、端口、fixture、Mock 和构建产物均已清理，外部系统授权仍为无。Gate 4 只接受主控下发的、包含本次激活同步的完整提交 SHA；在该 SHA 公布前不得创建 Gate 4 任务、分支或 worktree。
+3A/3B 的临时 PostgreSQL、端口、fixture、Mock 和构建产物均已清理，权限未继承到 Gate 4。当前 Gate 4 外部变更边界为：不得部署，不得修改 ECS/RDS/Tair/SLS，不得执行预生产 migration；后续仅在单独授权后快进推送新的统一基线、制作唯一 SHA tag、读取 index/amd64 digest 并对精确 digest 扫描。旧 `4102ee1…` RC 保持 `REJECTED_DO_NOT_DEPLOY`，不得覆盖或删除。
 
 共同停止条件：HEAD/基线不一致、工作区不干净、端口/数据库身份/空库状态不明、需要修改 Schema/migration/API 契约/业务代码、需要外部连接/新依赖/跨域文件、权威文档冲突，或 rollback 需要删除事实绕过保护。详细验收以[并行开发主计划 §8.2～§8.3](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md)为准。
 
@@ -182,7 +182,7 @@ remote commit: 958afca537b412fb972b6e180561a9b37022834d
 2. 新候选的 Schema/migration tree 与完成一次性空 PostgreSQL 演练的旧冻结候选完全相同；原有 9 个正向 migration、最终 Schema、8 个 rollback 和五类安全护栏结论继续有效。
 3. 冻结真实 10 单已完成：订单 1～6、8～10 共 9 单完成，订单 7 按预期为 `INFEASIBLE` 且保留 1 条开放预警；并发、旧版本、到达后改排拒绝与订单 10 幂等重放均通过。首轮失败、旧映射、边界抖动和错误 helper 现场继续保留，不得清理。
 4. 最终一致性审查确认本地/远程代码、ACR digest、ECS 运行身份、真实依赖、10 单结果和故障/回退证据一致；文档口径已返修，并以 `feature/v2-gate3-review-remediation @ 57ef86c43bf220f48774e130575c40b8c94a83d5` 形成可追溯基线，本地、upstream 与 GitHub 远程核验一致。
-5. 主控已于 2026-08-11 最终裁决 Gate 3 `PASS`；第二轮与 P2 随后退出。Gate 2 兼容返修与 T0 已依次进入本地 develop，应用代码树锚点为 `8ff70ccc…`。3A/3B 均完成重验并为 `PASS / WARN`；Edge 原生 125% 缩放仅缺工具级证据，等效布局与精确 H5 尺寸已通过。5 份退出治理文档已形成 Gate 4 筹备来源 `f835302…`，当前为 `PREFLIGHT / NOT_STARTED`；本次激活同步提交并由主控公布完整 SHA 后，才可创建 Gate 4 独立任务。远程仍为 `ae471484…`。
+5. Gate 4 已从 `4102ee1…` 启动并进入 `feature/v2-stabilization`。G4-1 工程基线、G4-2 资源/权限与 SLS/证书、G4-3 恢复点和隔离库 Forward/rollback 已通过；G4-4 首个 RC 因安全扫描失败被拒绝。本地最小返修 `c3b554e…` 已通过工程回归、精确镜像扫描与独立代码审计，当前仅放行到 `REMOTE_RC_BUILD_RESCAN_READY`。本次治理同步提交形成新的统一基线后，方可推送并按新完整 SHA 构建远端 RC；扫描通过前部署仍禁止。
 
 状态事实和阻断项统一在[状态总览](../status/README.md)维护；状态文档不得修改领域契约。
 

@@ -1,7 +1,7 @@
 # 人车单 V2 Agent 公共上下文（Layer 0）
 
 > 文档类型：`DERIVED / LAYER_0`
-> 上下文版本：`RCD-AGENT-CONTEXT-20260829-R51`
+> 上下文版本：`RCD-AGENT-CONTEXT-20260831-R52`
 > 适用范围：所有新建或重新启动的 Agent
 > 权威范围：仅提供项目目标、当前阶段、公共纪律、模块边界和命令入口
 > 非权威范围：产品行为、Schema、HTTP DTO、枚举、基础设施细节和任务验收标准
@@ -12,7 +12,7 @@
 
 人车单调度系统 V2 面向汽车租赁调度，主线是订单接入、实时位置、司机班次、A/B/C 工单时间轴、真实 ETA、调度事务和执行闭环。
 
-Gate 3、第二轮与 P2 均已退出。T0 候选 `72cb11baad851f3a2fc2bf1ea6367affac679c96` 经独立审计和测试后以 `--no-ff` 合入本地 `develop @ 8ff70cccf29371229818058055d45de376eebdf7`；合入后 `812 passed / 7 expected skipped`、lint、tsc、31/31 build 和 diff check 通过。3A/3B 均为 `PASS / WARN`。5 份退出治理文档已形成来源提交 `develop @ f835302d555fc0481a37dfc388bf8e4e382a6230`，Gate 4 当前为 `PREFLIGHT / NOT_STARTED`，未推送。
+Gate 3、第二轮、P2 与 3A/3B 均已退出。Gate 4 已在 `feature/v2-stabilization` 启动：G4-1 工程基线、G4-2 资源与权限盘点、G4-3 恢复点和隔离库 Forward/rollback 已通过。G4-4 首个远端 RC 被判定 `REJECTED_DO_NOT_DEPLOY`；本地返修代码锚点 `c3b554ec579c88d544eb05447babeadca3abfd6c` 已通过全量回归、精确镜像复扫和独立代码审计。当前只放行到 `REMOTE_RC_BUILD_RESCAN_READY`，新远端 RC 尚未构建、扫描或部署。
 
 ## 2. 当前版本与闸门
 
@@ -24,22 +24,24 @@ Gate 3、第二轮与 P2 均已退出。T0 候选 `72cb11baad851f3a2fc2bf1ea6367
 | 文档基线 | Gate 3 `PASS` 内容基线 `feature/v2-gate3-review-remediation @ 464ee5d6ffdb435d76b65f9814d82e4666fd84a9`，本地/upstream/GitHub 远程一致 |
 | Gate 3→develop | 交接分支 `b853a7af245942758de1cd46c9a25c384c08ec62`；代码交接合并点 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`，本地/upstream/GitHub 远程一致 |
 | 第二轮与 P2 退出基线 | 2A/2B/2C 代码树锚点 `46813c3ecf4a0df1eaf99bfb3d8d72f7d450193b`；P2 候选 `0e354696…` 已合入 `develop @ 5c2760cea40b975b24d5d2201333ab5048ce1cf0`，合并父提交为 `78a708f…` 与 `0e354696…` |
-| Gate 4 筹备来源 | 本地 `develop @ f835302d555fc0481a37dfc388bf8e4e382a6230`；其应用代码树锚点为父提交 `8ff70cccf29371229818058055d45de376eebdf7`，相对父提交仅含 5 份治理文档 |
+| Gate 4 当前代码 | 分支 `feature/v2-stabilization`；初始/远端来源 `4102ee1f85f89f363aeaa42f829a9c6d535f6d31`；本地返修代码锚点 `c3b554ec579c88d544eb05447babeadca3abfd6c`；应用目录 tree `d5443715affdf7f4c6ff8d3013f1e91515deb54a` |
 | 数据库实施 | 空 PostgreSQL 演练已验证 9 个 migration、最终 Schema、8 个 rollback 和 5 类护栏；真实预生产已完成备份、9 个 migration、最小权限和 G3E2E R2.2 基础资料 `3/6/5/8` 核验，owner 已关闭；首轮失败样本与本轮通过/失败事实均保留，禁止重复 bootstrap 或清理 |
 | 候选状态 | `DEPLOYED / REAL_E2E_PASS / FAULT_ROLLBACK_PASS / FINAL_CONSISTENCY_RUNTIME_PASS`：代码、镜像、运行资源、真实 10 单和故障/回退证据一致 |
 | 镜像 | app/worker 运行 `958afca…` → `sha256:13e0…5bff`；Nginx 原镜像/配置/证书/端口不变且 release revision 对齐；更早运行/回退候选继续保留，不得混用 |
 | 基础设施 | 阿里云主线；ECS 上 app/worker/Nginx、自签名 HTTPS、结构化日志、`json-file` 轮转与 LoongCollector `3.2.6` 已验收；SLS 运行/安全日志、查询、脱敏、30/180 天留存、告警、通知和预算通过；正式域名/备案/可信证书延后 |
 | Gate 3 | `PASS`（2026-08-11 最终裁决） |
-| 并行验证与 Gate 4 | `3A_PASS_WARN / 3B_PASS_WARN / GATE4_PREFLIGHT / NOT_STARTED`；Edge 125% 为等效布局证据，不是原生缩放证据 |
+| Gate 4 子闸门 | `G4_1_PASS / G4_2_PASS / G4_3_PASS / G4_4_LOCAL_REMEDIATION_PASS / INDEPENDENT_CODE_AUDIT_PASS`；Gate 4 总闸门仍为 `IN_PROGRESS` |
+| Gate 4 镜像 | 旧 RC `4102ee1…@sha256:5d9685…` 保持拒绝并禁止部署；本地返修镜像仅用于审计，使用占位高德构建参数，不可部署 |
+| Gate 4 下一步 | 本次治理同步提交形成新的统一基线；单独授权后快进推送，以新完整 SHA 构建远端唯一 tag、核对 index/amd64 digest 和 OCI revision，并对精确 digest 复扫 |
 | Railway | 仅历史 Demo 证据，不是生产基线 |
 
 状态变化只认 [项目状态总览](../status/README.md)；文档入口只认 [文档版本总入口](../versions/README.md)。
 
-当前 Gate 3 运行候选与预生产证据保持不可变。3A/3B 临时环境、端口、fixture 和 Mock 已清理，权限不向 Gate 4 继承。Gate 4 以 `f835302…` 为筹备来源；主控必须在本次激活同步形成提交后，下发该提交的完整 SHA 作为统一代码/文档基线，之后才能创建独立任务卡、分支和 worktree。
+当前 Gate 3 运行候选与预生产证据保持不可变。Gate 4 的 SLS 初始化、自签名证书轮换与隔离恢复库验证均已按当轮授权完成，但这些授权已用尽，不向后续任务继承。旧远端 RC 不得覆盖、删除或部署；新远端 RC 的 Git 推送、ACR 构建/推送、精确 digest 复扫和任何部署都必须分别遵守新的任务卡。
 
-- 3A：`PASS / WARN`。10 个 migration、V1/V2 映射、兼容窗口、数据核对、rollback 保护/安全回退与 Schema 零漂移通过；T0 差异未触及该域。
-- 3B：`PASS / WARN`，worktree 已对齐 `8ff70ccc…`。PRD §13 14 项、故障、数据库/API、安全、Chrome/Edge 和工程命令通过；Edge 原生 125% 受工具限制，登记为 `952×800` 等效布局，H5 两尺寸为精确视口。
-- 两线均无外部系统授权：不得连接真实 RDS/Tair/高德、预生产或云资源。HEAD/基线不一致、工作区不干净、端口/数据库身份/空库不明、需改 Schema/migration/API 契约/业务代码、需外部连接/新依赖/跨域文件、权威冲突或 rollback 需删除事实绕过保护时立即停止。
+- G4-2：RDS/Tair 无公网入口；ECS 仅 80/443 公网开放，SSH 受限；SLS 告警与 30/180 天留存通过；自签名证书有效至 2026-10-06，仅代表预生产公网 IP 演示通过。
+- G4-3：2026-08-30 全量快照恢复点可用；隔离恢复库完成 9→10 Forward 与 10→9 rollback，checksum、DDL 恢复和业务行数不变通过，源预生产库零写入。
+- G4-4：本地返修只改 Dockerfile、package/lock 与部署制品测试；`812/7`、lint、tsc、build、镜像运行探针与 Trivy 0.74.0 复扫通过，未裁决 P0/P1 为 0。远端 RC 仍未完成。
 
 ## 3. 公共模块边界
 
