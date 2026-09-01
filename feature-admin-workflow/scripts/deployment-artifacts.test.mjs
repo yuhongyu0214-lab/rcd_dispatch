@@ -1,10 +1,73 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
 const readProjectFile = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
+const readProjectBytes = (path) => readFile(new URL(`../${path}`, import.meta.url));
+
+const tenthMigrationPath =
+  "prisma/migrations/20260816120000_extend_dispatch_event_outbox_types/migration.sql";
+const tenthMigrationSha256 =
+  "ab2fd94d6d6549ee4dfcff51c744bcc76390fdff26fd26d89b928637e144759c";
 
 describe("deployment artifacts", () => {
+  it("keeps migration SQL byte-stable across Windows checkouts and image builds", async () => {
+    const [attributes, dockerfile, tenthMigration] = await Promise.all([
+      readProjectBytes(".gitattributes"),
+      readProjectBytes("Dockerfile"),
+      readProjectBytes(tenthMigrationPath)
+    ]);
+    const dockerfileSource = dockerfile.toString("utf8");
+    const normalizedTenthMigration = Buffer.from(
+      tenthMigration.toString("utf8").replaceAll("\r\n", "\n")
+    );
+
+    expect(attributes.includes(13)).toBe(false);
+    expect(dockerfile.includes(13)).toBe(false);
+    expect(attributes.toString("utf8")).toBe(
+      ".gitattributes text eol=lf\n" +
+        "Dockerfile text eol=lf\n" +
+        "scripts/deployment-artifacts.test.mjs text eol=lf\n" +
+        "prisma/migrations/**/*.sql text eol=lf\n"
+    );
+    expect(dockerfileSource).toContain(
+      "find prisma/migrations -type f \\( -name 'migration.sql' -o -name 'rollback.sql' \\)"
+    );
+    expect(dockerfileSource).toContain("-exec sed -i 's/\\r$//' {} +");
+    expect(dockerfileSource).toContain(
+      "--include='migration.sql' --include='rollback.sql'"
+    );
+    expect(dockerfileSource).toContain('"$(printf \'\\r\')" prisma/migrations');
+    expect(dockerfileSource).toContain(
+      `'${tenthMigrationSha256}'`
+    );
+    expect(dockerfileSource).toContain(`'${tenthMigrationPath}'`);
+    expect(dockerfileSource).toContain("sha256sum --check --strict");
+    expect(
+      createHash("sha256").update(normalizedTenthMigration).digest("hex")
+    ).toBe(tenthMigrationSha256);
+
+    const copyIndex = dockerfileSource.indexOf("COPY . .");
+    const normalizeIndex = dockerfileSource.indexOf("find prisma/migrations");
+    const residualCrCheckIndex = dockerfileSource.indexOf(
+      "--include='migration.sql' --include='rollback.sql'"
+    );
+    const checksumIndex = dockerfileSource.indexOf(tenthMigrationSha256);
+    const prismaGenerateIndex = dockerfileSource.indexOf(
+      "pnpm exec prisma generate",
+      normalizeIndex
+    );
+    const buildIndex = dockerfileSource.indexOf("pnpm build", normalizeIndex);
+
+    expect(copyIndex).toBeGreaterThanOrEqual(0);
+    expect(normalizeIndex).toBeGreaterThan(copyIndex);
+    expect(residualCrCheckIndex).toBeGreaterThan(normalizeIndex);
+    expect(checksumIndex).toBeGreaterThan(residualCrCheckIndex);
+    expect(prismaGenerateIndex).toBeGreaterThan(checksumIndex);
+    expect(buildIndex).toBeGreaterThan(prismaGenerateIndex);
+  });
+
   it("builds a non-root standalone image without embedding runtime secrets", async () => {
     const [dockerfile, dockerignore, nextConfigSource, packageJsonSource] = await Promise.all([
       readProjectFile("Dockerfile"),

@@ -1,0 +1,4 @@
+.gitattributes text eol=lf
+Dockerfile text eol=lf
+scripts/deployment-artifacts.test.mjs text eol=lf
+prisma/migrations/**/*.sql text eol=lf

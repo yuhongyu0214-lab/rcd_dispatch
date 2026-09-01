@@ -41,7 +41,16 @@ ENV NEXT_OUTPUT_STANDALONE=true
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
 
-RUN test -n "$GIT_COMMIT_SHA" \
+RUN find prisma/migrations -type f \( -name 'migration.sql' -o -name 'rollback.sql' \) \
+      -exec sed -i 's/\r$//' {} + \
+  && ! grep --recursive --files-with-matches --binary-files=text \
+      --include='migration.sql' --include='rollback.sql' \
+      "$(printf '\r')" prisma/migrations \
+  && printf '%s  %s\n' \
+      'ab2fd94d6d6549ee4dfcff51c744bcc76390fdff26fd26d89b928637e144759c' \
+      'prisma/migrations/20260816120000_extend_dispatch_event_outbox_types/migration.sql' \
+    | sha256sum --check --strict \
+  && test -n "$GIT_COMMIT_SHA" \
   && test -n "$NEXT_PUBLIC_AMAP_JS_KEY" \
   && test -n "$NEXT_PUBLIC_AMAP_SECURITY_JS_CODE" \
   && mkdir -p public \
