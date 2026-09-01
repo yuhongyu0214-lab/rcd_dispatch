@@ -1,26 +1,26 @@
 # 人车单项目状态总览
 
-> 状态快照：2026-08-31
+> 状态快照：2026-09-01
 > 用途：说明项目做到哪一步、还差什么
 > 非权威范围：产品行为、状态机、Schema、枚举、HTTP 契约、技术栈和生产架构
 
 ## 一句话结论
 
-Gate 3、第二轮、P2 与 3A/3B 保持已退出。Gate 4 已在 `feature/v2-stabilization` 启动：T0/G4-1 工程基线、G4-2 脱敏资源与权限盘点、G4-3 迁移与隔离回退均已通过；G4-4 的首个远端 RC 因镜像漏洞被判定 `REJECTED_DO_NOT_DEPLOY`，随后本地返修代码锚点 `c3b554ec579c88d544eb05447babeadca3abfd6c` 通过全量回归、精确镜像复扫和独立代码审计。当前状态为 `G4-4_REMOTE_RC_BUILD_RESCAN_READY / DEPLOYMENT_DENIED`：必须先以本次治理同步提交形成新的统一基线，再推送、制作新 SHA tag 并对远端精确 digest 复扫；尚未完成 Gate 4 总闸门。
+Gate 3、第二轮、P2 与 3A/3B 保持已退出。Gate 4 的 T0/G4-1、G4-2、G4-3 与 G4-4 均已通过。G4-4 远端 RC 使用统一代码/OCI revision `a0c8bbdcfd967dd45aa0f0c6f8f0c5d6aa736eac`，ACR index digest `sha256:8e671d612a2633e6fe52e7d10b79a6181dd1a51595ba8f846df0a4997743c541`、linux/amd64 digest `sha256:de3bb4720815512962f36cc18956be2c3a423094522b0afbae303d6cc424d913`，精确 digest Trivy 0.74.0 复扫与独立审计确认未解决 P0/P1 为 `0`。当前为 `G4-5_PREPROD_DEPLOYMENT_REQUESTED / GOVERNANCE_SYNC_IN_PROGRESS / DEPLOYMENT_NOT_STARTED`；本轮只同步治理文档，尚未执行预生产 migration、容器更新或云资源变更，Gate 4 总闸门仍为 `IN_PROGRESS`。
 
 ## 当前工作流状态
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
-| 文档治理 | `GATE4_PROGRESS_SYNC_IN_PROGRESS` | Gate 4 本地代码锚点 `c3b554e…`；本次只同步 5 份治理文档 | 本次提交后公布新的统一 Gate 4 基线 SHA |
+| 文档治理 | `G4_4_PASS_SYNC_IN_PROGRESS` | 当前 HEAD/远端来源 `a0c8bbd…`；本次只同步 5 份治理文档 | 文档提交需单独授权；提交后形成新的统一 Gate 4-5 文档基线 |
 | 应用候选 | `958AFCA_GATE3_ACCEPTED_DEVELOP_HANDOFF_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变运行身份；代码历史交接点为 `develop @ 51ddb5f…`，最终状态激活 HEAD 为 `ae471484…` |
-| 依赖安全 | `G4_LOCAL_REMEDIATION_PASS / REMOTE_RESCAN_PENDING` | 本地 Trivy 0.74.0 精确 digest 复扫与独立代码审计无未解决 P0/P1 | 新统一 SHA 的远端 RC 必须重新扫描；不得复用本地占位参数镜像结论 |
+| 依赖安全 | `G4_4_PASS / UNRESOLVED_P0_P1_0` | 远端 amd64 digest `sha256:de3bb4…d913` 的 Trivy 0.74.0 报告 SHA-256 为 `bcb5546d…f649`；独立审计通过 | 保留 P2 依赖卫生与 ACR 个人版无生产 SLA 警告；不阻断当前预生产验收 |
 | migration 指纹 | `PREPROD_9_APPLIED_LOCAL_10_PASS` | 第 10 个 migration 提交 `c6850df0a85aab601c3034e542a0f0b575c9053e` | 隔离 PostgreSQL 已通过；预生产 9 个保持不变，未经授权不实施第 10 个 |
 | 数据库迁移 | `OUTBOX_CHECK_REMEDIATION_PASS_LOCAL_DEVELOP` | 两个新事件 CHECK、受保护 rollback、零漂移和全量回归通过 | 数据分支退出；API 分支重放新基线后使用该约束，禁止重复迁移 |
 | 隔离业务基础资料 | `BASE_DATA_PASS_TEST_FACTS_RETAINED` | [真实 E2E 重验进度](2026-08-10-gate3r-real-e2e-retest-progress.md) | 不重复基础资料写入；所有通过与失败样本均保留 |
 | 基础设施文档 | `GATE3_FINAL_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | Gate 3-R 退出；正式可信 HTTPS 与整机/RDS 灾备仍为独立后续验收 |
-| ACR 镜像发布 | `GATE3_RUNTIME_RETAINED / GATE4_OLD_RC_REJECTED` | Gate 3 运行镜像 `958afca…@sha256:13e0…5bff` 保持不变；Gate 4 旧 RC `4102ee1…@sha256:5d9685…` 禁止部署 | 以新的统一基线制作新 SHA tag，按 amd64 digest 复扫；禁止 `latest` |
-| 阿里云预生产准备 | `G4_2_PASS / G4_3_PASS / NO_NEW_DEPLOYMENT` | RDS/Tair 无公网入口；SLS 与告警初始化、自签名证书轮换、恢复点和隔离库 Forward/rollback 证据通过 | 保持现有运行资源；新 RC 扫描通过前不得部署 |
+| ACR 镜像发布 | `G4_4_PASS / GATE4_OLD_RC_REJECTED` | 新 RC `a0c8bbd…@sha256:8e671d…c541` 已推送并按 amd64 digest 复扫；旧 RC `4102ee1…@sha256:5d9685…` 保持拒绝 | 新 RC 只可按完整 index digest 用于获准的预生产发布；禁止 `latest`，旧 RC 不得覆盖或删除 |
+| 阿里云预生产准备 | `G4_2_PASS / G4_3_PASS / G4_5_REQUESTED_NOT_STARTED` | RDS/Tair 无公网入口；SLS/告警、证书、恢复点、隔离 Forward/rollback 和 G4-4 RC 均已验收 | 完整任务卡、维护窗口、回退目标和外部系统授权明确前只读；不得从文档同步推定已部署 |
 | 本地 Docker Desktop | `DATA_MOVED_TO_D_NTFS_BACKUP_RETAINED` | `D:\DockerDesktop\data\DockerDesktopWSL` | 镜像、版本、容器与卷核验通过；完整 VHDX 备份保留，不影响生产架构 |
 | 既有预生产成果审查 | `RUNTIME_FINAL_CONSISTENCY_PASS` | [RDS 迁移与权限证据](2026-08-05-gate3r-rds-preprod-migration-permissions.md) | 保持备份、9 个 migration、最小权限、单 worker 和运行身份不变 |
 | 真实 10 单 | `REAL10_PASS_9_COMPLETED_1_INFEASIBLE_ALERT` | [真实 E2E 重验进度](2026-08-10-gate3r-real-e2e-retest-progress.md) | 保留全部成功与失败现场，不清理 |
@@ -31,8 +31,9 @@ Gate 3、第二轮、P2 与 3A/3B 保持已退出。Gate 4 已在 `feature/v2-st
 | Gate 4 T0/G4-1 | `PASS` | `feature/v2-stabilization @ 4102ee1…` 初始基线干净；全量 test/lint/tsc/build/Prisma validate 通过 | 结果已作为后续 Gate 4 子阶段入口 |
 | Gate 4 G4-2 | `PASS` | ACR、ECS、RDS、Tair、SLS、Nginx、自签名证书、安全组、责任人和网络边界已只读核验 | 未误用生产资源；无需开放公网数据库或 Redis |
 | Gate 4 G4-3 | `PASS` | 2026-08-30 全量快照恢复点可用；隔离恢复库完成 9→10 migration Forward 与 10→9 rollback | 源预生产库零写入；隔离恢复库保留，后续清理由单独授权处理 |
-| Gate 4 G4-4 | `LOCAL_REMEDIATION_PASS / INDEPENDENT_CODE_AUDIT_PASS / REMOTE_RC_BUILD_RESCAN_READY` | 本地代码锚点 `c3b554e…`；本地 amd64 镜像与 Trivy 精确复扫无未裁决 P0/P1 | 先提交本次治理同步，再推送新基线、制作远端 RC 并精确 digest 复扫；部署仍禁止 |
-| Gate 4 总闸门 | `IN_PROGRESS` | G4-1～G4-3 已通过；G4-4 仅本地返修通过 | 远端 RC 追溯/复扫及其后的剩余 Gate 4 验收未完成，不得宣布 Gate 4 总 PASS |
+| Gate 4 G4-4 | `PASS` | `a0c8bbd…` tag/OCI revision、index `sha256:8e671d…c541`、amd64 `sha256:de3bb4…d913`、Compose 同 digest、Trivy 与独立审计全部闭合；未解决 P0/P1 为 0 | 保留旧 RC 拒绝证据；不得自动部署或宣布 Gate 4 总 PASS |
+| Gate 4 G4-5 | `REQUESTED / NOT_STARTED` | 必须交付发布与运行身份记录；验收顺序为 migration → app → 单 worker → Nginx | 需新的完整任务卡和外部系统授权；本轮文档同步不授权 migration、ECS 或流量变更 |
+| Gate 4 总闸门 | `IN_PROGRESS` | G4-1～G4-4 已通过；G4-5 尚未执行 | 预生产发布、运行身份与其后的剩余 Gate 4 验收未完成，不得宣布 Gate 4 总 PASS |
 
 ## 3A/3B 退出记录
 
@@ -54,7 +55,9 @@ Gate 3、第二轮、P2 与 3A/3B 保持已退出。Gate 4 已在 `feature/v2-st
 | G4-2 SLS/证书补齐 | `PASS` | SLS 告警中心已初始化，两条规则运行；runtime 保留 30 天、security 保留 180 天。自签名证书轮换后 `NOT_AFTER=2026-10-06`、指纹 `47:DA:50:4B:81:E9:7F:C1:92:12:A1:5E:F0:6B:EE:40:FE:98:5E:0E:E1:1F:A2:32:C1:19:F2:D6:CA:06:CA:32`，Nginx test/reload 与 HTTP 308、HTTPS 登录/健康 200 通过 | 自签名仅获准用于预生产公网 IP 演示，不代表可信证书或正式生产 HTTPS 通过 |
 | G4-3 恢复点与隔离迁移回退 | `PASS` | 2026-08-30 15:44:53 全量快照备份完成；隔离库 `rcd_v2_g43_restore_20260830` 从 9 个已匹配 checksum 的 migration 正向到 10 个，再按批准 rollback 与单条元数据复位回到 9 个。正向后目标约束存在，回退后 DDL 指纹恢复，业务行数指纹始终 `bdfd523e37095ee55ed03daa94e454e4c92fac910a16c3d21d3d1ddb836c9828` | `UNEXPECTED_DDL=NONE`、`BUSINESS_DATA_DELETION=NONE`、源预生产库写入为零；不把隔离库操作写成生产迁移 |
 | G4-4 首个 RC 安全扫描 | `REJECTED_DO_NOT_DEPLOY` | SHA tag `4102ee1…`，index digest `sha256:5d9685bd49b4404dea4e04be0c4b009d3746e9fdb0325665a87e8b66e4024d30`，amd64 digest `sha256:c41161d0d03581612c0edaf2aeb800649215bd9eae883dc9f8fa815067c9f388`；扫描发现未裁决 Critical/High，根因包含完整开发期 `node_modules` 进入最终镜像 | 禁止覆盖、删除或部署；作为失败证据保留 |
-| G4-4 本地返修与审计 | `PASS / REMOTE_RC_BUILD_RESCAN_READY` | 返修提交 `5f5104f…`、`c3b554e…` 仅修改 4 个批准文件；应用目录 tree `d5443715affdf7f4c6ff8d3013f1e91515deb54a`。本地 amd64 manifest `sha256:bcee2149a8b0b8825a2556db809ccf8f5b933adaf6892bfbd36de81ff100c4c9`，OCI revision=`c3b554e…`；Trivy 0.74.0 报告 SHA-256 `dc54d00c8dd9aaccbc331c5b182c7222fa514c009c98ca24721a12a58d78ae13`，未解决 P0/P1 为 0，独立代码审计通过 | 本地镜像使用显式占位高德构建参数，不可部署；必须用本次文档提交形成的新统一 SHA 作为远端 tag/revision，重新构建并按精确 digest 扫描 |
+| G4-4 本地返修与审计 | `PASS / HISTORICAL_LOCAL_STAGE` | 返修提交 `5f5104f…`、`c3b554e…` 仅修改 4 个批准文件；应用目录 tree `d5443715affdf7f4c6ff8d3013f1e91515deb54a`。本地 amd64 manifest `sha256:bcee2149a8b0b8825a2556db809ccf8f5b933adaf6892bfbd36de81ff100c4c9`，OCI revision=`c3b554e…`；Trivy 0.74.0 报告 SHA-256 `dc54d00c8dd9aaccbc331c5b182c7222fa514c009c98ca24721a12a58d78ae13`，未解决 P0/P1 为 0，独立代码审计通过 | 本地镜像使用显式占位高德构建参数且不可部署；随后形成的远端正式 RC 结果见下一行 |
+| G4-4 远端 RC 追溯与复扫 | `PASS` | source/tag/OCI revision 均为 `a0c8bbdcfd967dd45aa0f0c6f8f0c5d6aa736eac`；index `sha256:8e671d612a2633e6fe52e7d10b79a6181dd1a51595ba8f846df0a4997743c541`，amd64 `sha256:de3bb4720815512962f36cc18956be2c3a423094522b0afbae303d6cc424d913`，config `sha256:987b78ba8749c26e6cae5f6719bc51a42a94583059b9081cbb7401e41ef413cc`；Trivy 报告 SHA-256 `bcb5546da3f16e6c1c62aa181eead03a4f18fc4ded6a076e0e75ab8833a1f649`，未解决 P0/P1 为 0；app/worker/migration Compose 均为同一 `repository@index-digest` 且无 `latest` | 旧 `4102ee1…` RC 继续 `REJECTED_DO_NOT_DEPLOY`；ACR 个人版无正式生产 SLA，Nginx 镜像 digest 固定留待独立变更窗口，均不阻断当前预生产 RC |
+| G4-5 预生产发布与运行身份 | `REQUESTED / NOT_STARTED` | 目标交付为发布与运行身份记录；验收要求 migration → app → 单 worker → Nginx、revision 对齐、readiness/HTTPS/真实依赖/outbox/SLS 查询正常 | 本轮治理同步不授权外部系统变更；需独立任务卡明确代码/文档基线、空文件白名单、精确资源、维护窗口、回退目标和停止条件 |
 
 ## 唯一代码、文档与迁移基线
 
@@ -120,13 +123,13 @@ T0 candidate/merge: 72cb11baad851f3a2fc2bf1ea6367affac679c96 | local develop @ 8
 3A/3B historical exit status: PASS_WARN / GATE4_ENTRY_COMPLETE
 Gate 4 branch/worktree: feature/v2-stabilization | .worktrees/v2-stabilization
 Gate 4 initial baseline: 4102ee1f85f89f363aeaa42f829a9c6d535f6d31
-Gate 4 remote source before governance sync: origin/feature/v2-stabilization @ 4102ee1f85f89f363aeaa42f829a9c6d535f6d31
+Gate 4 current unified source: feature/v2-stabilization and origin/feature/v2-stabilization @ a0c8bbdcfd967dd45aa0f0c6f8f0c5d6aa736eac
 Gate 4 local remediation code anchor: c3b554ec579c88d544eb05447babeadca3abfd6c
 Gate 4 application directory tree: d5443715affdf7f4c6ff8d3013f1e91515deb54a
 Gate 4 local remediation status: LOCAL_REMEDIATION_PASS / INDEPENDENT_CODE_AUDIT_PASS
-Gate 4 remote RC status: READY_AFTER_GOVERNANCE_SYNC / NOT_BUILT / NOT_SCANNED
+Gate 4 remote RC status: PASS / tag+OCI revision a0c8bbdcfd967dd45aa0f0c6f8f0c5d6aa736eac / index sha256:8e671d612a2633e6fe52e7d10b79a6181dd1a51595ba8f846df0a4997743c541 / amd64 sha256:de3bb4720815512962f36cc18956be2c3a423094522b0afbae303d6cc424d913
 Gate 4 old RC status: REJECTED_DO_NOT_DEPLOY
-Gate 4 deployment status: DENIED
+Gate 4 deployment status: G4_5_REQUESTED / NOT_STARTED / PENDING_COMPLETE_TASK_CARD_AND_EXTERNAL_AUTHORIZATION
 rejected dispatcher API candidate: feature/v2-dispatcher-api-wiring @ 319f73401359ef4a232a2217afaaef2ef4212af2
 superseded unaligned API remediation candidate: feature/v2-dispatcher-api-wiring @ 5b84ab4881e1a8da12672c19d87098674798e60c
 superseded API remediation candidate: feature/v2-dispatcher-api-wiring @ 60f03af3c73bb867a7139b705741135d276b50ab
