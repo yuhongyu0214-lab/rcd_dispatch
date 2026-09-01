@@ -1,7 +1,7 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3、第二轮、P2 与 3A/3B 已完成。Gate 4 的 G4-1～G4-4 已通过；当前远端 RC 的 source/tag/OCI revision 为 `a0c8bbdcfd967dd45aa0f0c6f8f0c5d6aa736eac`，index digest 为 `sha256:8e671d612a2633e6fe52e7d10b79a6181dd1a51595ba8f846df0a4997743c541`，linux/amd64 digest 为 `sha256:de3bb4720815512962f36cc18956be2c3a423094522b0afbae303d6cc424d913`，精确复扫未解决 P0/P1 为 0。G4-5 预生产部署已请求但尚未执行；本轮只同步治理文档，不授权外部系统变更。
+> 状态：总体架构已批准；Gate -1～Gate 3、第二轮、P2 与 3A/3B 已完成。Gate 4 的 G4-1～G4-3 保持通过；G4-5 T0 通过后在 T1 写库前因远端 RC `a0c8bbdc…@sha256:8e671d…c541` 内 SQL raw checksum 与 Git 制品不一致而阻断，该 RC 已拒绝，G4-4 重开。三文件本地返修 `0c854224c703b3afaa18db2351d8bba3b263ad86` 已通过 19/19 SQL raw checksum、全量回归和独立审计；新远端 RC 未构建或推送，本轮只同步治理文档，不授权外部系统变更。
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
@@ -595,7 +595,7 @@ flowchart TD
 
 ### 8.4 Gate 4：稳定化与发布验收
 
-当前状态：`IN_PROGRESS / G4_1_TO_G4_4_PASS / G4_5_REQUESTED_NOT_STARTED`。Gate 4 已从统一初始基线 `4102ee1f85f89f363aeaa42f829a9c6d535f6d31` 创建 `feature/v2-stabilization` 与 `.worktrees/v2-stabilization`；当前 HEAD 与远端来源均为 `a0c8bbdcfd967dd45aa0f0c6f8f0c5d6aa736eac`，应用 tree 为 `d5443715affdf7f4c6ff8d3013f1e91515deb54a`。G4-5 不得继承 3A/3B 或已结束 G4-2～G4-4 的数据库、端口、Mock、浏览器 fixture、云资源或密钥权限；本轮“提交并更新文档”只授权治理文件同步，不授权 Git 提交/推送、预生产 migration、ECS/Docker、Nginx、RDS/Tair/SLS 或流量变更。
+当前状态：`IN_PROGRESS / G4_1_TO_G4_3_PASS / G4_4_REOPENED_LOCAL_REMEDIATION_PASS / G4_5_BLOCKED_AT_T1_ARTIFACT_PREFLIGHT`。Gate 4 已从统一初始基线 `4102ee1f85f89f363aeaa42f829a9c6d535f6d31` 创建 `feature/v2-stabilization` 与 `.worktrees/v2-stabilization`；本地 HEAD 为 `0c854224c703b3afaa18db2351d8bba3b263ad86`，远端来源为 `dfabd6250f92e127efb6a4e0070c598127e6b372`，应用 tree 为 `9da32d3f5d33cb60c8b047094b244eb1655e4a05`。重开的 G4-4 与 G4-5 不得继承 3A/3B 或已结束 G4-2/G4-3 的数据库、端口、Mock、浏览器 fixture、云资源或密钥权限；本轮“提交并更新文档”只授权治理文件同步，不授权 Git 提交/推送、ACR 构建/推送、预生产 migration、ECS/Docker、Nginx、RDS/Tair/SLS 或流量变更。
 
 建议分支：`feature/v2-stabilization`
 
@@ -626,8 +626,9 @@ flowchart TD
 3. **G4-3 `PASS`**：2026-08-30 全量快照恢复点可用。隔离恢复库 `rcd_v2_g43_restore_20260830` 的 9 个历史 migration 与制品 checksum 匹配；第 10 个 migration 完成 Forward 后约束正确、业务行数不变，随后 rollback 与单条 migration 元数据复位恢复到 9 个。无非预期 DDL、漂移或业务数据删除，源预生产库写入为零。
 4. **G4-4 首个 RC `REJECTED_DO_NOT_DEPLOY`**：SHA tag `4102ee1…`、index digest `sha256:5d9685…`、amd64 digest `sha256:c41161…` 可追溯，但精确 digest 扫描发现未裁决 Critical/High；该 tag/digest 作为失败证据保留，禁止覆盖、删除或部署。
 5. **G4-4 本地返修 `PASS`**：同一分支的 `5f5104f…` 与 `c3b554e…` 只修改 Dockerfile、package/lock 和部署制品测试；Node 22/Bookworm 保持，最终镜像移除完整开发依赖，GnuTLS 达到修复版本。`812 passed / 7 expected skipped`、lint、tsc、build、专项测试、app/worker/Prisma CLI 运行探针与 Trivy 0.74.0 精确扫描通过；独立审计确认未解决 P0/P1 为 0。
-6. **G4-4 远端 RC `PASS`**：source/tag/OCI revision 均为 `a0c8bbdcfd967dd45aa0f0c6f8f0c5d6aa736eac`；index digest `sha256:8e671d612a2633e6fe52e7d10b79a6181dd1a51595ba8f846df0a4997743c541`，amd64 digest `sha256:de3bb4720815512962f36cc18956be2c3a423094522b0afbae303d6cc424d913`，config digest `sha256:987b78ba8749c26e6cae5f6719bc51a42a94583059b9081cbb7401e41ef413cc`；Trivy 0.74.0 报告 SHA-256 `bcb5546da3f16e6c1c62aa181eead03a4f18fc4ded6a076e0e75ab8833a1f649`，未解决 P0/P1 为 0。Compose 证明 app/worker/migration 使用同一 `repository@index-digest` 且无 `latest`；旧 `4102ee1…` RC 保持拒绝且未覆盖、删除或部署。
-7. **G4-5 `REQUESTED / NOT_STARTED`**：交付物是发布与运行身份记录；执行必须严格按 migration → app → 单 worker → Nginx，并逐步验证 revision、readiness、HTTPS、真实 RDS/Tair/高德依赖、outbox 与 SLS 查询。完整任务卡必须声明代码/文档基线、空修改白名单、精确目标资源、维护窗口、回退目标、外部系统授权和停止条件；缺失时只能只读。
+6. **G4-4 历史远端 RC `REJECTED_DO_NOT_DEPLOY`**：source/tag/OCI revision `a0c8bbdc…`、index `sha256:8e671d…c541`、amd64 `sha256:de3bb4…d913`、Trivy 和 Compose 同 digest 曾通过，但随后 G4-5 T1 制品预检证明镜像内第 10 条 SQL raw checksum 是 CRLF 字节的 `4944d45a972d68d20a67708457ed733f6e00b4fbc1f72cb5acab8a05c6d1a2d7`，与 Git 制品 `ab2fd94d6d6549ee4dfcff51c744bcc76390fdff26fd26d89b928637e144759c` 不一致。该 RC 与旧 `4102ee1…` RC 都作为失败证据保留，禁止覆盖、删除或部署。
+7. **G4-5 `T0_PASS / T1_ARTIFACT_PREFLIGHT_FAIL / BLOCKED`**：T0 确认当前 app/worker/Nginx 仍为 Gate 3 `958afca…`、真实 RDS/Tair/高德 readiness 正常、单 worker 成功、outbox pending/failed=0、预生产仍为 9 条 migration；RDS 全量备份 ID `3143022530`，ECS 配置备份 SHA-256 `9feec1ab82cec72dc995a10e8b06f84a5014ab81e480c1a46bae6a38ded3525b`。T1 只运行了 `--network none` 制品预检，`MIGRATION_EXECUTED=NO`、`APP/WORKER/NGINX_UPDATED=NO`、`ROLLBACK_USED=NO`。
+8. **G4-4 CRLF 本地返修 `PASS`**：`0c854224c703b3afaa18db2351d8bba3b263ad86` 只修改 `.gitattributes`、Dockerfile 和部署制品测试，不修改 migration SQL、Schema、API、依赖或业务逻辑。专项 5/5、全量 `813 passed / 7 expected skipped`、lint、tsc、31/31 build、diff check 通过；本地镜像 `sha256:9c771dd5ba19db1babdccbfc94ee804d7e29e77d4fdfa5537028af4d56e15c41` 内残余 CR=0、19/19 SQL raw checksum 与 Git 一致，独立审计 P0/P1/P2=0。Git/ACR 推送、新 RC、复扫和部署均未开始；须形成新统一基线并重跑 G4-4 远端验收后，才能重进 G4-5。
 
 ## 9. 并行开发纪律
 
@@ -768,7 +769,7 @@ flowchart TD
 - 后续追加发现 ETA Top-8 仍会裁掉本轮 A 槽新生成的 delivery cursor，导致可连续进入 B 的订单误报 `ETA_UNAVAILABLE`；已恢复计划池全部 delivery→pickup 必要组合，并补 `buildEtaMatrix()` → `runDispatchV2()` A/B 串联回归。
 - G3-3 本地开发已闭环：司机类事件按受影响门店加载全部活动司机参与比较；相同逻辑计划重试不回收/重建 Assignment 或递增 `planVersion`；outbox 只有持有当前租约的 worker 才计为处理成功；锁忙、Redis 不可用降级、过期快照重算均有独立编排测试。
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
-- 当前工作阶段：Gate 4 `IN_PROGRESS`。G4-1～G4-4 已 `PASS`；G4-4 新远端 RC 为 `a0c8bbd…@sha256:8e671d…c541`，精确 digest 复扫和独立审计未解决 P0/P1 为 0；旧 `4102ee1…` RC 继续 `REJECTED_DO_NOT_DEPLOY`。
+- 当前工作阶段：Gate 4 `IN_PROGRESS`。G4-1～G4-3 已 `PASS`；G4-4 因远端 RC 内第 10 条 SQL 出现 CRLF 字节漂移而重开，本地三文件返修 `0c854224…`、19/19 SQL raw checksum 与独立审计均已通过，但新的远端 RC 尚未制作；G4-5 已在 T0 通过后于 T1 离线制品预检停止，数据库、app、worker 与 Nginx 均未变更。`a0c8bbd…@sha256:8e671d…c541` 与更早的 `4102ee1…` RC 均为 `REJECTED_DO_NOT_DEPLOY`。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
-- 当前执行限制：本轮仅获 5 份治理文档同步授权；不得提交/推送，不得变更 app、worker、Nginx、ECS、RDS、Tair 或 SLS，不得执行 migration、重复基础资料、清理任何失败样本或直接写业务数据库。错误 helper 产生的独立 `G3FAULT` 订单必须保留并与冻结 10 单分开统计。
-- 下一动作：本轮治理同步经核验后，由用户另行授权形成文档提交并下发 G4-5 完整任务卡；随后才可在受控维护窗口按 migration → app → 单 worker → Nginx 分阶段执行，逐步保存运行身份和验收证据。任何一步失败立即停止，不得自动部署后续角色。
+- 当前执行限制：本轮仅获 5 份治理文档同步授权；不得提交/推送，不得构建或推送 ACR 镜像，不得变更 app、worker、Nginx、ECS、RDS、Tair 或 SLS，不得执行 migration、重复基础资料、清理任何失败样本或直接写业务数据库。错误 helper 产生的独立 `G3FAULT` 订单必须保留并与冻结 10 单分开统计。
+- 下一动作：本轮治理同步经核验后，由用户另行授权提交并推送这 5 份文档，形成包含 `0c854224…` 应用修复的统一新基线；再单独授权快进推送代码、以新完整 SHA 制作唯一 ACR tag、获取精确 digest 并复扫。只有新的 G4-4 重新裁决为 `PASS` 后，G4-5 才可从发布前核验恢复，并继续严格按 migration → app → 单 worker → Nginx 分阶段执行。任何一步失败立即停止，不得自动部署后续角色。

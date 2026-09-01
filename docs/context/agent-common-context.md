@@ -1,7 +1,7 @@
 # 人车单 V2 Agent 公共上下文（Layer 0）
 
 > 文档类型：`DERIVED / LAYER_0`
-> 上下文版本：`RCD-AGENT-CONTEXT-20260901-R53`
+> 上下文版本：`RCD-AGENT-CONTEXT-20260901-R54`
 > 适用范围：所有新建或重新启动的 Agent
 > 权威范围：仅提供项目目标、当前阶段、公共纪律、模块边界和命令入口
 > 非权威范围：产品行为、Schema、HTTP DTO、枚举、基础设施细节和任务验收标准
@@ -12,7 +12,7 @@
 
 人车单调度系统 V2 面向汽车租赁调度，主线是订单接入、实时位置、司机班次、A/B/C 工单时间轴、真实 ETA、调度事务和执行闭环。
 
-Gate 3、第二轮、P2 与 3A/3B 均已退出。Gate 4 的 G4-1～G4-4 已通过：远端 RC 的 source/tag/OCI revision 均为 `a0c8bbdcfd967dd45aa0f0c6f8f0c5d6aa736eac`，index digest 为 `sha256:8e671d612a2633e6fe52e7d10b79a6181dd1a51595ba8f846df0a4997743c541`，linux/amd64 digest 为 `sha256:de3bb4720815512962f36cc18956be2c3a423094522b0afbae303d6cc424d913`；Trivy 0.74.0 精确复扫和独立审计确认未解决 P0/P1 为 `0`。G4-5 预生产部署已被用户提出，但本次仅获文档同步授权；预生产 migration、ECS 容器更新和流量变更尚未执行。
+Gate 3、第二轮、P2 与 3A/3B 均已退出。Gate 4 的 G4-1～G4-3 保持 `PASS`；G4-5 在 T0 发布前核验通过后，于 T1 写库前发现远端 RC `a0c8bbdc…@sha256:8e671d…c541` 内第 10 条 SQL 的原始 checksum 因 Windows CRLF 与 Git 制品不一致，因此该 RC 已改为 `REJECTED_DO_NOT_DEPLOY`，G4-4 重开。本地三文件返修 `0c854224c703b3afaa18db2351d8bba3b263ad86` 已通过全量回归、镜像内 19/19 SQL raw checksum 与独立审计，但新远端 RC 尚未构建、推送或扫描；预生产仍运行 Gate 3 候选，数据库仍为 9 条 migration。
 
 ## 2. 当前版本与闸门
 
@@ -24,25 +24,25 @@ Gate 3、第二轮、P2 与 3A/3B 均已退出。Gate 4 的 G4-1～G4-4 已通�
 | 文档基线 | Gate 3 `PASS` 内容基线 `feature/v2-gate3-review-remediation @ 464ee5d6ffdb435d76b65f9814d82e4666fd84a9`，本地/upstream/GitHub 远程一致 |
 | Gate 3→develop | 交接分支 `b853a7af245942758de1cd46c9a25c384c08ec62`；代码交接合并点 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`，本地/upstream/GitHub 远程一致 |
 | 第二轮与 P2 退出基线 | 2A/2B/2C 代码树锚点 `46813c3ecf4a0df1eaf99bfb3d8d72f7d450193b`；P2 候选 `0e354696…` 已合入 `develop @ 5c2760cea40b975b24d5d2201333ab5048ce1cf0`，合并父提交为 `78a708f…` 与 `0e354696…` |
-| Gate 4 当前代码 | 分支 `feature/v2-stabilization`；HEAD 与 `origin/feature/v2-stabilization` 均为 `a0c8bbdcfd967dd45aa0f0c6f8f0c5d6aa736eac`；本地返修代码锚点 `c3b554ec579c88d544eb05447babeadca3abfd6c`；应用目录 tree `d5443715affdf7f4c6ff8d3013f1e91515deb54a` |
+| Gate 4 当前代码 | 分支 `feature/v2-stabilization`；本地 HEAD `0c854224c703b3afaa18db2351d8bba3b263ad86`；`origin/feature/v2-stabilization @ dfabd6250f92e127efb6a4e0070c598127e6b372`；应用目录 tree `9da32d3f5d33cb60c8b047094b244eb1655e4a05` |
 | 数据库实施 | 空 PostgreSQL 演练已验证 9 个 migration、最终 Schema、8 个 rollback 和 5 类护栏；真实预生产已完成备份、9 个 migration、最小权限和 G3E2E R2.2 基础资料 `3/6/5/8` 核验，owner 已关闭；首轮失败样本与本轮通过/失败事实均保留，禁止重复 bootstrap 或清理 |
 | 候选状态 | `DEPLOYED / REAL_E2E_PASS / FAULT_ROLLBACK_PASS / FINAL_CONSISTENCY_RUNTIME_PASS`：代码、镜像、运行资源、真实 10 单和故障/回退证据一致 |
 | 镜像 | app/worker 运行 `958afca…` → `sha256:13e0…5bff`；Nginx 原镜像/配置/证书/端口不变且 release revision 对齐；更早运行/回退候选继续保留，不得混用 |
 | 基础设施 | 阿里云主线；ECS 上 app/worker/Nginx、自签名 HTTPS、结构化日志、`json-file` 轮转与 LoongCollector `3.2.6` 已验收；SLS 运行/安全日志、查询、脱敏、30/180 天留存、告警、通知和预算通过；正式域名/备案/可信证书延后 |
 | Gate 3 | `PASS`（2026-08-11 最终裁决） |
-| Gate 4 子闸门 | `G4_1_PASS / G4_2_PASS / G4_3_PASS / G4_4_PASS`；Gate 4 总闸门仍为 `IN_PROGRESS` |
-| Gate 4 镜像 | 新 RC `a0c8bbd…@sha256:8e671d…c541` 已通过精确 digest 复扫；app/worker/migration Compose 同一 index digest 且无 `latest`。旧 RC `4102ee1…@sha256:5d9685…` 继续拒绝，禁止覆盖、删除或部署 |
-| Gate 4 下一步 | G4-5 为 `REQUESTED / NOT_STARTED`；先完成本轮治理文档同步并另行形成可追溯文档基线，再由完整任务卡明确预生产资源、维护窗口、回退目标、外部授权和逐步停止条件 |
+| Gate 4 子闸门 | `G4_1_PASS / G4_2_PASS / G4_3_PASS / G4_4_REOPENED_LOCAL_REMEDIATION_PASS / G4_5_BLOCKED_AT_T1_ARTIFACT_PREFLIGHT`；Gate 4 总闸门仍为 `IN_PROGRESS` |
+| Gate 4 镜像 | `4102ee1…@sha256:5d9685…` 与 `a0c8bbd…@sha256:8e671d…c541` 均为 `REJECTED_DO_NOT_DEPLOY`，禁止覆盖、删除或部署；新本地返修尚未生成远端 tag/index/amd64 digest |
+| Gate 4 下一步 | 先将 `0c854224…` 的已验收返修同步为新治理基线，再单独授权 Git 推送、新 SHA tag RC 构建/ACR 推送和精确 digest 复扫；新 G4-4 `PASS` 前不得重进 G4-5 |
 | Railway | 仅历史 Demo 证据，不是生产基线 |
 
 状态变化只认 [项目状态总览](../status/README.md)；文档入口只认 [文档版本总入口](../versions/README.md)。
 
-当前 Gate 3 运行候选与预生产证据保持不可变。Gate 4 的 SLS 初始化、自签名证书轮换、隔离恢复库验证和 G4-4 RC 构建/复扫均已按各自任务卡完成，但这些授权已用尽，不向 G4-5 继承。旧远端 RC 不得覆盖、删除或部署；新 RC 只允许在 G4-5 完整任务卡明确授权后按精确 index digest 使用。本轮“提交并更新文档”只授权治理文件修改，不授权 Git 提交/推送、预生产 migration、ECS/Docker、Nginx、RDS/Tair/SLS 或流量变更。
+当前 Gate 3 运行候选与预生产证据保持不可变。G4-5 T0 已完成只读身份/依赖/outbox 核验、RDS 全量备份 `3143022530` 和 ECS 配置备份；T1 只执行了断网制品预检，未连接或写入 RDS，未更新 app、worker 或 Nginx。旧远端 RC 不得覆盖、删除或部署；新 RC 需重新完成 G4-4 追溯、扫描和同 digest 验收。本轮“提交并更新文档”只授权治理文件修改，不授权 Git 提交/推送、ACR 构建/推送、预生产 migration、ECS/Docker、Nginx、RDS/Tair/SLS 或流量变更。
 
 - G4-2：RDS/Tair 无公网入口；ECS 仅 80/443 公网开放，SSH 受限；SLS 告警与 30/180 天留存通过；自签名证书有效至 2026-10-06，仅代表预生产公网 IP 演示通过。
 - G4-3：2026-08-30 全量快照恢复点可用；隔离恢复库完成 9→10 Forward 与 10→9 rollback，checksum、DDL 恢复和业务行数不变通过，源预生产库零写入。
-- G4-4：本地返修和远端唯一 SHA RC 均通过。远端 index `sha256:8e671d…c541`、amd64 `sha256:de3bb4…d913`、OCI revision `a0c8bbd…` 可互相追溯；Trivy 报告 SHA-256 `bcb5546d…f649`，未解决 P0/P1 为 0；app/worker/migration 同一 digest 且无 `latest`。
-- G4-5：必须按 migration → app → 单 worker → Nginx 分阶段执行，并交付发布/运行身份、revision、readiness、HTTPS、真实依赖、outbox 和 SLS 查询证据。任务卡或外部授权不完整时只能只读。
+- G4-4：历史远端 RC `a0c8bbd…@sha256:8e671d…c541` 的追溯、Trivy 和同 digest 曾通过，但 G4-5 T1 制品预检证明其第 10 条 SQL raw checksum 为 CRLF 字节的 `4944d45a…`，与 Git 制品 `ab2fd94d…` 不一致，故已拒绝。`0c854224…` 三文件本地返修已使镜像内 19/19 SQL raw checksum 匹配，未解决 P0/P1/P2 为 0；新远端 RC 尚未开始。
+- G4-5：T0 发布前核验 `PASS`；T1 在任何数据库写入前因制品 checksum 不匹配正确阻断。当前为 `BLOCKED`，migration 仍为 9，app/worker/Nginx 仍运行 Gate 3 镜像，未使用 rollback。重进时仍必须按 migration → app → 单 worker → Nginx 分阶段执行。
 
 ## 3. 公共模块边界
 
