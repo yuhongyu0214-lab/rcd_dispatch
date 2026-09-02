@@ -76,12 +76,16 @@ describe("deployment artifacts", () => {
       readProjectFile("package.json")
     ]);
     const packageJson = JSON.parse(packageJsonSource);
-    const pinnedNodeImage =
+    const pinnedBuildNodeImage =
       "node:22.23.1-bookworm-slim@sha256:8607a9064d4a571140998ae9e52a3b3fcf9cff361d04642d5971e6cd76d39e27";
+    const pinnedRuntimeImage =
+      "gcr.io/distroless/nodejs22-debian13:nonroot@sha256:4e4fb0ce55fd73901600796ef079a9490369d2515d7da31633a91608c82ca13b";
+    const runnerStage = dockerfile.split(`FROM ${pinnedRuntimeImage} AS runner`)[1] ?? "";
 
     expect(nextConfigSource).toContain("NEXT_OUTPUT_STANDALONE");
     expect(nextConfigSource).toContain('output: "standalone"');
-    expect(dockerfile.split(`FROM ${pinnedNodeImage}`).length - 1).toBe(2);
+    expect(dockerfile.split(`FROM ${pinnedBuildNodeImage}`).length - 1).toBe(1);
+    expect(dockerfile.split(`FROM ${pinnedRuntimeImage}`).length - 1).toBe(1);
     expect(dockerfile).toContain("NEXT_OUTPUT_STANDALONE=true");
     expect(dockerfile).toContain("pnpm install --frozen-lockfile");
     expect(dockerfile).toContain("pnpm install --prod --no-optional --frozen-lockfile");
@@ -90,26 +94,30 @@ describe("deployment artifacts", () => {
       dockerfile.match(
         /apt-get install --yes --no-install-recommends ca-certificates openssl/g
       )
-    ).toHaveLength(2);
-    expect(dockerfile.match(/apt-get upgrade --yes/g)).toHaveLength(2);
-    expect(dockerfile).toContain("ge '3.7.9-2+deb12u7'");
+    ).toHaveLength(1);
+    expect(dockerfile.match(/apt-get upgrade --yes/g)).toHaveLength(1);
+    expect(runnerStage).not.toContain("apt-get");
+    expect(runnerStage).not.toContain("apk");
+    expect(runnerStage).not.toContain("corepack");
+    expect(runnerStage).toContain("ENTRYPOINT []");
+    expect(runnerStage).toContain("ENV PATH=/nodejs/bin:");
     expect(dockerfile).toContain(
-      "COPY --from=production-dependencies --chown=nextjs:nodejs /app/node_modules ./node_modules"
+      "COPY --from=production-dependencies --chown=65532:65532 /app/node_modules ./node_modules"
     );
     expect(dockerfile).toContain("FROM builder AS standalone-artifacts");
     expect(dockerfile).toContain("rm -rf /app/.next/standalone/node_modules");
     expect(dockerfile).toContain(
-      "COPY --from=standalone-artifacts --chown=nextjs:nodejs /app/.next/standalone ./"
+      "COPY --from=standalone-artifacts --chown=65532:65532 /app/.next/standalone ./"
     );
     expect(dockerfile).not.toContain(
-      "COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules"
+      "COPY --from=builder --chown=65532:65532 /app/node_modules ./node_modules"
     );
-    expect(dockerfile).toContain("rm -rf /usr/local/lib/node_modules/npm");
-    expect(dockerfile).toContain("/usr/local/lib/node_modules/corepack");
     expect(dockerfile).not.toContain("esbuild");
     expect(packageJson.dependencies.prisma).toBe("^6.7.0");
     expect(packageJson.devDependencies.prisma).toBeUndefined();
-    expect(dockerfile).toContain("USER nextjs");
+    expect(packageJson.pnpm.overrides["deepmerge-ts@7.1.5"]).toBe("8.0.0");
+    expect(dockerfile).toContain("USER 65532:65532");
+    expect(dockerfile).toContain('CMD ["node", "-e",');
     expect(dockerfile).toContain("/api/v2/health");
     expect(dockerfile).not.toContain("DATABASE_URL");
     expect(dockerfile).not.toContain("REDIS_URL");
@@ -158,6 +166,8 @@ describe("deployment artifacts", () => {
     expect(compose.match(/max-size: "20m"/g)).toHaveLength(3);
     expect(compose.match(/max-file: "5"/g)).toHaveLength(3);
     expect(migrationBlock).toContain("MIGRATION_DATABASE_URL");
+    expect(migrationBlock).toContain("node_modules/prisma/build/index.js");
+    expect(migrationBlock).not.toContain("./node_modules/.bin/prisma");
     expect(migrationBlock).not.toContain("SHADOW_DATABASE_URL");
     expect(migrationBlock).not.toContain("REDIS_URL");
     expect(nginxBlock).toContain('profiles: ["edge"]');

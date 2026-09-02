@@ -61,7 +61,7 @@ FROM builder AS standalone-artifacts
 
 RUN rm -rf /app/.next/standalone/node_modules
 
-FROM node:22.23.1-bookworm-slim@sha256:8607a9064d4a571140998ae9e52a3b3fcf9cff361d04642d5971e6cd76d39e27 AS runner
+FROM gcr.io/distroless/nodejs22-debian13:nonroot@sha256:4e4fb0ce55fd73901600796ef079a9490369d2515d7da31633a91608c82ca13b AS runner
 
 ARG GIT_COMMIT_SHA
 
@@ -71,40 +71,25 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
+ENV PATH=/nodejs/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 WORKDIR /app
 
-RUN apt-get update \
-  && apt-get upgrade --yes \
-  && apt-get install --yes --no-install-recommends ca-certificates openssl \
-  && dpkg --compare-versions "$(dpkg-query --show --showformat='${Version}' libgnutls30)" ge '3.7.9-2+deb12u7' \
-  && rm -rf /var/lib/apt/lists/* \
-  && groupadd --system --gid 1001 nodejs \
-  && useradd --system --uid 1001 --gid nodejs nextjs \
-  && rm -rf /usr/local/lib/node_modules/npm \
-    /usr/local/lib/node_modules/corepack \
-    /opt/yarn-* \
-  && rm -f /usr/local/bin/npm \
-    /usr/local/bin/npx \
-    /usr/local/bin/corepack \
-    /usr/local/bin/pnpm \
-    /usr/local/bin/pnpx \
-    /usr/local/bin/yarn \
-    /usr/local/bin/yarnpkg
+ENTRYPOINT []
 
-COPY --from=standalone-artifacts --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=production-dependencies --chown=nextjs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
-COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=nextjs:nodejs /app/scripts/dispatch-event-worker.mjs ./scripts/dispatch-event-worker.mjs
+COPY --from=standalone-artifacts --chown=65532:65532 /app/.next/standalone ./
+COPY --from=production-dependencies --chown=65532:65532 /app/node_modules ./node_modules
+COPY --from=builder --chown=65532:65532 /app/.next/static ./.next/static
+COPY --from=builder --chown=65532:65532 /app/public ./public
+COPY --from=builder --chown=65532:65532 /app/package.json ./package.json
+COPY --from=builder --chown=65532:65532 /app/prisma ./prisma
+COPY --from=builder --chown=65532:65532 /app/scripts/dispatch-event-worker.mjs ./scripts/dispatch-event-worker.mjs
 
-USER nextjs
+USER 65532:65532
 
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/v2/health').then(response=>{if(!response.ok)process.exit(1)}).catch(()=>process.exit(1))"
+  CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/v2/health').then(response=>{if(!response.ok)process.exit(1)}).catch(()=>process.exit(1))"]
 
 CMD ["node", "server.js"]

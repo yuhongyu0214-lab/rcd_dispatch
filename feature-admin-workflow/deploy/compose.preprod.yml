@@ -84,7 +84,8 @@ services:
   migration:
     image: ${RCD_IMAGE_REF:?RCD_IMAGE_REF is required}
     command:
-      - ./node_modules/.bin/prisma
+      - node
+      - node_modules/prisma/build/index.js
       - migrate
       - deploy
       - --schema
