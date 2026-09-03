@@ -1,8 +1,8 @@
 # 人车单项目文档版本总入口
 
-> 版本戳：`RCD-DOC-REGISTRY-20260902-R55`
+> 版本戳：`RCD-DOC-REGISTRY-20260903-R56`
 > 建立日期：2026-07-13
-> 治理更新时间：2026-09-02
+> 治理更新时间：2026-09-03
 > 归档方式：现行权威集中到 `v2.0/`；已融合或冲突的旧方案从工作树清场，历史由 Git 追溯
 > 可视化导航：[Obsidian 项目全景白板](../rcd-v2-project-map.canvas)（仅作导航，不替代下方权威文档）
 
@@ -24,14 +24,14 @@
 | 代码与设计约束 | V2.0-r18 | 第二轮串行前置和 2A/2B/2C 唯一文件所有权已冻结 | [项目规则 V2](v2.0/project-rules-v2.md) |
 | API 契约 | V2.0-r18（develop 现行） | 2B `143a10a…` 已合入 `develop @ 2a621620…`；`DriverTaskV2.servicePlan` 必返收口正式生效 | [API 契约 V2](v2.0/api-contract-v2.md) |
 | 领域词汇 | V2.0-r13 | 当前候选领域术语与枚举零变化已登记 | [领域词汇 V2](v2.0/domain-glossary-v2.md) |
-| 应用框架与依赖决策 | V2.0-r5 | 当前候选未改变框架、依赖来源或兼容边界 | [应用决策日志](v2.0/application-decision-log.md) |
+| 应用框架与依赖决策 | V2.0-r6 | APP-006 补记已批准的 Debian 13 Distroless / deepmerge-ts 8.0.0 本地安全例外，业务与平台架构不变 | [应用决策日志](v2.0/application-decision-log.md) |
 | V1→V2 兼容映射 | V2.0 | Gate 0 已冻结 | [兼容矩阵](v2.0/v1-v2-compatibility-matrix.md) |
 | 生产基础设施架构 | V2.0-r6 | Gate 3 `PASS` 文档基线 `464ee5d…` 已远程核验；架构与正式生产未决边界不变 | [基础设施架构 V2](v2.0/infrastructure-v2.md) |
-| 构建、部署与回退 | V2.0-r13 | Gate 3 `PASS` 文档基线 `464ee5d…` 已远程核验；分阶段和禁止重复 migration 规则不变 | [部署指南 V2](v2.0/deployment-guide-v2.md) |
+| 构建、部署与回退 | V2.0-r14 | 无 shell Node 入口、Git 归档与 SQL raw 指纹、固定库/当前库分开扫描；G4-5 仍需新授权 | [部署指南 V2](v2.0/deployment-guide-v2.md) |
 | 生产运行与恢复 | V2.0-r6 | 最终运行资源、健康、10 单、outbox 和证据一致性通过；整机/RDS 灾备仍为独立演练 | [运维指南 V2](v2.0/operations-guide-v2.md) |
 | 基础设施决策与替代历史 | V2.0-r3 | INFRA-001～023 已登记；公网 IP 预生产演示获准，正式上线条件不变 | [基础设施决策日志](v2.0/infrastructure-decision-log.md) |
-| 项目当前状态 | 2026-09-02 | G4-1～G4-3 保持 `PASS`；统一基线 `857705e…` 的新远端 RC 制品追溯通过，但精确 digest 扫描仍有 2 个未裁决 P0、10 个未裁决 P1，G4-4 `FAIL` 且 G4-5 继续阻断 | [状态总览](../status/README.md) |
-| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260902-R55 | Layer 0；所有 Agent 必读；登记第三个拒绝 RC、G4-4 扫描失败、G4-5 未部署和下一轮安全返修边界 | [Agent 公共上下文](../context/agent-common-context.md) |
+| 项目当前状态 | 2026-09-03 | `4d370d6…` 本地安全返修/独立复审 PASS；真实配置远端 RC 待验收，三个旧 RC 拒绝，G4-5 阻断 | [状态总览](../status/README.md) |
+| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260903-R56 | Layer 0；区分代码锚点、文档基线与远端 RC；登记本地 PASS 的 R55/严重等级限定和授权边界 | [Agent 公共上下文](../context/agent-common-context.md) |
 | V1 产品与开发主线 | V1.x | 历史只读 | [V1 历史索引](v1/README.md) |
 
 ## 文档权威顺序（按领域拆分，唯一权威口径）
@@ -117,16 +117,16 @@ HTTP 契约               → v2.0/api-contract-v2.md
 
 ### Gate 4 当前任务入口（3A/3B 证据已冻结）
 
-3A/3B 保持 `PASS / WARN`，只作为 Gate 4 历史入口证据。Gate 4 位于 `feature/v2-stabilization`、`.worktrees/v2-stabilization`；本地 HEAD 与远端均为 `857705e810172a1e53eb1355089d51a3ad8c7632`，应用 tree 为 `9da32d3f5d33cb60c8b047094b244eb1655e4a05`。G4-1～G4-3 保持 `PASS`；新的 `857705e…` RC 已完成 source/tag/revision、index `sha256:79c72c…b9823`、amd64 `sha256:55c444…ee530`、19/19 SQL raw checksum 和 Compose 同 digest 追溯，但 Trivy 0.74.0 仍有 2 个未裁决 P0、10 个未裁决 P1，独立审计结论为 `FAIL / REJECTED_DO_NOT_DEPLOY`。G4-5 仍停在 T1 写库前，预生产未部署新 RC。
+3A/3B 保持 `PASS / WARN`，只作为 Gate 4 历史入口证据。Gate 4 位于 `feature/v2-stabilization`、`.worktrees/v2-stabilization`；本地代码锚点 `4d370d664c3710a4a03cb1b665cfdeddc7d32778`，父提交/R55 文档基线 `c5e38e42af82a4fb144e93170cc5d4c9001f5a74`，应用 tree `5188c0efcb96d646a9609b7c47dd624d578841ee`。本地跟踪 origin 仍为 `857705e…`，本轮未推送或联网核验远端。主控已接收本地安全返修与独立复审 PASS，仅限固定 R55 库的 Critical/High=0；真实配置远端 RC 仍待单独授权与验收，G4-5 不放行。
 
 | 验证线 | 角色与入口 | 初始边界 | 隔离候选与结果摘要 |
 |---|---|---|---|
 | 3A | 数据库验证 Agent；`feature/v2-migration-validation`；`.worktrees/v2-migration-validation` | `PASS / WARN`；T0 7 文件差异不触及数据/迁移/兼容权威域 | 10 个 migration、迁移映射、双读/兼容窗口、数据核对、rollback 和零漂移通过 |
 | 3B | 测试 Agent；`feature/v2-e2e-validation @ 8ff70ccc…`；`.worktrees/v2-e2e-validation` | `PASS / WARN`；修改白名单为空 | PRD §13 14 项、故障、数据库/API、安全、Chrome/Edge 和工程命令通过；Edge 125% 为 `952×800` 等效布局证据 |
 
-3A/3B 与已结束 G4-2/G4-3 的数据库、端口、fixture、Mock、浏览器、云资源和密钥权限均不继承到重开的 G4-4 或 G4-5。`4102ee1…@sha256:5d9685…`、`a0c8bbd…@sha256:8e671d…c541` 与 `857705e…@sha256:79c72c…b9823` 都保持 `REJECTED_DO_NOT_DEPLOY`，不得覆盖、删除或部署。当前“提交并更新文档”只授权 5 份治理文件同步，不授权 Git 提交/推送、ACR 构建/推送、预生产 migration、ECS/Docker、Nginx、RDS/Tair/SLS 或流量变更。
+3A/3B、已结束的返修/扫描和旧 G4-5 授权均不继承到新远端任务。`4102ee1…`、`a0c8bbd…`、`857705e…` 三个旧 RC 继续 `REJECTED_DO_NOT_DEPLOY`，不得覆盖、删除或部署。当前已获准同步并本地提交 7 份文档：5 份治理文件、应用决策日志和部署指南；正式 R56 文档 SHA 由主控提交回执下发。不授权 Git 推送、构建/ACR 推送、漏洞库下载或云资源变更。后续前置清单见[主计划 §8.4.2](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md#842-新远端-rc-验收前置未授权)。
 
-共同停止条件：HEAD/基线不一致、工作区不干净、端口/数据库身份/空库状态不明、需要修改 Schema/migration/API 契约/业务代码、需要外部连接/新依赖/跨域文件、权威文档冲突，或 rollback 需要删除事实绕过保护。详细验收以[并行开发主计划 §8.2～§8.3](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md)为准。
+共同停止条件：代码/文档 SHA 不明、工作区不干净、缺少精确白名单或外部授权、制品/SQL/扫描对象不一致、权威口径冲突时立即停止。新远端 RC 必须读取 APP-006、部署指南 §5.1/§6/§13、主计划 §8.4.2 和对应证据；未获完整任务卡时只能只读。
 
 ### 未分配到默认角色上下文的文档
 
@@ -156,7 +156,7 @@ HTTP 契约               → v2.0/api-contract-v2.md
 | 实时数据 | 阿里云 Tair/Redis 保存最新位置、在线状态、ETA 短缓存和短锁，不得成为业务事实源 | 上海预生产 Tair 白名单、内网登录、固定前缀、隔离短锁竞争与恢复均已通过；自动化不可用降级已验收，PostgreSQL 继续作为唯一业务事实库 |
 | 地图与路径 | 高德 JS API 负责前端地图；高德服务端 API 负责地理编码、路径与真实 ETA | Key 分离，服务端 Key 不得进入浏览器 |
 | 应用技术栈 | Next.js 15.5.21、React 19.2.8、TypeScript、Tailwind CSS 3、shadcn/ui、Prisma 6、Pino、Vitest | 应用候选已完成依赖审计与回归 |
-| 构建与依赖 | pnpm 10.11.0；SheetJS 官方 CDN `xlsx 0.20.3`；受审计的精确 pnpm overrides | 已冻结，不得回退到 npm/yarn 或 npm `xlsx 0.18.x` |
+| 构建与依赖 | pnpm 10.11.0；SheetJS 官方 CDN `xlsx 0.20.3`；受审计的精确 pnpm overrides | Gate 4 APP-006 允许本地 Distroless/deepmerge-ts 例外；不改变包管理器、业务契约或阿里云主线，远端 RC 尚未通过 |
 
 详细组件职责、网络边界和未决事项分别见[基础设施架构 V2](v2.0/infrastructure-v2.md)与[基础设施决策日志](v2.0/infrastructure-decision-log.md)。本表是导航摘要，不替代原文。
 
@@ -182,7 +182,7 @@ remote commit: 958afca537b412fb972b6e180561a9b37022834d
 2. 新候选的 Schema/migration tree 与完成一次性空 PostgreSQL 演练的旧冻结候选完全相同；原有 9 个正向 migration、最终 Schema、8 个 rollback 和五类安全护栏结论继续有效。
 3. 冻结真实 10 单已完成：订单 1～6、8～10 共 9 单完成，订单 7 按预期为 `INFEASIBLE` 且保留 1 条开放预警；并发、旧版本、到达后改排拒绝与订单 10 幂等重放均通过。首轮失败、旧映射、边界抖动和错误 helper 现场继续保留，不得清理。
 4. 最终一致性审查确认本地/远程代码、ACR digest、ECS 运行身份、真实依赖、10 单结果和故障/回退证据一致；文档口径已返修，并以 `feature/v2-gate3-review-remediation @ 57ef86c43bf220f48774e130575c40b8c94a83d5` 形成可追溯基线，本地、upstream 与 GitHub 远程核验一致。
-5. Gate 4 已从 `4102ee1…` 启动并进入 `feature/v2-stabilization`。G4-1～G4-3 保持通过；G4-5 T0 已核验当前 Gate 3 运行身份、真实依赖、单 worker、outbox=0、预生产 9 条 migration、RDS 备份 `3143022530` 和 ECS 配置备份。T1 在写库前因 `a0c8bbd…` RC 的 SQL CRLF 制品漂移阻断，未执行 migration、容器更新或 rollback。后续 `857705e…` 统一远端 RC 的制品追溯已通过，但精确 digest 扫描仍有 2 个未裁决 P0、10 个未裁决 P1，因此 G4-4 为 `FAIL`、第三个 RC 继续拒绝部署；下一步只能另行授权最小安全返修与新 SHA 复扫，G4-4 `PASS` 前不得重进 G4-5。
+5. Gate 4 从 `4102ee1…` 启动；G4-1～G4-3 保持通过。G4-5 在写库前被 SQL CRLF 制品差异阻断，后续 `857705e…` RC 安全扫描失败，三个旧 RC 均拒绝。2026-09-03 新本地 `4d370d6…` 已通过五文件边界、813/7、lint、tsc、运行探针、19/19 SQL 和固定 R55 Critical/High=0 独立复审；本地占位镜像不可部署。本轮七文档本地提交已获批准，提交回执给出正式文档 SHA 后，再另行授权真实配置远端 RC 验收任务；新的远端 G4-4 PASS 后才可重新授权 G4-5。
 
 状态事实和阻断项统一在[状态总览](../status/README.md)维护；状态文档不得修改领域契约。
 

@@ -1,8 +1,8 @@
 # 人车单生产部署、迁移与回退指南 V2
 
-> 文档版本：`RCD-DEPLOY-V2.0-R13-20260811`
+> 文档版本：`RCD-DEPLOY-V2.0-R14-20260903`
 >
-> 状态：Gate 3 已最终 `PASS`，PASS 文档内容基线 `464ee5d…` 已远程核验；代码、ACR digest 与预生产运行身份保持 `958afca…`；本裁决不授权重复部署或 migration
+> 状态：Gate 3 预生产最近已核验运行身份为 `958afca…`；Gate 4 本地 `4d370d6…` 安全返修与独立复审通过，远端 RC 尚待验收，G4-5 保持阻断；本次文档同步不授权构建、推送、部署或 migration
 >
 > 权威范围：构建、镜像、发布、迁移、启动、验证和回退顺序
 >
@@ -88,6 +88,20 @@ Git commit SHA
 - app、worker、migration 使用同一个镜像，避免三个角色运行不同代码。
 - 构建产物必须经过依赖、安全、测试、类型、lint 和生产构建检查；具体命令以项目工程纪律和获准流水线为准。
 
+### 5.1 Gate 4 无 shell 运行镜像与制品验收
+
+本节落实[APP-006](application-decision-log.md#app-006gate-4-运行镜像与传递依赖安全返修例外)，不改变单 ECS、同一镜像三角色及后续分阶段发布顺序。
+
+- 已批准本地候选：`4d370d664c3710a4a03cb1b665cfdeddc7d32778`。runner 固定为 `gcr.io/distroless/nodejs22-debian13:nonroot@sha256:4e4fb0ce55fd73901600796ef079a9490369d2515d7da31633a91608c82ca13b`；构建阶段继续使用候选 Dockerfile 固定的 Node 22/Bookworm。该调整不授权更换宿主 OS 或 Nginx 镜像。
+- runner 使用 UID/GID `65532:65532`；无 shell、运行包管理器、setuid/setgid 或 mount/umount。诊断通过宿主受控工具或显式 Node 探针完成，不向最终镜像补装调试工具。
+- app 使用 `node server.js`；worker 使用 `node scripts/dispatch-event-worker.mjs`；migration 使用 exec-form `node node_modules/prisma/build/index.js migrate deploy --schema prisma/schema.prisma`。不得在运行容器内调用 `sh -c`、pnpm/npx 或依赖 `.bin` shell wrapper。健康检查同样使用 exec-form Node；Prisma `--version` 探针不等于已执行迁移。
+- 构建来源必须是批准 commit 的 Git 原始归档，记录归档 SHA-256；不得直接复制 Windows 脏工作区。构建后的全部 19 份 migration/rollback 必须与该归档逐文件 raw SHA-256 相等且 CR=0；不能以换行归一化后的比较掩盖制品差异，也不能修改历史 SQL 来追平坏镜像。
+- 代码来源 SHA、治理文档 SHA 分开登记。只改文档的后继提交不能冒充既有 OCI revision；后续任务必须明确锁定实际构建来源，不得隐式使用分支 HEAD。
+- 本地占位高德参数制品仅用于隔离验证。真实配置重建前须另行批准源码推送、构建参数类别、新完整 SHA tag 与 ACR 推送；只注入获准的浏览器构建配置，不把高德服务端 Key、数据库或云凭据放入构建参数。本轮禁止 `latest` 和覆盖既有 tag。
+- 远端验收必须重核 source/tag → index → amd64 manifest → config → OCI revision 与扫描对象，重验 19/19 SQL、非 root、bcrypt、Prisma、app/worker 探针及 Compose 三角色同 digest。容器安全扫描与秘密扫描分别记录，不能互相替代。
+- 固定 R55 库复扫用于证明返修可重复；另在独立缓存核验获准验收时点的最新可用漏洞库。两组均记录 scanner digest/version、DB UpdatedAt/SHA-256、镜像/报告哈希、扫描包范围及严重等级；保留 R55 原库不覆盖。更新或下载漏洞库属于后续独立任务授权，不由本文触发。
+- 2026-09-03 本地 PASS 仅适用固定 R55 库的 Critical/High；不声称所有等级或最新漏洞库为零。新的远端 RC 未经主控完整 G4-4 PASS 前，不得恢复 G4-5；绑定三个旧拒绝 RC 的历史部署任务卡不能复用。
+
 ## 6. 数据库迁移
 
 ### 6.1 原则
@@ -148,6 +162,7 @@ migration 使用临时或受控的最小 DDL 权限。完成后撤销临时账�
 ```bash
 docker compose --env-file <受控配置文件> \
   -f deploy/compose.preprod.yml \
+  --profile migration --profile app --profile worker --profile edge \
   config --quiet
 docker compose --env-file <受控配置文件> \
   -f deploy/compose.preprod.yml \
@@ -163,7 +178,7 @@ docker compose --env-file <受控配置文件> \
   --profile edge up -d nginx
 ```
 
-1. `config --quiet` 失败、出现未替换变量或非预期端口时立即停止。
+1. `config --quiet` 失败、出现未替换变量或非预期端口时立即停止；身份核验时仅对 `config` 显式选择全部 profile，并检查 app/worker/migration 都存在且指向同一批准 digest。未选 profile 得到空服务表不能算三角色核验通过；真实秘密配置不得整份输出或写入普通日志。
 2. migration 失败、指纹不符或数据库核对失败时停止，不启动 app。
 3. app readiness 未通过时停止，不启动 worker。
 4. worker 日志、单副本约束或内部鉴权未通过时停止，不启动 Nginx。
@@ -322,3 +337,4 @@ docker compose --env-file <受控配置文件> \
 | V2.0-r11 | 2026-08-10 | 登记文档基线 `feature/v2-gate3-review-remediation @ 57ef86c…` 已提交、推送并完成本地/upstream/GitHub 远程核验；应用发布、回退与禁止 migration 规则不变 |
 | V2.0-r12 | 2026-08-11 | 登记 Gate 3 最终 `PASS`；不可变镜像、分阶段发布、回退目标和禁止重复 migration/基础资料规则不变，第二轮部署仍需单独授权 |
 | V2.0-r13 | 2026-08-11 | 登记 Gate 3 PASS 文档内容基线 `464ee5d…` 已提交、推送并完成三方核验；运行镜像、部署、回退与 migration 边界不变 |
+| V2.0-r14 | 2026-09-03 | 落实 APP-006 无 shell runner/Node 入口、Git 归档与 19/19 SQL raw 指纹；区分本地 R55 PASS、远端双扫描和 G4-5 重新授权，补全 Compose config-only profile 核验 |
