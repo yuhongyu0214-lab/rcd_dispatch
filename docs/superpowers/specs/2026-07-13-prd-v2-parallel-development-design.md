@@ -1,7 +1,7 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3、第二轮、P2 与 3A/3B 已完成，G4-1～G4-4 PASS。2026-09-03 主控接收新远端 `4d370d664c3710a4a03cb1b665cfdeddc7d32778` 的完整制品与独立审计；G4-5 为 ENTRY_READY / T0_NOT_STARTED / EXECUTION_AUTHORIZATION_PENDING，Gate 4 总闸门仍 IN_PROGRESS。本轮 R57 只更新并本地提交 5 份治理文档，不推送或部署。
+> 状态：总体架构已批准；Gate -1～Gate 3、第二轮、P2 与 3A/3B 已完成，G4-1～G4-4 PASS。新远端 `4d370d6…` 的 G4-4 已通过；G4-5 T0 已获只读授权并为 IN_PROGRESS / PARTIAL_PASS / T1_BLOCKED，Gate 4 总闸门仍 IN_PROGRESS。本轮 R58 只同步 5 份治理文档，不提交、推送、迁移或部署。
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
@@ -595,7 +595,7 @@ flowchart TD
 
 ### 8.4 Gate 4：稳定化与发布验收
 
-当前状态：`IN_PROGRESS / G4_1_TO_G4_4_PASS / G4_5_ENTRY_READY / T0_NOT_STARTED / EXECUTION_AUTHORIZATION_PENDING`。分支/worktree 不变，代码/RC tag/OCI revision 为 `4d370d664c3710a4a03cb1b665cfdeddc7d32778`，应用 tree `5188c0efcb96d646a9609b7c47dd624d578841ee`；已完成远端验收的文档基线及本地 origin 跟踪为 `7b6a2f472fe089b0a3dddf136b6f71f3b4a7e4f6`。本轮批准同步并本地提交 5 份治理文件，正式 R57 文档 SHA 由主控回执下发；不更改代码身份、不推送、不合并 develop，也不执行外部操作。
+当前状态：`IN_PROGRESS / G4_1_TO_G4_4_PASS / G4_5_T0_IN_PROGRESS / PARTIAL_PASS / T1_BLOCKED`。分支/worktree 不变，代码/RC tag/OCI revision 为 `4d370d664c3710a4a03cb1b665cfdeddc7d32778`，应用 tree `5188c0efcb96d646a9609b7c47dd624d578841ee`；正式 R57 文档基线为 `355c7e4fef64533fcc15a75b70a472dfbd7f881e`。本轮 R58 只同步 5 份治理文件；不更改代码身份、不提交、不推送、不合并 develop，也不执行外部写操作。
 
 建议分支：`feature/v2-stabilization`
 
@@ -619,7 +619,7 @@ flowchart TD
 - `develop` 可运行、可演示、可回滚。
 - 用户批准后才允许 `develop → main`。
 
-#### 8.4.1 Gate 4 执行快照（截至 2026-09-03）
+#### 8.4.1 Gate 4 执行快照（截至 2026-09-05）
 
 1. **T0/G4-1 `PASS`**：初始 `feature/v2-stabilization @ 4102ee1…` 与 worktree 干净；在不安装或升级依赖的前提下完成全量 test、lint、`tsc --noEmit`、build、Prisma validate 和 diff check。工程验收矩阵、正式演示脚本草案、证据复用/重验矩阵与缺陷归属已形成。
 2. **G4-2 `PASS`**：完成脱敏资源与权限盘点。ACR、ECS、RDS、Tair、SLS、Nginx、自签名证书、安全组和责任人已确认；RDS/Tair 无公网入口，数据库/Redis 无需对公网开放。SLS 告警中心与内部存储已初始化，runtime/security 分别保留 30/180 天；自签名证书已轮换至 2026-10-06，只允许预生产公网 IP 演示，不代表正式生产可信 HTTPS。
@@ -634,6 +634,7 @@ flowchart TD
 10. **G4-4 本地安全返修与独立复审 `PASS`**：用户于 2026-09-03 批准 Debian 13 Distroless 例外及五文件返修，候选 `4d370d6…` 相对父提交 `c5e38e4…` 精确修改 Dockerfile、Compose、package/lock 和部署制品测试。Git 归档、index/manifest/config/OCI revision、19/19 SQL raw SHA、CR=0、非 root、bcrypt/Prisma/worker/app 探针通过；独立全量 `813 passed / 7 expected skipped`、lint、tsc、diff check 通过。固定 R55 库（2026-09-01）Critical/High=0，报告 SHA-256 `c3bf30b87438b62ff5eff978fb7d0c44f483f162a7174f10e73ce6adcdb49c21`；最后独立复审复用既有 31/31 构建日志和实际镜像，未重建。仅本地占位配置制品通过，未推送/部署；完整证据见[状态总览](../../status/README.md#gate-4-本地安全返修证据2026-09-03)，技术例外见 APP-006 和部署指南 §5.1。
 
 11. **G4-4 新远端 RC `PASS`**：2026-09-03 真实配置制品 `4d370d6…@sha256:508dea…453d` 的 source/tag/index/amd64/config/OCI 链、SQL、双库及秘密扫描全部通过，独立证据审计未决 P0/P1/P2=0。主控裁决完整 G4-4 PASS；G4-5 仅入口就绪，须按下节重新授权 T0。历史第 7 项的 T0/T1 结论不被改写或续期。
+12. **G4-5 当前 T0 `IN_PROGRESS / PARTIAL_PASS / T1_BLOCKED`**：2026-09-05 只读复核确认 ECS/RDS/Tair/网络边界、当前 Gate 3 运行身份、预生产 9 条 migration、outbox 无积压/失败和数据库最小权限；`OrderServicePlan` app ACL 经单独返修与独立复核通过。SLS 当前规则/执行、RDS 当前恢复点与可恢复时间窗、owner 长期凭证关闭或轮换证据未齐，故 T0 尚未 PASS，新 RC 未部署。
 
 #### 8.4.2 新远端 RC 验收（已完成）
 
@@ -647,22 +648,22 @@ flowchart TD
 - 三个旧 RC 保持 `REJECTED_DO_NOT_DEPLOY`，禁止覆盖、删除或作为获准回退镜像；当前 Gate 3 运行镜像与这些拒绝 RC 分开管理，回退资格仍须验证数据库兼容性和安全风险。
 - 远端验收未部署、未执行 migration；本轮五文档提交也不触发外部操作。此前 G4-5 T0/T1 与失败现场保留，旧 SHA/digest 的部署授权失效。
 
-#### 8.4.3 G4-5 预生产继续联调方案（待执行授权）
+#### 8.4.3 G4-5 预生产继续联调方案（T0 已授权并在补证；T1～T6 未授权）
 
-**状态与目标。** `ENTRY_READY / T0_NOT_STARTED / EXECUTION_AUTHORIZATION_PENDING`。以已验收的新 RC 接入既有阿里云预生产，在单 ECS 上证明 migration → app → 单 worker → Nginx 的身份一致、真实依赖可用、业务闭环和观测正常。不是重建基建、不是新功能，也不是正式生产上线。
+**状态与目标。** `T0_IN_PROGRESS / PARTIAL_PASS / T1_BLOCKED`。以已验收的新 RC 接入既有阿里云预生产，在单 ECS 上证明 migration → app → 单 worker → Nginx 的身份一致、真实依赖可用、业务闭环和观测正常。T0 仅允许只读盘点；不是重建基建、不是新功能，也不是正式生产上线。
 
-**固定起点与任务卡。** 沿用 `feature/v2-stabilization` / `C:/Users/yhy/Desktop/人车单生态-v2/.worktrees/v2-stabilization`。代码 SHA 为 `4d370d664c3710a4a03cb1b665cfdeddc7d32778`，应用 tree 为 `5188c0efcb96d646a9609b7c47dd624d578841ee`；文档 SHA 为本次 R57 五文档提交（完整 SHA 由提交回执下发）。启动时应满足 `HEAD == DOCUMENT_BASELINE_SHA`、代码 SHA 在祖先链、应用 tree 相同、工作区干净；本地 develop 仍为 `4102ee1f85f89f363aeaa42f829a9c6d535f6d31`，不要为了“统一”而擅自合并或改写。
+**固定起点与任务卡。** 沿用 `feature/v2-stabilization` / `C:/Users/yhy/Desktop/人车单生态-v2/.worktrees/v2-stabilization`。代码 SHA 为 `4d370d664c3710a4a03cb1b665cfdeddc7d32778`，应用 tree 为 `5188c0efcb96d646a9609b7c47dd624d578841ee`；正式文档 SHA 为 `355c7e4fef64533fcc15a75b70a472dfbd7f881e`。本轮文档同步后 HEAD 暂不变且工作区只允许 5 份治理文档差异；本地 develop 仍为 `4102ee1f85f89f363aeaa42f829a9c6d535f6d31`，不要为了“统一”而擅自合并或改写。
 
 ```text
 ROLE=G4-5 运维发布执行（主控统筹；数据库/测试/审计按下表协作）
 SOURCE_SHA=4d370d664c3710a4a03cb1b665cfdeddc7d32778
-DOCUMENT_BASELINE_SHA=<本次 R57 提交回执完整 SHA>
+DOCUMENT_BASELINE_SHA=355c7e4fef64533fcc15a75b70a472dfbd7f881e
 MODIFICATION_WHITELIST=EMPTY（全部跟踪文件，包括代码、Schema、SQL 与文档）
 RCD_IMAGE_REF=crpi-kcg4tksk7neseyy4.cn-shanghai.personal.cr.aliyuncs.com/rcd_dispatch/rcd_dispatch@sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d
 EXPECTED_AMD64_DIGEST=sha256:577dc21e8375d1ff07af4e49100799ac6ba1b1b225968e91f3559091bc04f414
 EXPECTED_CONFIG_DIGEST=sha256:2930e8be2941a59fada8f8bef9614e95b83445c58e70a2f7b1337741baed8649
 RCD_RELEASE_REVISION=4d370d664c3710a4a03cb1b665cfdeddc7d32778
-EXTERNAL_SYSTEM_AUTHORIZATION=NONE（每步另行下发；此方案不是执行许可）
+EXTERNAL_SYSTEM_AUTHORIZATION=T0_READ_ONLY_ONLY（T1～T6 每步另行下发）
 ```
 
 镜像不得重建、改 tag、使用 latest 或复用本地占位镜像；app/worker/migration 同 index，并核对实际 amd64/config。Nginx 保留已批准的独立镜像，release revision 与 app/worker 对齐；不要求 Nginx 与应用同 image digest。无 shell 镜像只使用[部署指南 §5.1](../../versions/v2.0/deployment-guide-v2.md#51-gate-4-无-shell-运行镜像与制品验收)的 Node exec-form，不使用 pnpm/npx/sh 包装或在线补装工具。
@@ -698,7 +699,8 @@ EXTERNAL_SYSTEM_AUTHORIZATION=NONE（每步另行下发；此方案不是执行�
 - 浏览器使用 Chrome/Edge × 桌面 100%/125%，司机 H5 360×800、390×844；只得到等效布局时如实记 WARN，不冒充原生缩放。75% 默认布局改动已撤回，不再加入本轮。
 - 构建/扫描/SQL 已验收证据可以按同 digest 复用，但部署前要核验时效及新披露；若身份、漏洞有效性或真实配置发生变化，回到 G4-4，不边部署边更换镜像。
 - 精确远端路径、资源范围、备份/恢复点、维护窗口、责任人、测试数据和观察阈值尚需 T0 后冻结；任一未填写不得进入相应写入阶段。异常只执行预先批准且数据库兼容的应用回退；数据库恢复/rollback、停依赖故障演练、清理证据均另行授权，禁止删除 outbox 或业务事实绕过保护。
-- 本轮文档同步与提交获批，**G4-5 T0 外部只读复核及 T1～T6 执行均未授权**。最先下发的应是 T0 只读任务；获得结果后再批准实际备份/迁移/部署，不把本节作为可直接执行的空白授权书。
+- 当前 T0 已取得：ECS/RDS/Tair/网络/旧运行身份、9 条 migration、outbox 与 ACL 证据；app ACL 返修独立复核通过。仍缺 SLS 当前态、RDS 当前恢复点/时间窗和 owner 长期凭证关闭或轮换证据，故 T0 不得判 PASS。
+- 本轮文档同步获批，Git 提交未授权；**T1～T6 执行均未授权**。先补齐 T0 三项证据，再批准实际备份/迁移/部署，不把本节作为可直接执行的空白授权书。
 
 ## 9. 并行开发纪律
 
@@ -839,7 +841,7 @@ EXTERNAL_SYSTEM_AUTHORIZATION=NONE（每步另行下发；此方案不是执行�
 - 后续追加发现 ETA Top-8 仍会裁掉本轮 A 槽新生成的 delivery cursor，导致可连续进入 B 的订单误报 `ETA_UNAVAILABLE`；已恢复计划池全部 delivery→pickup 必要组合，并补 `buildEtaMatrix()` → `runDispatchV2()` A/B 串联回归。
 - G3-3 本地开发已闭环：司机类事件按受影响门店加载全部活动司机参与比较；相同逻辑计划重试不回收/重建 Assignment 或递增 `planVersion`；outbox 只有持有当前租约的 worker 才计为处理成功；锁忙、Redis 不可用降级、过期快照重算均有独立编排测试。
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
-- 当前工作阶段：Gate 4 `IN_PROGRESS`，G4-1～G4-4 已通过；新远端 RC `4d370d6…@sha256:508dea…453d` 已获主控 PASS。G4-5 `ENTRY_READY / T0_NOT_STARTED / EXECUTION_AUTHORIZATION_PENDING`；三个旧 RC 继续拒绝，最近预生产记录仍为 Gate 3 与 9 条 migration，实际现状必须新 T0 重验。
+- 当前工作阶段：Gate 4 `IN_PROGRESS`，G4-1～G4-4 已通过；新远端 RC `4d370d6…@sha256:508dea…453d` 已获主控 PASS。G4-5 `T0_IN_PROGRESS / PARTIAL_PASS / T1_BLOCKED`；三个旧 RC 继续拒绝，预生产仍运行 Gate 3 与 9 条 migration。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
-- 当前执行限制：本轮只批准 5 份治理文档同步及本地提交，不推送；不得更改代码/API/Schema/SQL、运行容器、秘密、真实数据或云资源。APP-006 和部署指南技术权威不变；新远端验收已完成，不再重复申请构建，旧 G4-5 部署授权仍不能继承。
-- 下一动作：完成 R57 五文档本地提交并下发完整文档 SHA；按 §8.4.3 单独授权 G4-5 T0 外部只读复核，依据实际结果冻结资源路径、备份/回退、维护窗口、责任人与测试范围，再逐步授权准备 → migration → app → 单 worker → Nginx → 真实联调。
+- 当前执行限制：本轮只批准 5 份治理文档同步，不授权 Git 提交或推送；不得更改代码/API/Schema/SQL、运行容器、秘密、真实数据或云资源。APP-006 和部署指南技术权威不变；旧 G4-5 部署授权仍不能继承。
+- 下一动作：补齐 SLS 当前规则/执行、RDS 当前恢复点与可恢复时间窗、owner 长期凭证关闭或轮换证据；T0 主控 PASS 后再冻结资源路径、备份/回退、维护窗口、责任人与测试范围，并逐步授权准备 → migration → app → 单 worker → Nginx → 真实联调。
