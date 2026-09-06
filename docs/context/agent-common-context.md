@@ -1,7 +1,7 @@
 # 人车单 V2 Agent 公共上下文（Layer 0）
 
 > 文档类型：`DERIVED / LAYER_0`
-> 上下文版本：`RCD-AGENT-CONTEXT-20260906-R60`
+> 上下文版本：`RCD-AGENT-CONTEXT-20260907-R61`
 > 适用范围：所有新建或重新启动的 Agent
 > 权威范围：仅提供项目目标、当前阶段、公共纪律、模块边界和命令入口
 > 非权威范围：产品行为、Schema、HTTP DTO、枚举、基础设施细节和任务验收标准
@@ -12,7 +12,7 @@
 
 人车单调度系统 V2 面向汽车租赁调度，主线是订单接入、实时位置、司机班次、A/B/C 工单时间轴、真实 ETA、调度事务和执行闭环。
 
-Gate 3、第二轮、P2 与 3A/3B 已退出，G4-1～G4-4 保持 PASS。G4-5 T0 已 `PASS`：资源、网络、旧运行身份、9 条 migration、逐表权限、owner `NOLOGIN`、SLS 通知链路及 RDS 恢复点均已核验；最新可用全量自动备份 ID 为 `3149081194`，完成于 `2026-09-06T07:06:43Z`，当前 PITR 窗口为 `2026-08-31T07:07:02Z .. 2026-09-06T09:24:50Z`。新 RC 尚未部署，Gate 4 总闸门仍 `IN_PROGRESS`；T1-A 参数尚未冻结且未获授权。本轮只同步 5 份治理文档，不提交、推送、迁移或部署。
+Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。G4-5 已按 migration → app → 单 worker → Nginx 完成预生产部署、T5 联调和 T6 独立审计；`4d370d6…@sha256:508dea…453d` 正在运行，预生产为 10 条 migration，真实依赖、HTTPS、SLS、单 worker、outbox、恢复与最小权限通过，未决 P0/P1 为 0。app/worker/Nginx 实际切换超过维护窗口且 migration 绝对时间未保留，主控仅针对本次部署批准一次性非阻断例外，裁决 `G4_5=FINAL_PASS_WITH_CONTROLLER_EXCEPTION / GATE_4=PASS`。本轮只提交 5 份治理文档，不推送或操作云资源。
 
 ## 2. 当前版本与闸门
 
@@ -25,24 +25,24 @@ Gate 3、第二轮、P2 与 3A/3B 已退出，G4-1～G4-4 保持 PASS。G4-5 T0 
 | Gate 3→develop | 交接分支 `b853a7af245942758de1cd46c9a25c384c08ec62`；代码交接合并点 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`，本地/upstream/GitHub 远程一致 |
 | 第二轮与 P2 退出基线 | 2A/2B/2C 代码树锚点 `46813c3ecf4a0df1eaf99bfb3d8d72f7d450193b`；P2 候选 `0e354696…` 已合入 `develop @ 5c2760cea40b975b24d5d2201333ab5048ce1cf0`，合并父提交为 `78a708f…` 与 `0e354696…` |
 | Gate 4 当前代码 | `feature/v2-stabilization @ 4d370d664c3710a4a03cb1b665cfdeddc7d32778`；应用 tree `5188c0efcb96d646a9609b7c47dd624d578841ee`；远端 RC 验收文档/源码可追溯后继为 `7b6a2f472fe089b0a3dddf136b6f71f3b4a7e4f6`，不作为 OCI revision |
-| 数据库实施 | 预生产仍为 9 条 migration，第 10 条未执行；app ACL 已补齐 `OrderServicePlan INSERT/SELECT/UPDATE`，worker 仍零 DB 权限。`rcd_v2_preprod_owner.rolcanlogin=false` 已复核，既有密码状态不改变 `NOLOGIN` 阻断登录的事实；禁止重复 bootstrap 或清理 |
+| 数据库实施 | 预生产已由 9 条增至 10 条 migration，outbox CHECK 精确允许 17 种事件；app ACL 含 `OrderServicePlan INSERT/SELECT/UPDATE`，worker 零 DB 权限。`rcd_v2_preprod_owner.rolcanlogin=false` 保持；migration 绝对时间缺失已获一次性非阻断裁决，禁止重跑、改元数据或重开 owner 补证 |
 | Gate 3 历史验收状态 | `DEPLOYED / REAL_E2E_PASS / FAULT_ROLLBACK_PASS / FINAL_CONSISTENCY_RUNTIME_PASS`：代码、镜像、运行资源、真实 10 单和故障/回退证据一致，不适用于 Gate 4 新候选 |
 | Gate 3 运行镜像（最近记录） | app/worker 为 `958afca…` → `sha256:13e0…5bff`；Nginx release revision 对齐；更早运行/回退候选继续保留，不得混用；当前健康须在下一轮重新核验 |
 | 基础设施 | 阿里云主线；ECS 上 app/worker/Nginx、自签名 HTTPS、结构化日志、`json-file` 轮转与 LoongCollector `3.2.6` 已验收；SLS 运行/安全日志、查询、脱敏、30/180 天留存、告警、通知和预算通过；正式域名/备案/可信证书延后 |
 | Gate 3 | `PASS`（2026-08-11 最终裁决） |
-| Gate 4 子闸门 | `G4_1_TO_G4_4_PASS / G4_5_T0_PASS / T1_A_TO_T6_NOT_AUTHORIZED`；Gate 4 总闸门仍为 `IN_PROGRESS` |
+| Gate 4 子闸门 | `G4_1_TO_G4_4_PASS / G4_5_FINAL_PASS_WITH_CONTROLLER_EXCEPTION`；Gate 4 总闸门 `PASS` |
 | Gate 4 镜像 | 已验收远端 index `sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d`；完整 amd64/config 与扫描证据见状态总览；三个旧 RC `4102ee1… / a0c8bbd… / 857705e…` 继续 `REJECTED_DO_NOT_DEPLOY` |
-| Gate 4 下一步 | 本轮输入文档基线 `ee0ab9f34d46fdb07cd5d11c415e3f723fbadfe0`；本地 `develop @ 4102ee1f85f89f363aeaa42f829a9c6d535f6d31` 未合入。冻结 T1-A 的维护窗口、责任人、观察阈值、远端路径/文件白名单和测试数据范围，再申请新鲜备份与发布准备的单独授权；不继承旧部署许可 |
+| Gate 4 下一步 | 本轮输入文档基线 `8f69579d041c46e9a47b0ae0bfff746fd510a5b1`；本地 `develop @ 4102ee1f85f89f363aeaa42f829a9c6d535f6d31` 未合入。先完成 R61 治理交接；develop 合入/推送、进入 main 或正式生产发布均须另行裁决，不继承已消费部署许可 |
 | Railway | 仅历史 Demo 证据，不是生产基线 |
 
 状态变化只认 [项目状态总览](../status/README.md)；文档入口只认 [文档版本总入口](../versions/README.md)。
 
-Gate 3 运行证据和 G4-5 历史 T0/T1 记录保留：历史备份 `3143022530`，T1 因 SQL CRLF 在写库前阻断。当前 ECS 仍运行 Gate 3 `958afca…@sha256:13e0…5bff`；新 RC 仅通过 G4-4，未部署。T0 已确认 RDS/Tair 无公网、9/10 migration、outbox 0/0 与 ACL；写入阶段、Git 推送、migration、部署、故障演练或数据清理均未授权。
+Gate 3 运行证据和 G4-5 历史 T0/T1 记录保留：历史备份 `3143022530`，旧 T1 因 SQL CRLF 在写库前阻断。当前 ECS 已运行 Gate 4 `4d370d6…@sha256:508dea…453d`；app/worker/Nginx revision 对齐，第 10 条 migration 已应用，`RCD_V2_STATE_MACHINE_ENABLED=true`，RDS/Tair/高德、HTTPS、SLS 与 outbox 通过；V1 读兼容窗口未自动关闭。写入和部署授权已经消费；Git 推送、develop/main 合并、故障演练、数据库回退或数据清理均未授权。
 
 - G4-2：RDS/Tair 无公网入口；ECS 仅 80/443 公网开放，SSH 受限；自签名证书有效至 2026-10-06，仅代表预生产公网 IP 演示通过。SLS `runtime/security` 30/180 天留存与正式规则当前态已复核；临时规则 `g45-notify-test-20260906` 已触发负责人通知并关闭，未改变正式查询或阈值。
 - G4-3：2026-08-30 全量快照恢复点可用；隔离恢复库完成 9→10 Forward 与 10→9 rollback，checksum、DDL 恢复和业务行数不变通过，源预生产库零写入。
 - G4-4：新远端 RC `PASS`，只针对固定 digest、R55 库及验收时点库的 Critical/High 与已登记秘密扫描，不表示所有等级或未来漏洞为零。[APP-006](../versions/v2.0/application-decision-log.md#app-006gate-4-运行镜像与传递依赖安全返修例外)与[部署指南 §5.1](../versions/v2.0/deployment-guide-v2.md#51-gate-4-无-shell-运行镜像与制品验收)继续定义技术边界；其 R56 历史状态由本轮状态总览更新，不改平台架构。
-- G4-5：`T0_PASS / T1_A_TO_T6_NOT_AUTHORIZED`；[主计划 §8.4.3](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md#843-g4-5-预生产继续联调方案t0-passt1t6-未授权)登记上下文、分工、证据与停止条件。恢复点 `3149081194` 状态 `Success`、`BackupAvailable=1`、类型 `FullBackup`、模式 `Automated`，完成时刻位于当前 PITR 窗口内；该自动备份只闭合 T0 盘点，不替代 T1-A 要求的另行批准新鲜备份。后续仍按准备/备份 → migration → app → 单 worker → Nginx → 真实联调逐闸门授权。
+- G4-5：`FINAL_PASS_WITH_CONTROLLER_EXCEPTION`；[主计划 §8.4.3](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md#843-g4-5-预生产继续联调方案t6-pass_with_controller_exceptiongate-4-pass)登记最终证据与边界。维护窗口原定 `18:00–20:00 +08:00`，app/worker/Nginx 实际在 `21:13/21:29/21:47` 切换，migration 绝对时间未知；一次性例外不改变以后发布要求。恢复点 `3149081194`、配置备份和兼容回退镜像有效，未使用回退。
 
 ## 3. 公共模块边界
 
