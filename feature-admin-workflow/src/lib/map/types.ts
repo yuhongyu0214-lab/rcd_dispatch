@@ -79,10 +79,14 @@ export type MapBoardSummary = {
 };
 
 export type MapBoardPayload = {
+  /** 所有可见订单（含无坐标），用于侧边栏列表 */
+  allOrders: OrderDisplayDTO[];
   orders: MapOrderPoint[];
   drivers: MapDriverPoint[];
   vehicles: MapVehiclePoint[];
   stores: MapStorePoint[];
   summary: MapBoardSummary;
+  /** 动态地图中心：从第一个有 GPS 的车辆计算，回退到 DEFAULT_MAP_CENTER */
+  mapCenter: { lat: number; lng: number };
   generatedAt: string;
 };

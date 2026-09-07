@@ -20,6 +20,7 @@ export type CurrentUser = {
 
 export async function findUserForLogin(account: string) {
   const normalizedAccount = account.trim().toLowerCase();
+
   const where = normalizedAccount.includes("@")
     ? { email: normalizedAccount }
     : { phone: normalizedAccount };
@@ -39,7 +40,7 @@ export async function findUserForLogin(account: string) {
 
 async function readSessionPayload(): Promise<AuthSession | null> {
   try {
-    const token = cookies().get(AUTH_SESSION_COOKIE_NAME)?.value;
+    const token = (await cookies()).get(AUTH_SESSION_COOKIE_NAME)?.value;
 
     if (!token) {
       return null;
@@ -90,10 +91,6 @@ export async function requireAdminPage(nextPath: string) {
   return currentUser;
 }
 
-/**
- * 保护司机端页面：未登录跳转登录页，无 driverId 跳转首页。
- * 与 requireAdminPage 对称，但检查的是 driverId 而非 admin role。
- */
 export async function requireDriverPage() {
   const currentUser = await getCurrentUser();
 

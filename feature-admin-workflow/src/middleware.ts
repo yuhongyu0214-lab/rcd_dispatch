@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { fail } from "@/lib/api-response";
+import {
+  buildV1WriteGoneCorsHeaders,
+  buildV1WriteGoneMessage,
+  findV1WriteGuardMatch,
+  isV2StateMachineEnabled
+} from "@/lib/compatibility/v1-write-guard";
+import { getOrCreateTraceId } from "@/lib/observability-v2/trace";
+
 /**
  * 全链路 Trace ID 中间件
  *
@@ -15,15 +24,36 @@ import type { NextRequest } from "next/server";
  * - api-response 保证响应体 JSON 内也包含 traceId
  */
 export function middleware(request: NextRequest) {
-  const traceId =
-    request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
+  const traceId = getOrCreateTraceId(request.headers);
+  const v1WriteMatch = findV1WriteGuardMatch(
+    request.method,
+    request.nextUrl.pathname
+  );
+
+  if (
+    isV2StateMachineEnabled(process.env.RCD_V2_STATE_MACHINE_ENABLED) &&
+    v1WriteMatch
+  ) {
+    return fail(buildV1WriteGoneMessage(v1WriteMatch), {
+      status: 410,
+      traceId,
+      headers: {
+        "Cache-Control": "no-store",
+        ...buildV1WriteGoneCorsHeaders(
+          v1WriteMatch,
+          request.headers.get("Origin"),
+          process.env.CORS_ORIGINS
+        )
+      }
+    });
+  }
 
   // 构造新 Headers，注入 X-Trace-Id 供下游路由读取
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("X-Trace-Id", traceId);
 
   const response = NextResponse.next({
-    request: { headers: requestHeaders },
+    request: { headers: requestHeaders }
   });
 
   // 设置响应头（与 api-response.ts 的 withTraceIdHeaders 互补）
@@ -33,9 +63,8 @@ export function middleware(request: NextRequest) {
 }
 
 /**
- * 拦截 API 路由 + 司机端 H5 页面。
- * API 路由需要 traceId 注入；司机端页面需要登录保护（由 requireDriverPage 兜底）。
+ * 仅拦截 API 路由，避免影响静态资源、NextAuth 页面等。
  */
 export const config = {
-  matcher: ["/api/:path*", "/driver/:path*"],
+  matcher: "/api/:path*"
 };

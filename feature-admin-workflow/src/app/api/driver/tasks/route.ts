@@ -29,26 +29,24 @@ export async function GET(request: Request) {
   const startTime = Date.now();
 
   try {
-    // ---- 1. 鉴权（JWT > Cookie > query param 回退） ----
-    const url = new URL(request.url);
-    const effectiveDriverId =
-      (await extractDriverId(request)) ??
-      url.searchParams.get("driverId")?.trim() ??
-      null;
+    // ---- 1. 鉴权 ----
+    const driverId = await extractDriverId(request);
 
-    if (!effectiveDriverId) {
-      return fail("请提供司机 ID（Authorization header、Cookie 或 query 参数）", {
+    if (!driverId) {
+      return fail("司机身份认证失败", {
         status: 401,
         traceId
       });
     }
+
+    const url = new URL(request.url);
 
     // ---- 2. 可选筛选参数 ----
     const statusFilter = url.searchParams.get("status")?.trim();
 
     // ---- 3. 校验司机存在性 ----
     const driver = await prisma.driver.findUnique({
-      where: { id: effectiveDriverId },
+      where: { id: driverId },
       include: {
         store: { select: { id: true, code: true, name: true } }
       }
@@ -67,7 +65,7 @@ export async function GET(request: Request) {
       where: {
         status: { in: orderStatusFilter },
         currentAssignment: {
-          driverId: effectiveDriverId,
+          driverId,
           status: { in: [...DRIVER_ASSIGNMENT_STATUSES] }
         }
       },
@@ -94,7 +92,7 @@ export async function GET(request: Request) {
 
     driverLog.info("driver_tasks_listed", {
       traceId,
-      driverId: effectiveDriverId,
+      driverId,
       taskCount: tasks.length,
       statusFilter: statusFilter ?? "all",
       elapsed

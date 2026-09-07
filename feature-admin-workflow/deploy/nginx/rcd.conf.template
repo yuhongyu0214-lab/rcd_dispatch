@@ -1,0 +1,78 @@
+map $http_x_trace_id $rcd_trace_id {
+  default $request_id;
+  "~^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" $http_x_trace_id;
+}
+
+log_format rcd_json escape=json
+  '{"time":"$time_iso8601",'
+  '"level":"info",'
+  '"environment":"${RCD_DEPLOYMENT_ENV}",'
+  '"service":"nginx",'
+  '"revision":"${RCD_RELEASE_REVISION}",'
+  '"traceId":"$rcd_trace_id",'
+  '"remoteAddress":"$remote_addr",'
+  '"method":"$request_method",'
+  '"path":"$uri",'
+  '"status":$status,'
+  '"requestTimeSeconds":$request_time,'
+  '"bytesSent":$body_bytes_sent,'
+  '"msg":"nginx_access"}';
+
+upstream rcd_app {
+  server app:3000;
+  keepalive 32;
+}
+
+server {
+  listen 80 default_server;
+  server_name ${RCD_SERVER_NAME};
+  return 308 https://$server_name$request_uri;
+}
+
+server {
+  listen 443 ssl default_server;
+  http2 on;
+  server_name ${RCD_SERVER_NAME};
+
+  ssl_certificate /etc/nginx/tls/tls.crt;
+  ssl_certificate_key /etc/nginx/tls/tls.key;
+  ssl_protocols TLSv1.2 TLSv1.3;
+
+  access_log /dev/stdout rcd_json;
+  error_log /dev/stderr warn;
+
+  client_max_body_size 10m;
+  proxy_connect_timeout 5s;
+  proxy_read_timeout 60s;
+  proxy_send_timeout 60s;
+
+  add_header Strict-Transport-Security "max-age=31536000" always;
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+  location = /api/v2/system/dispatch-events/process {
+    return 404;
+  }
+
+  location = /api/v2/ingest/orders {
+    client_max_body_size 1m;
+    proxy_pass http://rcd_app;
+    proxy_http_version 1.1;
+    proxy_set_header Host $server_name;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Trace-Id $rcd_trace_id;
+  }
+
+  location / {
+    proxy_pass http://rcd_app;
+    proxy_http_version 1.1;
+    proxy_set_header Host $server_name;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Trace-Id $rcd_trace_id;
+    proxy_hide_header X-Powered-By;
+  }
+}

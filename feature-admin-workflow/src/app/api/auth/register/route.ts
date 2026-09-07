@@ -1,5 +1,6 @@
 import { fail, ok } from "@/lib/api-response";
 import { hashPassword } from "@/lib/auth/password";
+import { isPublicAdminRegistrationEnabled } from "@/lib/auth/public-registration";
 import { isAdminRole } from "@/lib/auth/roles";
 import { prisma } from "@/lib/prisma";
 
@@ -9,6 +10,10 @@ function normalizePhoneAccount(account: string) {
 
 export async function POST(request: Request) {
   const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
+
+  if (!isPublicAdminRegistrationEnabled()) {
+    return fail("公开注册已关闭", { status: 403, traceId });
+  }
 
   try {
     const body = (await request.json()) as {
@@ -102,7 +107,8 @@ export async function POST(request: Request) {
 
     return ok(user, { status: 201, traceId });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "注册失败，请稍后重试";
+    const message =
+      error instanceof Error ? error.message : "注册失败，请稍后重试";
 
     return fail(message, { status: 500, traceId });
   }

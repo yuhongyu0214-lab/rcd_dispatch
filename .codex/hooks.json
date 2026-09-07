@@ -1,0 +1,18 @@
+{
+  "description": "人车单 V2：每个主对话回合结束前提示用户是否同步项目文档。",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/end-turn-doc-reminder.mjs\"",
+            "commandWindows": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$root = git rev-parse --show-toplevel; node (Join-Path $root '.codex\\hooks\\end-turn-doc-reminder.mjs')\"",
+            "timeout": 10,
+            "statusMessage": "Preparing project-document reminder"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -7,10 +7,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "worker:dispatch-events": "node scripts/dispatch-event-worker.mjs",
+    "lint": "eslint .",
     "test": "vitest run",
-    "demo:reset": "dotenv -e .env.local -- node scripts/reset-demo-data.js",
-    "demo:reset:apply": "dotenv -e .env.local -- node scripts/reset-demo-data.js --apply",
     "db:migrate": "dotenv -e .env.local -- prisma migrate dev --name data_model_core",
     "db:seed": "dotenv -e .env.local -- prisma db seed",
     "db:studio": "dotenv -e .env.local -- prisma studio"
@@ -19,28 +18,42 @@
     "@paralleldrive/cuid2": "^2.2.2",
     "@prisma/client": "^6.7.0",
     "bcrypt": "^6.0.0",
-    "next": "^14.2.30",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
     "ioredis": "^5.4.1",
-    "xlsx": "^0.18.5"
+    "next": "15.5.21",
+    "pino": "9.6.0",
+    "prisma": "^6.7.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "3.3.6",
     "@types/node": "^22.10.2",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
     "autoprefixer": "^10.4.20",
     "dotenv-cli": "^7.4.4",
-    "eslint": "^8.57.1",
-    "eslint-config-next": "^14.2.30",
-    "postcss": "^8.4.49",
+    "eslint": "9.39.5",
+    "eslint-config-next": "15.5.21",
+    "postcss": "8.5.18",
     "prettier": "^3.4.2",
-    "prisma": "^6.7.0",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.9"
+    "vitest": "3.2.6"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
+  },
+  "pnpm": {
+    "overrides": {
+      "brace-expansion@1.1.14": "1.1.17",
+      "brace-expansion@5.0.5": "5.0.8",
+      "deepmerge-ts@7.1.5": "8.0.0",
+      "nanoid@3.3.16": "3.3.18",
+      "next@15.5.21>sharp": "-",
+      "postcss": "8.5.18",
+      "tsx@4.21.0>esbuild": "0.28.1",
+      "vite": "6.4.3"
+    }
   }
 }

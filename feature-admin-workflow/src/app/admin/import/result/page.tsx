@@ -6,12 +6,13 @@ import { ImportResultView } from "../components/import-result-view";
 export default async function ImportResultPage({
   searchParams
 }: {
-  searchParams: {
+  searchParams: Promise<{
     batchId?: string;
-  };
+  }>;
 }) {
+  const resolvedSearchParams = await searchParams;
   const currentUser = await requireAdminPage(
-    `/admin/import/result${searchParams.batchId ? `?batchId=${encodeURIComponent(searchParams.batchId)}` : ""}`
+    `/admin/import/result${resolvedSearchParams.batchId ? `?batchId=${encodeURIComponent(resolvedSearchParams.batchId)}` : ""}`
   );
 
   return (
@@ -23,7 +24,7 @@ export default async function ImportResultPage({
           </div>
           <LogoutButton />
         </div>
-        <ImportResultView batchId={searchParams.batchId ?? null} />
+        <ImportResultView batchId={resolvedSearchParams.batchId ?? null} />
       </div>
     </main>
   );

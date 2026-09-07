@@ -9,9 +9,8 @@
 
   position: fixed;
   inset: 0;
-  display: grid;
+  display: block;
   overflow: hidden;
-  place-items: center;
   background: var(--bg);
   font-family: var(--font-system);
   font-variant-numeric: tabular-nums;
@@ -19,21 +18,21 @@
 
 .appShell {
   display: grid;
-  width: var(--design-w);
-  min-width: var(--design-w);
-  height: var(--design-h);
-  min-height: var(--design-h);
-  grid-template-columns: var(--rail-w) var(--work-panel-w) minmax(0, 1fr);
+  width: 100vw;
+  min-width: 0;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  grid-template-columns: var(--rail-w) minmax(360px, var(--work-panel-w)) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
   background: var(--bg);
   contain: layout paint;
-  transform: scale(var(--app-scale));
-  transform-origin: center center;
-  will-change: transform;
 }
 
 .navRail {
   display: flex;
+  min-height: 0;
   flex-direction: column;
   align-items: center;
   gap: 8px;
@@ -83,7 +82,8 @@
 .workPanel {
   display: flex;
   min-width: 0;
-  height: var(--design-h);
+  min-height: 0;
+  height: 100%;
   flex-direction: column;
   border-right: 1px solid var(--line);
   background: var(--panel);
@@ -468,8 +468,9 @@
 
 .workspace {
   display: grid;
-  min-width: var(--right-panel-min-w);
-  height: var(--design-h);
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
   grid-template-rows: var(--right-head-h) minmax(0, 1fr);
   overflow: hidden;
   background: var(--bg);

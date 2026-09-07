@@ -76,6 +76,7 @@ pnpm exec prisma validate
 
 已知限制：
 
+- 当前 schema 未提供 `driver_locations` 表，`POST /api/driver/location` 只保留接口契约和结构化日志，不写库。
 - Supabase 事务偶发出现 `Unable to start a transaction in the given time` 时，先重启本地 Next 服务释放连接池，再重试当前动作。
 
 ## 4. 高德 API 检查
@@ -230,6 +231,7 @@ Railway 部署异常时按以下顺序处理：
 | 风险 | 影响 | 处理 |
 |---|---|---|
 | Supabase 事务连接超时 | 派单、接单、完单请求可能偶发失败 | 重启本地/服务端进程释放连接池，重试当前动作 |
+| `driver_locations` 表未落地 | 司机位置上报只保留契约 | 后续 data-model 扩展表后再切为真实写库 |
 | 高德 JS Key 未配置 | 真实在线地图无法渲染 | mock 地图不阻断，真实地图验收前补 key |
 | 演示数据被多次验收改变 | 待处理订单减少或状态不匹配 | 先执行 `pnpm demo:reset` 检查，再执行 `pnpm demo:reset:apply` 恢复固定演示数据 |
 

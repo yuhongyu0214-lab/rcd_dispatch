@@ -6,28 +6,90 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 # 人车单调度系统 (RCD Dispatch)
 
-汽车租赁可视化调度平台 MVP。链路：订单导入 → 地图看板 → 推荐派单 → 调度闭环。
+汽车租赁可视化调度平台。V1 链路：订单导入 → 地图看板 → 推荐派单 → 调度闭环。当前正在向 PRD V2（实时滚动调度 + A/B/C 工单时间轴）兼容演进。
 
-## 项目架构
+## Codex Agent 启动前置上下文
 
-- **多 worktree 并行开发**，每个 `feature-*` 目录是一个独立的 git worktree，对应一个开发阶段
+任何 Codex Agent 在本项目开始新任务或恢复旧任务前，必须先完整读取 `docs/context/agent-common-context.md`，再从 `docs/versions/README.md` 的“Agent 角色上下文直接入口”进入自己的角色章节。主控下发任务时必须同时声明角色、代码基线、文档基线和文件白名单；缺少任一项时只能进行只读盘点。
+
+- 公共上下文是所有 Agent 的强制 Layer 0，不替代任何领域权威。
+- 每个 Agent 只读取自己角色章节登记的默认文档，以及主控为本轮任务追加的 Layer 2 材料。
+- Canvas `docs/rcd-v2-project-map.canvas` 提供角色入口的可视化导航，但不定义规则。
+- 状态、决策、代码基线或角色必读文档变化后，旧上下文立即失效；完成文档总入口、公共上下文和 Canvas 同步前不得启动新任务。
+
+### 文档同步确认口令
+
+项目级 `Stop` Hook 会在每个主对话回合结束时提示：`如需提交项目状态上传到文档，回复"提交并更新文档"。`
+
+只有用户明确回复“提交并更新文档”时，当前 Agent 才获得本轮文档同步授权；本项目把这次明确授权简称为 **A8 文档同步授权**。收到口令后，应先根据本轮已经确认的进展、状态和决策核对证据，再只更新实际受影响的状态文档、决策日志、文档总入口、公共上下文和 Canvas；没有发生变化的文件不得改动。
+
+每个子阶段都必须形成运行证据，但不因单个子阶段 `PASS` 默认修改治理文档或产生 Git 提交。运行证据包括命令输出、截图、traceId、镜像 digest、数据库核验和 SLS 查询等，应保存到受控验收目录、制品库或工单附件；只有阶段组完成、结论稳定且已获得 A8 时，才统一同步治理文档。发现 P0/P1 时先保存缺陷和现场证据、返修并重验，不为尚未稳定的中间状态提交治理文档。
+
+代码 RC SHA 冻结后保持不变；运行证据、治理文档提交 SHA 与代码 RC SHA 必须分别记录。A8 只授权文档同步，不授权 Git 提交或推送，也不授权数据库迁移、部署、云资源或其他外部系统变更；Git 提交仍需用户另行明确批准。若验收中途必须修改跟踪文档才能继续，应暂停并重新申请 A8。
+
+## 文档优先级（V2 生效后）
+
+文档权威**按领域拆分**（唯一口径见 `docs/versions/README.md`，此处为同一内容）：
+
+```text
+工程纪律                → 本文件（工程铁律部分）
+产品行为                → docs/versions/v2.0/prd-v2.md
+数据模型                → docs/versions/v2.0/data-architecture-v2.md
+术语与枚举              → docs/versions/v2.0/domain-glossary-v2.md
+HTTP 契约               → docs/versions/v2.0/api-contract-v2.md
+迁移与兼容              → docs/versions/v2.0/v1-v2-compatibility-matrix.md
+代码一致性与设计系统    → docs/versions/v2.0/project-rules-v2.md
+应用框架与依赖决策      → docs/versions/v2.0/application-decision-log.md
+生产基础设施架构        → docs/versions/v2.0/infrastructure-v2.md
+构建、部署与回退        → docs/versions/v2.0/deployment-guide-v2.md
+生产运行与恢复          → docs/versions/v2.0/operations-guide-v2.md
+基础设施决策与替代历史  → docs/versions/v2.0/infrastructure-decision-log.md
+```
+
+- 数据安全与不可逆操作原则高于以上一切。
+- V1 文档与本文件的 V1 阶段描述仅用于维护现有 V1 代码和历史追溯；原型与临时说明不得反向定义规则。
+- 同一事项在两份文档中冲突、且无法按领域判断归属时：暂停实现并升级裁决，不得自行取舍。
+
+## V2 开发流程（当前主线）
+
+V2 按串行闸门 + 受控并行推进，完整定义见 `docs/superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md`：
+
+```
+Gate -1 基线整理（已通过，develop @ 37ee8a3）
+→ Gate 0 文档冻结 → Gate 1 Schema 与迁移 → Gate 2 DTO/API 契约落地
+→ 第一轮并行（订单来源 / 实时位置 / 调度核心）→ Gate 3 调度事务集成
+→ 第二轮并行（Web / 司机接口 / 观测）→ 迁移与端到端验证 → Gate 4 稳定化
+```
+
+- 每个 Gate 通过验收后才能创建下一阶段分支；不得提前建分支。
+- Gate 3 当前唯一代码/ACR/预生产运行候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`；app、worker 与 Nginx release revision 已对齐，Nginx 原镜像、配置、证书和端口未变。更早运行/回退候选继续保留，不得使用 `latest` 或混用候选。
+- Gate 3、第二轮、3A/3B 与 Gate 4 已退出。Gate 4 运行证据包 `gate4-evidence-package-20260907.zip` 的 SHA-256 为 `988b134205791d56e35dbfcdd4d4758004057643385763ddf43f59270cafbcf0`；独立只读交接审计未发现 P0/P1，保留“部分外部原始证据未完整入包”的非阻断 P2。`feature/v2-stabilization @ 089bc4da56022c1b077faac474c269d269d0930b` 已经用户单独批准，以 `--no-ff` 合入本地 `develop @ 6c42f0c6448fc712bca71d9ef7d82b22a105b3ec`，合并后 test、lint、TypeScript、31/31 build、Prisma validate、部署制品专项与 diff check 全部通过。预生产继续运行代码/OCI revision `4d370d664c3710a4a03cb1b665cfdeddc7d32778` 与 index digest `sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d`；代码 RC、证据包和治理文档 SHA 必须分开。`origin/develop` 仍为 `ae4714849fa965940b0df1c6766638cf398ac0ce`；推送、进入 `main`、正式生产发布或任何外部变更均未授权。
+- V2 分支命名 `feature/v2-*`；合并路径仍为 `feature/* → develop → main`。
+- 每个分支只能修改自己的独占文件范围；Schema、公共 DTO、共享样式、logger、调度事务各有唯一所有者线。
+
+## 项目架构【工程铁律：继续有效】
+
+- **多 worktree 并行开发**，每个 `feature-*` 目录是一个独立的 git worktree
+- 正式应用代码位于 `feature-admin-workflow/`
 - 包管理器锁定 `pnpm@10.11.0`，禁止用 npm/yarn
-- API 统一响应格式：`lib/api-response.ts` 导出 `ok()` / `fail()`，含 `traceId`
+- API 统一响应格式：`lib/api-response.ts` 导出 `ok()` / `fail()`，含 `traceId`（V2 结构化 error 见 API 契约 V2）
 - 高德 API 服务端 Key 用于路径规划（ETA 计算），JS Key 用于地图前端渲染
-- 默认管理员账号：`admin@dispatch.dev` / `admin123`
+- 默认管理员账号只用于本地 seed；生产环境禁止公开注册、预填或展示演示凭据。
 
-## 技术栈（锁定）
+## 技术栈（锁定）【工程铁律：继续有效】
 
-- 全栈：Next.js 14 (App Router) + TypeScript
+- 全栈：Next.js `15.5.21`（App Router）+ React / React DOM `19.2.8` + TypeScript
 - UI：Tailwind CSS + shadcn/ui
 - 数据库：PostgreSQL + Prisma ORM（迁移用 `prisma migrate dev`，查看用 `npx prisma studio`）
 - 地图：高德 API（服务端 Key：`AMAP_SERVER_KEY`；前端 Key：`NEXT_PUBLIC_AMAP_JS_KEY`）
-- 日志：Pino（stdout 输出，Railway 采集）
+- 日志：Pino（stdout 输出），禁止 `console.log`
 - 测试：Vitest（`pnpm test`，`@` 路径别名 = `./src`）
+- 实时/短期数据用 Redis/Tair；业务事实只存 PostgreSQL
+- Excel 解析固定使用 SheetJS 官方 CDN 包 `xlsx 0.20.3`；不得回退到 npm 上长期未更新的 `xlsx 0.18.x`。
 
 ---
 
-## 全局铁律（所有阶段必须遵守）
+## 全局铁律（所有阶段必须遵守）【工程铁律：继续有效】
 
 ### 分支与合并
 
@@ -63,7 +125,9 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ---
 
-## 阶段执行顺序（固定，不可调换）
+## V1 阶段执行顺序【V1 维护流程：已被 V2 Gate 流程取代，仅用于维护 V1 存量代码】
+
+以下 1–11 阶段是 V1 的开发主线，已全部完成。V2 新功能不使用这些阶段名；修复 V1 存量 bug 时仍按原阶段的文件范围执行。
 
 ```
 1.docs-prd → 2.repo-bootstrap → 3.data-model → 4.order-import → 5.map-board
@@ -193,4 +257,4 @@ docs/              # 业务文档（仅 docs-prd 阶段修改）
 
 ### 环境变量（.env.local 必须项）
 
-`DATABASE_URL` / `SHADOW_DATABASE_URL` / `NEXTAUTH_SECRET` / `AMAP_SERVER_KEY`
+`DATABASE_URL` / `SHADOW_DATABASE_URL` / `AUTH_SESSION_SECRET` / `AMAP_SERVER_KEY`

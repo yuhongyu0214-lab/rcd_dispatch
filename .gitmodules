@@ -1,0 +1,11 @@
+[submodule "feature-data-model"]
+	path = feature-data-model
+	url = git@github.com-yuhongyu0214-lab:yuhongyu0214-lab/rcd_dispatch.git
+
+[submodule "feature-docs-prd"]
+	path = feature-docs-prd
+	url = git@github.com-yuhongyu0214-lab:yuhongyu0214-lab/rcd_dispatch.git
+
+[submodule "feature-repo-bootstrap"]
+	path = feature-repo-bootstrap
+	url = git@github.com-yuhongyu0214-lab:yuhongyu0214-lab/rcd_dispatch.git

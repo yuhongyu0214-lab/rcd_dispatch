@@ -32,42 +32,22 @@ const driverLog = createLogger("driver-workflow");
 
 export async function POST(
   request: Request,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
   const startTime = Date.now();
 
-  const orderId = context.params.id.trim();
+  const orderId = (await context.params).id.trim();
 
   if (!orderId) {
     return fail("请提供订单 ID", { status: 400, traceId });
   }
 
   // ---- 1. 鉴权 ----
-  let driverId = await extractDriverId(request);
-
-  // 兼容旧版：从请求体获取 driverId
-  if (!driverId) {
-    try {
-      const body = (await request.clone().json()) as { driverId?: string };
-      driverId = body.driverId?.trim() ?? null;
-    } catch {
-      // 忽略
-    }
-  }
+  const driverId = await extractDriverId(request);
 
   if (!driverId) {
-    // 重新读取 body（clone 已消耗，需重新 parse）
-    try {
-      const body = (await request.json()) as { driverId?: string };
-      driverId = body.driverId?.trim() ?? null;
-    } catch {
-      return fail("请提供司机 ID", { status: 401, traceId });
-    }
-  }
-
-  if (!driverId) {
-    return fail("请提供司机 ID", { status: 401, traceId });
+    return fail("司机身份认证失败", { status: 401, traceId });
   }
 
   // ---- 2. 事务执行 ----
@@ -164,11 +144,11 @@ export async function POST(
           data: { status: "S4" }
         });
 
-        // 2i. 写操作日志
+        // 2i. 写操作日志（entityType=ASSIGNMENT）
         await tx.operationLog.create({
           data: {
-            entityType: "ORDER",
-            entityId: order.id,
+            entityType: "ASSIGNMENT",
+            entityId: order.currentAssignment.id,
             action: "ACCEPT",
             operatorUserId,
             metadataJson: {

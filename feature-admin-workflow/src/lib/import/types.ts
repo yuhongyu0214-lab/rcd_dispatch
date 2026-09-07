@@ -21,7 +21,8 @@ export type ImportIssueCode =
   | "GEOCODE_FAILED"
   | "VEHICLE_TYPE_UNRECOGNIZED"
   | "VEHICLE_STORE_MISMATCH"
-  | "AMAP_KEY_MISSING";
+  | "AMAP_KEY_MISSING"
+  | "CITY_MISMATCH";
 
 export type ImportIssue = {
   rowNumber: number;

@@ -1,6 +1,11 @@
 BEGIN;
 
 DROP TABLE IF EXISTS "OperationLog";
+
+-- Break the circular Order <-> Assignment reference before dropping either table.
+ALTER TABLE IF EXISTS "Order"
+DROP CONSTRAINT IF EXISTS "Order_currentAssignmentId_fkey";
+
 DROP TABLE IF EXISTS "Assignment";
 DROP TABLE IF EXISTS "Order";
 DROP TABLE IF EXISTS "Vehicle";

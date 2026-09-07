@@ -23,13 +23,17 @@ const log = createLogger("amap");
 const AMAP_BASE_URL = "https://restapi.amap.com/v3";
 const GEOCODE_TIMEOUT_MS = 4000;
 const DRIVING_TIMEOUT_MS = 5000;
+const HEALTH_TIMEOUT_MS = 3000;
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 1000;
 
-// 请求队列并发控制（无外部依赖实现）
-const CONCURRENCY_LIMIT = 5;
-const INTERVAL_CAP = 20;
-const INTERVAL_MS = 1000;
+// Every real HTTP attempt (including retries and readiness probes) passes
+// through this process-wide limiter. Gate 3 preproduction runs one app
+// process, so spacing request starts is sufficient to keep the account at
+// the approved safe ceiling without adding another infrastructure dependency.
+const AMAP_REQUESTS_PER_SECOND = 3;
+const REQUEST_START_INTERVAL_MS = Math.ceil(1000 / AMAP_REQUESTS_PER_SECOND);
+const CONCURRENCY_LIMIT = 3;
 
 // ============================================================================
 // 类型定义
@@ -111,9 +115,8 @@ interface QueueItem<T> {
 class AmapRequestQueue {
   private pending: QueueItem<unknown>[] = [];
   private activeCount = 0;
-  private intervalCount = 0;
-  private intervalStart = Date.now();
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private nextStartAt = 0;
+  private timer: ReturnType<typeof setTimeout> | null = null;
 
   get concurrency(): number {
     return this.activeCount;
@@ -126,51 +129,67 @@ class AmapRequestQueue {
     });
   }
 
+  resetForTests(): void {
+    if (this.pending.length > 0 || this.activeCount > 0) return;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    this.nextStartAt = 0;
+  }
+
   private flush(): void {
-    while (this.pending.length > 0 && this.activeCount < CONCURRENCY_LIMIT) {
-      // 检查 interval cap
-      if (this.intervalCount >= INTERVAL_CAP) {
-        const elapsed = Date.now() - this.intervalStart;
-        if (elapsed < INTERVAL_MS) {
-          // 等待下一个 interval 窗口
-          if (!this.timer) {
-            this.timer = setTimeout(() => {
-              this.timer = null;
-              this.intervalCount = 0;
-              this.intervalStart = Date.now();
-              this.flush();
-            }, INTERVAL_MS - elapsed);
-          }
-          return;
-        }
-        // 新窗口开始
-        this.intervalCount = 0;
-        this.intervalStart = Date.now();
-      }
-
-      const item = this.pending.shift();
-      if (!item) break;
-
-      this.activeCount += 1;
-      this.intervalCount += 1;
-
-      item
-        .fn()
-        .then((result) => {
-          item.resolve(result);
-        })
-        .catch((err) => {
-          item.reject(err);
-        })
-        .finally(() => {
-          this.activeCount -= 1;
-          this.flush();
-        });
+    if (this.pending.length === 0 || this.activeCount >= CONCURRENCY_LIMIT) {
+      return;
     }
+
+    const now = Date.now();
+    const waitMs = Math.max(0, this.nextStartAt - now);
+    if (waitMs > 0) {
+      if (!this.timer) {
+        this.timer = setTimeout(() => {
+          this.timer = null;
+          this.flush();
+        }, waitMs);
+      }
+      return;
+    }
+
+    const item = this.pending.shift();
+    if (!item) return;
+
+    this.activeCount += 1;
+    this.nextStartAt = Math.max(this.nextStartAt, now) + REQUEST_START_INTERVAL_MS;
+
+    Promise.resolve()
+      .then(item.fn)
+      .then(item.resolve, item.reject)
+      .finally(() => {
+        this.activeCount -= 1;
+        this.flush();
+      });
+
+    // Schedule the next start independently of the current request's latency.
+    this.flush();
   }
 }
 
 const requestQueue = new AmapRequestQueue();
+
+/**
+ * Run one real AMap Web Service HTTP attempt through the process-wide limiter.
+ * All modules that use AMAP_SERVER_KEY must enter through this function so
+ * route planning, readiness and geocoding share the same 3 QPS budget.
+ */
+export function scheduleAmapServerRequest<T>(
+  request: () => Promise<T>
+): Promise<T> {
+  return requestQueue.enqueue(request);
+}
+
+/** Test isolation only; production callers must not reset the limiter. */
+export function __resetAmapRateLimiterForTests(): void {
+  if (process.env.NODE_ENV !== "test") return;
+  requestQueue.resetForTests();
+}
 
 // ============================================================================
 // 工具函数
@@ -212,12 +231,14 @@ function getRetryDelay(attempt: number): number {
  * 判断错误是否应重试
  */
 function shouldRetry(status: number | undefined, infocode: string | undefined): boolean {
-  // 网络错误（无 status）可重试
-  if (status === undefined) return true;
+  // 网络错误（HTTP status 和高德 infocode 均缺失）可重试。
+  // 明确的高德业务错误（例如配额耗尽）不得误判为网络故障。
+  if (status === undefined && infocode === undefined) return true;
   // 5xx 可重试
-  if (status >= 500 && status < 600) return true;
-  // 高德服务端内部错误可重试
-  if (infocode === "30000") return true;
+  if (status !== undefined && status >= 500 && status < 600) return true;
+  // Transient service/QPS errors may recover after bounded backoff. Explicit
+  // daily quota and key errors (for example 10003) still fail immediately.
+  if (infocode === "10021" || infocode === "30000") return true;
   return false;
 }
 
@@ -254,16 +275,26 @@ async function fetchAmapApi<T>(
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
 
-    const { signal, cleanup } = withTimeoutSignal(timeoutMs);
-
     try {
-      const response = await fetch(url, {
-        method: "GET",
-        signal,
-        cache: "no-store"
+      const { response, payload } = await scheduleAmapServerRequest(async () => {
+        const { signal, cleanup } = withTimeoutSignal(timeoutMs);
+        try {
+          const response = await fetch(url, {
+            method: "GET",
+            signal,
+            cache: "no-store"
+          });
+          const payload = response.ok
+            ? ((await response.json()) as {
+                status?: string;
+                infocode?: string;
+              })
+            : undefined;
+          return { response, payload };
+        } finally {
+          cleanup();
+        }
       });
-
-      cleanup();
 
       if (!response.ok) {
         const err = new Error(`AMAP_HTTP_${response.status}`);
@@ -274,14 +305,9 @@ async function fetchAmapApi<T>(
         continue;
       }
 
-      const payload = (await response.json()) as {
-        status?: string;
-        infocode?: string;
-      };
-
-      if (payload.status !== "1") {
-        const err = new Error(`AMAP_API_ERROR_${payload.infocode ?? "UNKNOWN"}`);
-        if (!shouldRetry(undefined, payload.infocode)) {
+      if (payload?.status !== "1") {
+        const err = new Error(`AMAP_API_ERROR_${payload?.infocode ?? "UNKNOWN"}`);
+        if (!shouldRetry(undefined, payload?.infocode)) {
           throw err;
         }
         lastError = err;
@@ -290,8 +316,6 @@ async function fetchAmapApi<T>(
 
       return payload as T;
     } catch (err) {
-      cleanup();
-
       // AbortError（超时）可重试
       if (err instanceof DOMException && err.name === "AbortError") {
         lastError = new Error("AMAP_TIMEOUT");
@@ -314,6 +338,50 @@ async function fetchAmapApi<T>(
     retries: String(MAX_RETRIES)
   });
   throw lastError ?? new Error("AMAP_REQUEST_FAILED");
+}
+
+/**
+ * 高德 Web 服务就绪探针。
+ *
+ * 使用官方 IP 定位基础接口验证网络、Key 与服务响应，不执行路径规划，
+ * 避免 readiness 消耗驾车路线配额或产生任何业务 ETA。
+ */
+export async function amapHealthCheck(): Promise<boolean> {
+  const key = getAmapKey();
+  if (!key) return false;
+
+  const url = new URL(`${AMAP_BASE_URL}/ip`);
+  url.searchParams.set("key", key);
+  url.searchParams.set("ip", "114.247.50.2");
+
+  try {
+    const { response, payload } = await scheduleAmapServerRequest(async () => {
+      const { signal, cleanup } = withTimeoutSignal(HEALTH_TIMEOUT_MS);
+      try {
+        const response = await fetch(url, {
+          method: "GET",
+          signal,
+          cache: "no-store"
+        });
+        const payload = response.ok
+          ? ((await response.json()) as {
+              status?: string;
+              infocode?: string;
+            })
+          : undefined;
+        return { response, payload };
+      } finally {
+        cleanup();
+      }
+    });
+    if (!response.ok) return false;
+    return payload?.status === "1" && payload.infocode === "10000";
+  } catch (error) {
+    log.warn("amap_health_check_failed", {
+      reason: error instanceof Error ? error.message : String(error)
+    });
+    return false;
+  }
 }
 
 // ============================================================================
@@ -403,12 +471,10 @@ export async function geocode(
   }
 
   try {
-    const result = await requestQueue.enqueue(() =>
-      fetchAmapApi<AmapGeocodeResponse>(
-        "/geocode/geo",
-        params,
-        GEOCODE_TIMEOUT_MS
-      )
+    const result = await fetchAmapApi<AmapGeocodeResponse>(
+      "/geocode/geo",
+      params,
+      GEOCODE_TIMEOUT_MS
     );
 
     const geocode = result.geocodes?.[0];
@@ -510,39 +576,37 @@ export async function drivingRoute(
   origin: LatLng,
   dest: LatLng
 ): Promise<DrivingRouteResult> {
-  return requestQueue.enqueue(async () => {
-    const result = await fetchAmapApi<AmapDrivingResponse>(
-      "/direction/driving",
-      {
-        origin: formatCoordinate(origin),
-        destination: formatCoordinate(dest),
-        strategy: "0" // 速度优先
-      },
-      DRIVING_TIMEOUT_MS
-    );
+  const result = await fetchAmapApi<AmapDrivingResponse>(
+    "/direction/driving",
+    {
+      origin: formatCoordinate(origin),
+      destination: formatCoordinate(dest),
+      strategy: "0" // 速度优先
+    },
+    DRIVING_TIMEOUT_MS
+  );
 
-    const path = result.route?.paths?.[0];
-    if (!path) {
-      throw new Error("AMAP_NO_ROUTE_FOUND");
-    }
+  const path = result.route?.paths?.[0];
+  if (!path) {
+    throw new Error("AMAP_NO_ROUTE_FOUND");
+  }
 
-    const distance = Number(path.distance);
-    const duration = Number(path.duration);
+  const distance = Number(path.distance);
+  const duration = Number(path.duration);
 
-    if (!Number.isFinite(distance) || !Number.isFinite(duration)) {
-      throw new Error("AMAP_INVALID_ROUTE_DATA");
-    }
+  if (!Number.isFinite(distance) || !Number.isFinite(duration)) {
+    throw new Error("AMAP_INVALID_ROUTE_DATA");
+  }
 
-    return {
-      distance,
-      duration,
-      steps: path.steps?.map((step) => ({
-        instruction: step.instruction,
-        road: step.road,
-        distance: Number(step.distance)
-      }))
-    };
-  });
+  return {
+    distance,
+    duration,
+    steps: path.steps?.map((step) => ({
+      instruction: step.instruction,
+      road: step.road,
+      distance: Number(step.distance)
+    }))
+  };
 }
 
 // ============================================================================

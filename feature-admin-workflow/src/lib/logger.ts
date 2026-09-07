@@ -1,6 +1,6 @@
-export type LogPayload = Record<string, string | number | boolean | null | undefined>;
+import pino from "pino";
 
-type LogLevel = "info" | "warn" | "error";
+export type LogPayload = Record<string, unknown>;
 
 function normalizePayload(payload: LogPayload) {
   return Object.fromEntries(
@@ -8,28 +8,32 @@ function normalizePayload(payload: LogPayload) {
   );
 }
 
-function writeLog(level: LogLevel, scope: string, message: string, payload: LogPayload = {}) {
-  const line = JSON.stringify({
-    level,
-    scope,
-    message,
-    ...normalizePayload(payload),
-    timestamp: new Date().toISOString()
-  });
-
-  process.stdout.write(`${line}\n`);
-}
+const baseLogger = pino({
+  level: process.env.LOG_LEVEL ?? "info",
+  base: {
+    environment: process.env.RCD_DEPLOYMENT_ENV ?? "local",
+    service: "app",
+    revision: process.env.RCD_RELEASE_REVISION ?? "development"
+  },
+  formatters: {
+    level(label) {
+      return { level: label };
+    }
+  },
+  timestamp: pino.stdTimeFunctions.isoTime
+});
 
 export function createLogger(scope: string) {
+  const scopedLogger = baseLogger.child({ scope });
   return {
     info(message: string, payload: LogPayload = {}) {
-      writeLog("info", scope, message, payload);
+      scopedLogger.info(normalizePayload(payload), message);
     },
     warn(message: string, payload: LogPayload = {}) {
-      writeLog("warn", scope, message, payload);
+      scopedLogger.warn(normalizePayload(payload), message);
     },
     error(message: string, payload: LogPayload = {}) {
-      writeLog("error", scope, message, payload);
+      scopedLogger.error(normalizePayload(payload), message);
     }
   };
 }

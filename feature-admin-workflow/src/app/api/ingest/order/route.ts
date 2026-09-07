@@ -2,16 +2,24 @@ import type { OrderType } from "@/types";
 import { fail, ok } from "@/lib/api-response";
 import { prisma } from "@/lib/prisma";
 import { createLogger } from "@/lib/logger";
+import { geocodeAddress } from "@/lib/import/services/geocode";
+import {
+  buildGeocodeAddress,
+  isValidCoordinate,
+  mapOrderStatusRaw,
+  mapOrderTypeRaw,
+  validateRequiredCity,
+} from "@/lib/ingest/normalize";
 
 const ingestLog = createLogger("order-ingest");
 
 /**
- * 浏览器插件 JSON 入单接口
+ * 统一 JSON 入单接口
  *
  * POST /api/ingest/order
  * Header: X-Ingest-Key: <your_ingest_key>
  *
- * 浏览器插件抓取外部平台订单后 POST JSON 直接写入 RDS。
+ * 接收浏览器插件/RDS 的标准化订单数据，外部原始字段经映射后写入 RDS。
  * 不需要登录态，通过 Ingest Key 做轻量鉴权。
  */
 export async function POST(request: Request) {
@@ -28,8 +36,7 @@ export async function POST(request: Request) {
 
     // 必填字段校验
     const required = [
-      "orderNo", "type", "storeCode", "pickupAddress",
-      "returnAddress", "scheduledAt"
+      "orderNo", "pickupAddress", "returnAddress", "scheduledAt"
     ] as const;
 
     const missing = required.filter((f) => !body[f]);
@@ -39,28 +46,52 @@ export async function POST(request: Request) {
       });
     }
 
-    const orderType = body.type as OrderType;
-    const validTypes: OrderType[] = [
-      "STORE_PICKUP", "STORE_RETURN", "DOOR_DELIVERY", "DOOR_PICKUP"
-    ];
-    if (!validTypes.includes(orderType)) {
-      return fail(`无效订单类型: ${validTypes.join("/")}`, {
-        status: 400, traceId
-      });
+    // ── 订单类型映射：优先从外部原始文本映射，回退到直接传系统枚举 ──
+    let orderType: OrderType;
+    const mappedType = mapOrderTypeRaw(body.orderTypeRaw);
+    if (mappedType) {
+      orderType = mappedType;
+    } else if (body.type) {
+      const validTypes: OrderType[] = [
+        "STORE_PICKUP", "STORE_RETURN", "DOOR_DELIVERY", "DOOR_PICKUP"
+      ];
+      if (!validTypes.includes(body.type as OrderType)) {
+        return fail(`无效订单类型: ${validTypes.join("/")}`, { status: 400, traceId });
+      }
+      orderType = body.type as OrderType;
+    } else {
+      return fail("缺少订单类型（orderTypeRaw 或 type）", { status: 400, traceId });
     }
 
-    // 查门店
-    const store = await prisma.store.findFirst({
-      where: { code: body.storeCode, isActive: true }
-    });
+    // ── 订单状态映射：优先从外部原始状态映射，回退到 PENDING ──
+    const orderStatus = mapOrderStatusRaw(body.orderStatusRaw) ?? "PENDING";
+
+    // ── 城市必填校验 ──
+    const cityCheck = validateRequiredCity(body.city);
+    if (!cityCheck.valid) {
+      return fail(cityCheck.error, { status: 400, traceId });
+    }
+    const city = cityCheck.city;
+    const province = body.province?.trim() || null;
+    const district = body.district?.trim() || null;
+
+    // ── 门店匹配（优先 storeCode 否则 storeName）──
+    let store = body.storeCode
+      ? await prisma.store.findFirst({ where: { code: body.storeCode, isActive: true } })
+      : null;
+    if (!store && body.storeName) {
+      store = await prisma.store.findFirst({
+        where: { name: { contains: body.storeName }, isActive: true }
+      });
+    }
     if (!store) {
-      return fail(`门店不存在或已停用: ${body.storeCode}`, {
+      return fail(`门店不存在或已停用: ${body.storeCode ?? body.storeName}`, {
         status: 400, traceId
       });
     }
 
-    // 去重
-    const existing = await prisma.order.findUnique({
+    // ── 去重 ──
+    const existing = await prisma.order.findFirst({
       where: { orderNo: body.orderNo },
       select: { id: true }
     });
@@ -70,38 +101,79 @@ export async function POST(request: Request) {
       });
     }
 
-    // 写入 RDS
+    // ── 地理编码（拼接省市+区县提高短地址命中率）──
+    const pickupGeoInput = buildGeocodeAddress(body.pickupAddress, { province, city, district });
+    const returnGeoInput = buildGeocodeAddress(body.returnAddress, { province, city, district });
+
+    // 坐标取值优先级：请求体显式传入(需通过校验) > 地理编码回退
+    const hasExplicitPickupCoord = isValidCoordinate(body.pickupLat, body.pickupLng);
+    const hasExplicitReturnCoord = isValidCoordinate(body.returnLat, body.returnLng);
+
+    const [pickupGeo, returnGeo] = await Promise.all([
+      hasExplicitPickupCoord
+        ? null
+        : geocodeAddress(pickupGeoInput.fullAddress, "取车地址", pickupGeoInput.cityParam || undefined),
+      hasExplicitReturnCoord
+        ? null
+        : geocodeAddress(returnGeoInput.fullAddress, "还车地址", returnGeoInput.cityParam || undefined),
+    ]);
+
+    // 显式坐标通过 isValidCoordinate 校验后才使用 FROM_SOURCE，否则从 geocode 取值
+    const pickupLat = hasExplicitPickupCoord ? Number(body.pickupLat) : (pickupGeo?.success ? pickupGeo.lat : null);
+    const pickupLng = hasExplicitPickupCoord ? Number(body.pickupLng) : (pickupGeo?.success ? pickupGeo.lng : null);
+    const returnLat = hasExplicitReturnCoord ? Number(body.returnLat) : (returnGeo?.success ? returnGeo.lat : null);
+    const returnLng = hasExplicitReturnCoord ? Number(body.returnLng) : (returnGeo?.success ? returnGeo.lng : null);
+
+    const geocodePickupStatus = hasExplicitPickupCoord
+      ? "FROM_SOURCE"
+      : (pickupGeo?.geocodeStatus ?? "FAILED");
+    const geocodeReturnStatus = hasExplicitReturnCoord
+      ? "FROM_SOURCE"
+      : (returnGeo?.geocodeStatus ?? "FAILED");
+
+    // ── 写入 RDS ──
     const order = await prisma.order.create({
       data: {
         orderNo: body.orderNo,
         type: orderType,
-        status: "PENDING",
+        status: orderStatus,
         storeId: store.id,
-        channel: body.channel ?? "BROWSER_PLUGIN",
+        channel: body.source ?? body.channel ?? "BROWSER_PLUGIN",
         driverNameSnapshot: body.driverName ?? null,
         vehicleTypeSnapshot: body.vehicleType ?? null,
         licensePlateSnapshot: body.licensePlate ?? null,
         pickupAddress: body.pickupAddress,
-        pickupLat: body.pickupLat ?? null,
-        pickupLng: body.pickupLng ?? null,
+        pickupLat,
+        pickupLng,
         returnAddress: body.returnAddress,
-        returnLat: body.returnLat ?? null,
-        returnLng: body.returnLng ?? null,
+        returnLat,
+        returnLng,
         scheduledAt: new Date(body.scheduledAt),
+        geocodePickupStatus,
+        geocodeReturnStatus,
       }
     });
 
-    ingestLog.info("插件入单成功", {
+    ingestLog.info("入单成功", {
       traceId,
       orderNo: order.orderNo,
-      storeCode: body.storeCode,
-      channel: body.channel
+      orderType,
+      orderStatus,
+      storeCode: store.code,
+      province: province ?? null,
+      city: city ?? null,
+      geocodePickupStatus,
+      geocodeReturnStatus,
+      source: body.source ?? body.channel ?? "BROWSER_PLUGIN",
     });
 
     return ok({
       id: order.id,
       orderNo: order.orderNo,
       status: order.status,
+      type: orderType,
+      geocodePickupStatus,
+      geocodeReturnStatus,
     }, { traceId });
 
   } catch (error) {
