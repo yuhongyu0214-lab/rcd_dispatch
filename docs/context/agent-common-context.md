@@ -1,7 +1,7 @@
 # 人车单 V2 Agent 公共上下文（Layer 0）
 
 > 文档类型：`DERIVED / LAYER_0`
-> 上下文版本：`RCD-AGENT-CONTEXT-20260829-R51`
+> 上下文版本：`RCD-AGENT-CONTEXT-20260907-R62`
 > 适用范围：所有新建或重新启动的 Agent
 > 权威范围：仅提供项目目标、当前阶段、公共纪律、模块边界和命令入口
 > 非权威范围：产品行为、Schema、HTTP DTO、枚举、基础设施细节和任务验收标准
@@ -12,34 +12,37 @@
 
 人车单调度系统 V2 面向汽车租赁调度，主线是订单接入、实时位置、司机班次、A/B/C 工单时间轴、真实 ETA、调度事务和执行闭环。
 
-Gate 3、第二轮与 P2 均已退出。T0 候选 `72cb11baad851f3a2fc2bf1ea6367affac679c96` 经独立审计和测试后以 `--no-ff` 合入本地 `develop @ 8ff70cccf29371229818058055d45de376eebdf7`；合入后 `812 passed / 7 expected skipped`、lint、tsc、31/31 build 和 diff check 通过。3A/3B 均为 `PASS / WARN`。5 份退出治理文档已形成来源提交 `develop @ f835302d555fc0481a37dfc388bf8e4e382a6230`，Gate 4 当前为 `PREFLIGHT / NOT_STARTED`，未推送。
+Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。G4-5 已按 migration → app → 单 worker → Nginx 完成预生产部署、T5 联调和 T6 独立审计；`4d370d6…@sha256:508dea…453d` 正在运行，预生产为 10 条 migration，真实依赖、HTTPS、SLS、单 worker、outbox、恢复与最小权限通过，未决 P0/P1 为 0。app/worker/Nginx 实际切换超过维护窗口且 migration 绝对时间未保留，主控仅针对本次部署批准一次性非阻断例外，裁决 `G4_5=FINAL_PASS_WITH_CONTROLLER_EXCEPTION / GATE_4=PASS`。最新已提交治理文档基线为 `e4f55c8e4bff50bac646679607fb8c7c4b712c6f`；本轮只同步 Gate 4 退出后的证据治理和 develop 交接纪律，不改变代码 RC 或运行环境。
 
 ## 2. 当前版本与闸门
 
 | 项目 | 当前事实 |
 |---|---|
-| 唯一代码候选 | `codex/v2-gate3-app-candidate` |
-| 本地代码 SHA | `958afca537b412fb972b6e180561a9b37022834d` |
-| 远程代码 SHA | `958afca537b412fb972b6e180561a9b37022834d`，已完成普通快进推送与远端核验 |
-| 文档基线 | Gate 3 `PASS` 内容基线 `feature/v2-gate3-review-remediation @ 464ee5d6ffdb435d76b65f9814d82e4666fd84a9`，本地/upstream/GitHub 远程一致 |
+| Gate 3 历史代码候选 | `codex/v2-gate3-app-candidate` |
+| Gate 3 历史本地 SHA | `958afca537b412fb972b6e180561a9b37022834d` |
+| Gate 3 历史远程 SHA | `958afca537b412fb972b6e180561a9b37022834d`，已完成普通快进推送与远端核验 |
+| Gate 3 历史文档基线 | `PASS` 内容基线 `feature/v2-gate3-review-remediation @ 464ee5d6ffdb435d76b65f9814d82e4666fd84a9`，本地/upstream/GitHub 远程一致 |
 | Gate 3→develop | 交接分支 `b853a7af245942758de1cd46c9a25c384c08ec62`；代码交接合并点 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`，本地/upstream/GitHub 远程一致 |
 | 第二轮与 P2 退出基线 | 2A/2B/2C 代码树锚点 `46813c3ecf4a0df1eaf99bfb3d8d72f7d450193b`；P2 候选 `0e354696…` 已合入 `develop @ 5c2760cea40b975b24d5d2201333ab5048ce1cf0`，合并父提交为 `78a708f…` 与 `0e354696…` |
-| Gate 4 筹备来源 | 本地 `develop @ f835302d555fc0481a37dfc388bf8e4e382a6230`；其应用代码树锚点为父提交 `8ff70cccf29371229818058055d45de376eebdf7`，相对父提交仅含 5 份治理文档 |
-| 数据库实施 | 空 PostgreSQL 演练已验证 9 个 migration、最终 Schema、8 个 rollback 和 5 类护栏；真实预生产已完成备份、9 个 migration、最小权限和 G3E2E R2.2 基础资料 `3/6/5/8` 核验，owner 已关闭；首轮失败样本与本轮通过/失败事实均保留，禁止重复 bootstrap 或清理 |
-| 候选状态 | `DEPLOYED / REAL_E2E_PASS / FAULT_ROLLBACK_PASS / FINAL_CONSISTENCY_RUNTIME_PASS`：代码、镜像、运行资源、真实 10 单和故障/回退证据一致 |
-| 镜像 | app/worker 运行 `958afca…` → `sha256:13e0…5bff`；Nginx 原镜像/配置/证书/端口不变且 release revision 对齐；更早运行/回退候选继续保留，不得混用 |
+| Gate 4 当前代码 | `feature/v2-stabilization @ 4d370d664c3710a4a03cb1b665cfdeddc7d32778`；应用 tree `5188c0efcb96d646a9609b7c47dd624d578841ee`；远端 RC 验收文档/源码可追溯后继为 `7b6a2f472fe089b0a3dddf136b6f71f3b4a7e4f6`，不作为 OCI revision |
+| 数据库实施 | 预生产已由 9 条增至 10 条 migration，outbox CHECK 精确允许 17 种事件；app ACL 含 `OrderServicePlan INSERT/SELECT/UPDATE`，worker 零 DB 权限。`rcd_v2_preprod_owner.rolcanlogin=false` 保持；migration 绝对时间缺失已获一次性非阻断裁决，禁止重跑、改元数据或重开 owner 补证 |
+| Gate 3 历史验收状态 | `DEPLOYED / REAL_E2E_PASS / FAULT_ROLLBACK_PASS / FINAL_CONSISTENCY_RUNTIME_PASS`：代码、镜像、运行资源、真实 10 单和故障/回退证据一致，不适用于 Gate 4 新候选 |
+| Gate 3 运行镜像（最近记录） | app/worker 为 `958afca…` → `sha256:13e0…5bff`；Nginx release revision 对齐；更早运行/回退候选继续保留，不得混用；当前健康须在下一轮重新核验 |
 | 基础设施 | 阿里云主线；ECS 上 app/worker/Nginx、自签名 HTTPS、结构化日志、`json-file` 轮转与 LoongCollector `3.2.6` 已验收；SLS 运行/安全日志、查询、脱敏、30/180 天留存、告警、通知和预算通过；正式域名/备案/可信证书延后 |
 | Gate 3 | `PASS`（2026-08-11 最终裁决） |
-| 并行验证与 Gate 4 | `3A_PASS_WARN / 3B_PASS_WARN / GATE4_PREFLIGHT / NOT_STARTED`；Edge 125% 为等效布局证据，不是原生缩放证据 |
+| Gate 4 子闸门 | `G4_1_TO_G4_4_PASS / G4_5_FINAL_PASS_WITH_CONTROLLER_EXCEPTION`；Gate 4 总闸门 `PASS` |
+| Gate 4 镜像 | 已验收远端 index `sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d`；完整 amd64/config 与扫描证据见状态总览；三个旧 RC `4102ee1… / a0c8bbd… / 857705e…` 继续 `REJECTED_DO_NOT_DEPLOY` |
+| Gate 4 下一步 | 最新已提交文档基线 `e4f55c8e4bff50bac646679607fb8c7c4b712c6f`；本地 `develop @ 4102ee1f85f89f363aeaa42f829a9c6d535f6d31` 未合入。先归档运行证据并完成只读交接审计；审计通过后仍须另行批准本地 `--no-ff` 合入及合入后全量验证。推送、进入 main 或正式生产发布均须另行裁决 |
 | Railway | 仅历史 Demo 证据，不是生产基线 |
 
 状态变化只认 [项目状态总览](../status/README.md)；文档入口只认 [文档版本总入口](../versions/README.md)。
 
-当前 Gate 3 运行候选与预生产证据保持不可变。3A/3B 临时环境、端口、fixture 和 Mock 已清理，权限不向 Gate 4 继承。Gate 4 以 `f835302…` 为筹备来源；主控必须在本次激活同步形成提交后，下发该提交的完整 SHA 作为统一代码/文档基线，之后才能创建独立任务卡、分支和 worktree。
+Gate 3 运行证据和 G4-5 历史 T0/T1 记录保留：历史备份 `3143022530`，旧 T1 因 SQL CRLF 在写库前阻断。当前 ECS 已运行 Gate 4 `4d370d6…@sha256:508dea…453d`；app/worker/Nginx revision 对齐，第 10 条 migration 已应用，`RCD_V2_STATE_MACHINE_ENABLED=true`，RDS/Tair/高德、HTTPS、SLS 与 outbox 通过；V1 读兼容窗口未自动关闭。写入和部署授权已经消费；Git 推送、develop/main 合并、故障演练、数据库回退或数据清理均未授权。
 
-- 3A：`PASS / WARN`。10 个 migration、V1/V2 映射、兼容窗口、数据核对、rollback 保护/安全回退与 Schema 零漂移通过；T0 差异未触及该域。
-- 3B：`PASS / WARN`，worktree 已对齐 `8ff70ccc…`。PRD §13 14 项、故障、数据库/API、安全、Chrome/Edge 和工程命令通过；Edge 原生 125% 受工具限制，登记为 `952×800` 等效布局，H5 两尺寸为精确视口。
-- 两线均无外部系统授权：不得连接真实 RDS/Tair/高德、预生产或云资源。HEAD/基线不一致、工作区不干净、端口/数据库身份/空库不明、需改 Schema/migration/API 契约/业务代码、需外部连接/新依赖/跨域文件、权威冲突或 rollback 需删除事实绕过保护时立即停止。
+- G4-2：RDS/Tair 无公网入口；ECS 仅 80/443 公网开放，SSH 受限；自签名证书有效至 2026-10-06，仅代表预生产公网 IP 演示通过。SLS `runtime/security` 30/180 天留存与正式规则当前态已复核；临时规则 `g45-notify-test-20260906` 已触发负责人通知并关闭，未改变正式查询或阈值。
+- G4-3：2026-08-30 全量快照恢复点可用；隔离恢复库完成 9→10 Forward 与 10→9 rollback，checksum、DDL 恢复和业务行数不变通过，源预生产库零写入。
+- G4-4：新远端 RC `PASS`，只针对固定 digest、R55 库及验收时点库的 Critical/High 与已登记秘密扫描，不表示所有等级或未来漏洞为零。[APP-006](../versions/v2.0/application-decision-log.md#app-006gate-4-运行镜像与传递依赖安全返修例外)与[部署指南 §5.1](../versions/v2.0/deployment-guide-v2.md#51-gate-4-无-shell-运行镜像与制品验收)继续定义技术边界；其 R56 历史状态由本轮状态总览更新，不改平台架构。
+- G4-5：`FINAL_PASS_WITH_CONTROLLER_EXCEPTION`；[主计划 §8.4.3](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md#843-g4-5-预生产继续联调方案t6-pass_with_controller_exceptiongate-4-pass)登记最终证据与边界。维护窗口原定 `18:00–20:00 +08:00`，app/worker/Nginx 实际在 `21:13/21:29/21:47` 切换，migration 绝对时间未知；一次性例外不改变以后发布要求。恢复点 `3149081194`、配置备份和兼容回退镜像有效，未使用回退。
 
 ## 3. 公共模块边界
 
@@ -121,7 +124,9 @@ Agent 开工前必须向主控确认：
 
 Agent 只提交本轮交付和验证证据，不自行宣布 Gate 通过。
 
-每个主对话回合结束时，项目 Hook 只提示是否需要同步文档；只有用户明确回复“提交并更新文档”后，Agent 才能按本轮事实更新相关文档。该口令不授权 Git 提交、推送或任何外部环境操作。
+每个子阶段必须保存命令输出、截图、traceId、digest、数据库与 SLS 核验等运行证据，但单项 `PASS` 不默认修改治理文档或产生 Git 提交。运行证据通常保存在受控验收目录、制品库或工单附件，不改变冻结的代码 RC SHA。
+
+只有阶段组完成、结论稳定，且用户明确回复“提交并更新文档”取得 A8 文档同步授权后，Agent 才能统一更新相关治理文档。该口令不授权 Git 提交、推送或任何外部环境操作；Git 提交仍须另行批准。若验收中途必须修改跟踪文档才能继续，应暂停并重新申请 A8。
 
 主控在阶段开始和结束时必须复核任务、进度、状态和决策。状态、决策、代码基线或任一角色必读文档发生变化时，应同步更新：
 

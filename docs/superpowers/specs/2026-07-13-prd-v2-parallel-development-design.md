@@ -1,7 +1,7 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3 已完成。Gate 3 唯一验收候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`。第二轮与 P2 已退出；T0 已以 `--no-ff` 合入本地 `develop @ 8ff70cccf29371229818058055d45de376eebdf7` 并通过合入后回归。3A、3B 均为 `PASS / WARN`，5 份退出治理文档已形成 Gate 4 筹备来源 `develop @ f835302d555fc0481a37dfc388bf8e4e382a6230`，Gate 4 为 `PREFLIGHT / NOT_STARTED`；Edge 125% 仅有等效布局证据，未伪装为原生缩放。
+> 状态：总体架构已批准；Gate -1～Gate 3、第二轮、P2、3A/3B 与 Gate 4 已完成。G4-5 已部署 `4d370d6…@sha256:508dea…453d` 并完成 T5/T6；主控以一次性维护窗口例外裁决 `FINAL_PASS_WITH_CONTROLLER_EXCEPTION`，Gate 4 `PASS`。R62 冻结子阶段证据与治理提交分层纪律；本轮只更新文档，不提交、不推送或操作外部系统。
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
@@ -595,7 +595,7 @@ flowchart TD
 
 ### 8.4 Gate 4：稳定化与发布验收
 
-当前入口状态：`PREFLIGHT / NOT_STARTED`。Gate 4 以 `f835302d555fc0481a37dfc388bf8e4e382a6230` 为筹备来源；只有本次激活同步形成可追溯提交、且主控下发该完整统一基线 SHA 后，才能创建 Gate 4 任务；不得继承 3A/3B 的数据库、端口、Mock 或浏览器 fixture 权限。
+当前状态：`PASS / G4_1_TO_G4_4_PASS / G4_5_FINAL_PASS_WITH_CONTROLLER_EXCEPTION`。分支/worktree 不变，代码/RC tag/OCI revision 为 `4d370d664c3710a4a03cb1b665cfdeddc7d32778`，应用 tree `5188c0efcb96d646a9609b7c47dd624d578841ee`；T5/T6 任务文档基线为 `8f69579d041c46e9a47b0ae0bfff746fd510a5b1`，最新已提交治理文档基线为 `e4f55c8e4bff50bac646679607fb8c7c4b712c6f`。本轮不更改代码身份、不提交、不推送、不合并 develop，也不执行外部写操作。
 
 建议分支：`feature/v2-stabilization`
 
@@ -618,6 +618,104 @@ flowchart TD
 - 数据迁移、回滚、并发和故障场景验证通过。
 - `develop` 可运行、可演示、可回滚。
 - 用户批准后才允许 `develop → main`。
+
+#### 8.4.1 Gate 4 执行快照（截至 2026-09-07）
+
+1. **T0/G4-1 `PASS`**：初始 `feature/v2-stabilization @ 4102ee1…` 与 worktree 干净；在不安装或升级依赖的前提下完成全量 test、lint、`tsc --noEmit`、build、Prisma validate 和 diff check。工程验收矩阵、正式演示脚本草案、证据复用/重验矩阵与缺陷归属已形成。
+2. **G4-2 `PASS`**：完成脱敏资源与权限盘点。ACR、ECS、RDS、Tair、SLS、Nginx、自签名证书、安全组和责任人已确认；RDS/Tair 无公网入口，数据库/Redis 无需对公网开放。SLS 告警中心与内部存储已初始化，runtime/security 分别保留 30/180 天；自签名证书已轮换至 2026-10-06，只允许预生产公网 IP 演示，不代表正式生产可信 HTTPS。
+3. **G4-3 `PASS`**：2026-08-30 全量快照恢复点可用。隔离恢复库 `rcd_v2_g43_restore_20260830` 的 9 个历史 migration 与制品 checksum 匹配；第 10 个 migration 完成 Forward 后约束正确、业务行数不变，随后 rollback 与单条 migration 元数据复位恢复到 9 个。无非预期 DDL、漂移或业务数据删除，源预生产库写入为零。
+4. **G4-4 首个 RC `REJECTED_DO_NOT_DEPLOY`**：SHA tag `4102ee1…`、index digest `sha256:5d9685…`、amd64 digest `sha256:c41161…` 可追溯，但精确 digest 扫描发现未裁决 Critical/High；该 tag/digest 作为失败证据保留，禁止覆盖、删除或部署。
+5. **G4-4 本地返修 `PASS`**：同一分支的 `5f5104f…` 与 `c3b554e…` 只修改 Dockerfile、package/lock 和部署制品测试；Node 22/Bookworm 保持，最终镜像移除完整开发依赖，GnuTLS 达到修复版本。`812 passed / 7 expected skipped`、lint、tsc、build、专项测试、app/worker/Prisma CLI 运行探针与 Trivy 0.74.0 精确扫描通过；独立审计确认未解决 P0/P1 为 0。
+6. **G4-4 历史远端 RC `REJECTED_DO_NOT_DEPLOY`**：source/tag/OCI revision `a0c8bbdc…`、index `sha256:8e671d…c541`、amd64 `sha256:de3bb4…d913`、Trivy 和 Compose 同 digest 曾通过，但随后 G4-5 T1 制品预检证明镜像内第 10 条 SQL raw checksum 是 CRLF 字节的 `4944d45a972d68d20a67708457ed733f6e00b4fbc1f72cb5acab8a05c6d1a2d7`，与 Git 制品 `ab2fd94d6d6549ee4dfcff51c744bcc76390fdff26fd26d89b928637e144759c` 不一致。该 RC 与旧 `4102ee1…` RC 都作为失败证据保留，禁止覆盖、删除或部署。
+7. **G4-5 历史尝试 `T0_PASS / T1_ARTIFACT_PREFLIGHT_FAIL / BLOCKED`**：当时 T0 确认 app/worker/Nginx 为 Gate 3 `958afca…`、真实 RDS/Tair/高德 readiness 正常、单 worker 成功、outbox pending/failed=0、预生产为 9 条 migration；RDS 全量备份 ID `3143022530`，ECS 配置备份 SHA-256 `9feec1ab82cec72dc995a10e8b06f84a5014ab81e480c1a46bae6a38ded3525b`。T1 只运行了 `--network none` 制品预检，`MIGRATION_EXECUTED=NO`、`APP/WORKER/NGINX_UPDATED=NO`、`ROLLBACK_USED=NO`；此历史记录不代表新一轮 T0 已通过。
+8. **G4-4 CRLF 本地返修 `PASS`**：`0c854224c703b3afaa18db2351d8bba3b263ad86` 只修改 `.gitattributes`、Dockerfile 和部署制品测试，不修改 migration SQL、Schema、API、依赖或业务逻辑。专项 5/5、全量 `813 passed / 7 expected skipped`、lint、tsc、31/31 build、diff check 通过；本地镜像 `sha256:9c771dd5ba19db1babdccbfc94ee804d7e29e77d4fdfa5537028af4d56e15c41` 内残余 CR=0、19/19 SQL raw checksum 与 Git 一致，独立审计 P0/P1/P2=0。该修复随后进入统一远端基线 `857705e…`。
+9. **G4-4 统一远端 RC `TRACEABILITY_PASS / SECURITY_SCAN_FAIL / REJECTED_DO_NOT_DEPLOY`**：source/tag/OCI revision 为 `857705e810172a1e53eb1355089d51a3ad8c7632`，index 为 `sha256:79c72cc67ecf718d8ddb54e562c52c325424ce55868a3d1d79a67b0de81b9823`，linux/amd64 manifest 为 `sha256:55c444089ba7986c4cef3a41f4a9f6509cd05f3d8f55d7e39c1e9c1236cee530`。10 个 migration、19/19 SQL raw checksum、残余 CR=0、Compose app/worker/migration 同 index digest 和无 `latest` 均通过。Trivy 0.74.0 报告 SHA-256 为 `5fc07d3d33d83421d46ddc66c7c7b199ca24b7cad8c44f08511429de602c038e`；2 个唯一 Critical 已裁决不适用，仍有 2 个未裁决 P0 和 10 个未裁决 P1。独立审计结论为 `FAIL`；三个历史/当前 RC 均保留且禁止覆盖、删除或部署。执行记录未包含 ECS、RDS、Tair、SLS、Nginx、业务容器或 migration 变更，本地 Docker 事件未见业务容器启动；但没有持久化首次构建前 tag 不存在的原始证明、全程不可变 shell transcript 或独立 ECS 非部署快照，这些证据限制不改变 `FAIL` 结论。
+
+10. **G4-4 本地安全返修与独立复审 `PASS`**：用户于 2026-09-03 批准 Debian 13 Distroless 例外及五文件返修，候选 `4d370d6…` 相对父提交 `c5e38e4…` 精确修改 Dockerfile、Compose、package/lock 和部署制品测试。Git 归档、index/manifest/config/OCI revision、19/19 SQL raw SHA、CR=0、非 root、bcrypt/Prisma/worker/app 探针通过；独立全量 `813 passed / 7 expected skipped`、lint、tsc、diff check 通过。固定 R55 库（2026-09-01）Critical/High=0，报告 SHA-256 `c3bf30b87438b62ff5eff978fb7d0c44f483f162a7174f10e73ce6adcdb49c21`；最后独立复审复用既有 31/31 构建日志和实际镜像，未重建。仅本地占位配置制品通过，未推送/部署；完整证据见[状态总览](../../status/README.md#gate-4-本地安全返修证据2026-09-03)，技术例外见 APP-006 和部署指南 §5.1。
+
+11. **G4-4 新远端 RC `PASS`**：2026-09-03 真实配置制品 `4d370d6…@sha256:508dea…453d` 的 source/tag/index/amd64/config/OCI 链、SQL、双库及秘密扫描全部通过，独立证据审计未决 P0/P1/P2=0。主控裁决完整 G4-4 PASS；G4-5 仅入口就绪，须按下节重新授权 T0。历史第 7 项的 T0/T1 结论不被改写或续期。
+12. **G4-5 当前 T0 `PASS / RECOVERY_POINT_EVIDENCE_PASS`**：2026-09-06 只读复核确认 ECS/RDS/Tair/网络边界、当前 Gate 3 运行身份、预生产 9 条 migration、outbox、数据库最小权限、owner `NOLOGIN` 与 SLS 通知链路；`OrderServicePlan` app ACL 经单独返修与独立复核通过。最新恢复点 `3149081194` 为 `Success / BackupAvailable=1 / FullBackup / Automated`，完成于 `2026-09-06T07:06:43Z`，落在当前 PITR 窗口 `2026-08-31T07:07:02Z .. 2026-09-06T09:24:50Z` 内。T0 因此 PASS；新 RC 未部署，T1-A～T6 未授权。
+13. **G4-5 T1-A～T6 `FINAL_PASS_WITH_CONTROLLER_EXCEPTION`**：随后按单独授权完成配置/恢复准备、9→10 migration、app、单 worker、Nginx、真实业务/依赖/SLS 联调和 T6 独立审计。运行 source/index/OCI revision 一致，10 条 migration、CHECK 17 种、最小权限、真实 readiness、HTTPS、outbox 与恢复路径通过，未决 P0/P1=0。app/worker/Nginx 于维护窗口结束后切换，migration 绝对时间未知；主控保留原时间审计 FAIL，并只对本次预生产部署批准一次性非阻断例外。Gate 4 最终 `PASS`，但不自动授权 develop/main、推送或正式生产发布。
+
+#### 8.4.2 新远端 RC 验收（已完成）
+
+本节登记已另行授权并完成的远端任务，不构成部署许可。输入文档基线为 `7b6a2f472fe089b0a3dddf136b6f71f3b4a7e4f6`；source/tag/OCI revision 均为 `4d370d664c3710a4a03cb1b665cfdeddc7d32778`。源码可追溯、tag 原先不存在、Git 归档构建、真实浏览器公开配置、远端 OCI 链、SQL raw 指纹、运行探针、Compose 三角色同镜像、双库/秘密扫描和独立证据审计全部通过。
+
+- 2026-09-03 当时主控裁决：`G4_4=PASS`，未决 P0/P1/P2=0；该时点 Gate 4 总闸门仍 `IN_PROGRESS`，后续最终状态见 §8.4.3。
+- 正式 index：`sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d`。
+- 正式 amd64：`sha256:577dc21e8375d1ff07af4e49100799ac6ba1b1b225968e91f3559091bc04f414`。
+- 正式 config：`sha256:2930e8be2941a59fada8f8bef9614e95b83445c58e70a2f7b1337741baed8649`。
+- R55 固定库与 2026-09-03 验收时点库的 Critical/High 均为 0，秘密扫描 0；不扩展为全部等级或未来漏洞结论。19/19 SQL raw SHA、CR=0，813/7、31/31 build 通过；完整报告/哈希/公开配置脱敏事件见[状态总览](../../status/README.md#gate-4-新远端-rc-正式验收与主控裁决2026-09-03)。
+- 三个旧 RC 保持 `REJECTED_DO_NOT_DEPLOY`，禁止覆盖、删除或作为获准回退镜像；当前 Gate 3 运行镜像与这些拒绝 RC 分开管理，回退资格仍须验证数据库兼容性和安全风险。
+- 远端验收未部署、未执行 migration；本轮五文档提交也不触发外部操作。此前 G4-5 T0/T1 与失败现场保留，旧 SHA/digest 的部署授权失效。
+
+#### 8.4.3 G4-5 预生产继续联调方案（T6 PASS_WITH_CONTROLLER_EXCEPTION；Gate 4 PASS）
+
+**最终状态。** `G4_5=FINAL_PASS_WITH_CONTROLLER_EXCEPTION / GATE_4=PASS`。已验收的新 RC 按 migration → app → 单 worker → Nginx 接入既有阿里云预生产，运行身份、真实依赖、业务闭环、观测、恢复和最小权限均通过。实际切换超过批准维护窗口，且 migration 绝对执行时间未保留；主控只针对本次预生产部署接受一次性非阻断例外，不把它改写为按时完成，也不授权正式生产上线。
+
+**固定起点与任务卡。** 沿用 `feature/v2-stabilization` / `C:/Users/yhy/Desktop/人车单生态-v2/.worktrees/v2-stabilization`。部署代码 SHA 为 `4d370d664c3710a4a03cb1b665cfdeddc7d32778`，应用 tree 为 `5188c0efcb96d646a9609b7c47dd624d578841ee`；T5/T6 任务文档基线为 `8f69579d041c46e9a47b0ae0bfff746fd510a5b1`。本地 develop 仍为 `4102ee1f85f89f363aeaa42f829a9c6d535f6d31`；Gate 4 PASS 不自动合并或改写 develop。
+
+```text
+ROLE=G4-5 运维发布执行（主控统筹；数据库/测试/审计按下表协作）
+SOURCE_SHA=4d370d664c3710a4a03cb1b665cfdeddc7d32778
+DOCUMENT_BASELINE_SHA=8f69579d041c46e9a47b0ae0bfff746fd510a5b1
+MODIFICATION_WHITELIST=EMPTY（全部跟踪文件，包括代码、Schema、SQL 与文档）
+RCD_IMAGE_REF=crpi-kcg4tksk7neseyy4.cn-shanghai.personal.cr.aliyuncs.com/rcd_dispatch/rcd_dispatch@sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d
+EXPECTED_AMD64_DIGEST=sha256:577dc21e8375d1ff07af4e49100799ac6ba1b1b225968e91f3559091bc04f414
+EXPECTED_CONFIG_DIGEST=sha256:2930e8be2941a59fada8f8bef9614e95b83445c58e70a2f7b1337741baed8649
+RCD_RELEASE_REVISION=4d370d664c3710a4a03cb1b665cfdeddc7d32778
+EXTERNAL_SYSTEM_AUTHORIZATION=COMPLETED_AS_SEPARATELY_AUTHORIZED_T1_A_TO_T6（历史授权已消费，不得复用）
+```
+
+镜像不得重建、改 tag、使用 latest 或复用本地占位镜像；app/worker/migration 同 index，并核对实际 amd64/config。Nginx 保留已批准的独立镜像，release revision 与 app/worker 对齐；不要求 Nginx 与应用同 image digest。无 shell 镜像只使用[部署指南 §5.1](../../versions/v2.0/deployment-guide-v2.md#51-gate-4-无-shell-运行镜像与制品验收)的 Node exec-form，不使用 pnpm/npx/sh 包装或在线补装工具。
+
+**角色与最小上下文。** 所有角色先读 AGENTS.md、Layer 0 和文档总入口对应角色；以下仅为本轮 Layer 2，不新建角色派生文件。云端写操作由单一执行负责人串行进行，数据库/测试可参与核对，独立审计不得代替实现或部署。
+
+| 角色 / 域 | 本轮必读与职责 | 不得越界 |
+|---|---|---|
+| 主控 / 治理 | 状态总览、本节、应用/基建决策；下发精确任务、阶段批准、证据复核与最终裁决 | 不实施业务代码；不将历史授权自动续期 |
+| 运维发布 / 基建运行 | infrastructure-v2、deployment-guide-v2、operations-guide-v2、APP-006、本节及新 RC 证据 | 不改平台、网络架构、依赖或业务契约；不扩容/续费/授 RAM 权限 |
+| 数据库 / 迁移安全 | data-architecture-v2、兼容矩阵、部署指南 §3/§6/§11；10 个现有 migration、9 个 rollback、G4-3 证据 | 不改 SQL、Schema、元数据或业务事实来追平验收；不扩大 DDL 权限 |
+| 测试 / 真实联调 | PRD §13 完整 14 项、相关 API/状态机/位置与 ETA 契约；获批测试身份、数据范围、浏览器矩阵 | 不用 Mock 代替真实依赖通过；不清理旧 G3E2E/G3FAULT 或真实订单 |
+| 独立审计 / 只读 | 部署/运维安全边界、RC 和各阶段证据、SQL/权限/运行身份差异 | 不实施迁移、回退、修代码或代签主控 PASS |
+
+**阶段闸门与验证。** 下表保留当时的执行规则和停止条件；T1-A～T6 已按分步授权完成，不允许将已消费授权复用于后续发布，也不允许“一条命令启动全部 profile”。
+
+| 步骤 / 负责人 | 输入与需单独批准的事项 | 输出与验证 | 停止条件 |
+|---|---|---|---|
+| T0 新一轮只读盘点 / 运维 + 数据库 | 完整代码/文档/镜像身份；单独授权读取指定 ECS、ACR、RDS、Tair、SLS、Nginx 状态。只读检查不包含备份创建、镜像拉取、秘密注入、服务探针写入或维护操作 | 核对实例/区域/VPC/库名与身份、无公网 DB/Redis、实际 revision/digest、9/10 条 migration 及 checksum、owner/长期权限、证书/SAN、磁盘/期限/费用、现有告警和备份；列出差异 | 资源身份/有效期/权限不明、来源/制品漂移或旧工作现场未解释；不得照抄历史 T0 |
+| T1-A 发布准备 / 运维 + 数据库 | T0 PASS；明确维护起止/最长停机、实名负责人及替补、升级联系方式、观察时长/阈值、精确远端目录与文件白名单、测试数据范围；单独批准新鲜备份、配置备份、按 digest 拉取、受限配置/秘密注入与必要的停止写入/旧 worker 措施 | 登记可用恢复点 ID/时间与恢复校验、配置哈希、回退镜像及与 10 条 migration 的兼容/安全判定；ECS 镜像身份及 19/19 SQL raw SHA/CR=0；Compose 各 profile 仅 config 验证；权限/挂载对 UID 65532 可用 | 无可用恢复路径、退回已拒绝 RC、证据只在易失 Temp 且未保全、SQL 漂移或新安全披露未裁决。保持批准的维护/流量控制状态，不因旧 Nginx 存在而提前放开新 app |
+| T1-B 一次性 migration / 数据库 | T1-A PASS；单独批准预生产数据库、迁移窗口、一次性最小 DDL 身份及退出吊销方案 | 若实际为 9 条匹配记录，仅应用现有第 10 条 `20260816120000_extend_dispatch_event_outbox_types`；按部署指南运行一次性 migrate deploy，核对 10 条成功、CHECK 精确 17 种、无非预期 DDL/业务行数变化；关闭/轮换一次性身份并验证旧凭据失效 | 已有 10 条成功时只核验，不重复实施；失败/脏 migration/其他待执行项/漂移立即停止，不自行 migrate resolve、手改元数据或删事实 |
+| T2 app / 运维 | migration PASS；单独批准 app 切换，长期最小权限与鉴权/依赖秘密已验证；仍处批准的维护状态 | 只启动 app；revision/digest、匿名 liveness、受保护 readiness、RDS/Tair/真实高德、鉴权和无秘密泄漏通过；保留连接/响应和日志证据 | 健康 200 不能替代 readiness；任何身份不符、依赖失败或数据风险停止，不启动 worker |
+| T3 单 worker / 运维 + 测试 | app PASS；单独批准停止旧 worker 后启动 1 个新 worker 和其真实事件消费 | HTTP-only、无数据库身份、内部鉴权、公网不可访问；观察成功周期、十分钟基线、租约、outbox 处理/失败/最老年龄及日志，确认无双 worker | 无法证明只有 1 个、副作用重复、积压/连续失败越过批准阈值或 app 未就绪 |
+| T4 Nginx / 运维 | worker PASS；单独批准必要的配置检查与 reload/recreate、恢复入口流量；沿用已验收镜像/端口/证书 | app/worker/Nginx release revision 全为 4d370d6…；nginx 配置检查、HTTP 308、HTTPS 健康/登录 200、内部 worker 404、3000 不公网暴露；核验 IP SAN/2026-10-06 有效期 | TLS/身份/边界不符；环境变量改变需按实际 recreate，不把 reload 当作已更新 revision。自签名只作预生产演示，跳过校验不算可信 HTTPS |
+| T5 真实业务与观测联调 / 测试 | T4 PASS；单独批准确定的测试账号、来源凭证/订单标识/数量/写操作、真实高德调用范围与配额、必要的告警测试通知 | PRD §13 完整 14 项逐项登记新证据/适用的历史证据：订单接入幂等、A/B/C、分配改派/版本冲突、执行与模块、位置/ETA、预警、权限与脱敏；traceId 可从 HTTP 到业务日志/SLS 追踪，outbox 正常 | 无真实依赖证据不得标全 PASS；禁止 seed/reset、修改旧测试事实、冒充来源或用假 ETA；故障注入不包含在普通联调授权 |
+| T6 独立审计与主控收口 / 审计 + 主控 | 各步已完成，观察窗口、脱敏证据、身份与恢复能力齐全，未决 P0/P1=0 | 功能与安全 `PASS`；主控接受维护窗口超时和 migration 绝对时间缺失的一次性例外，裁决 `G4_5=FINAL_PASS_WITH_CONTROLLER_EXCEPTION` | 例外不自动触发 develop 合并、推送、main 或正式生产发布；以后发布不得继承 |
+
+**不变契约与补充停止条件。**
+
+- 基础设施沿用阿里云、单 ECS、VPC RDS/Tair、SLS 与同镜像三角色；不购域名、不扩大公网暴露、不新增云资源/收费服务。资源到期需先核实，再另行请求续费，不根据旧日期推定已续费或已失效。
+- 维持 `PRIMARY_ALERT_CHANNEL=预警信息通知负责人`；SLS 新告警中心为独立兜底，不改既有两条查询/阈值、RAM 或留存策略。个人联系方式仅保存在受限运维记录。
+- 兼容开关 `RCD_V2_STATE_MACHINE_ENABLED` 是否启用必须作为批准配置登记：启用后只停用已冻结的 V1 写请求，V1 读兼容窗口不因部署自动关闭。
+- 浏览器使用 Chrome/Edge × 桌面 100%/125%，司机 H5 360×800、390×844；只得到等效布局时如实记 WARN，不冒充原生缩放。75% 默认布局改动已撤回，不再加入本轮。
+- 构建/扫描/SQL 已验收证据可以按同 digest 复用，但部署前要核验时效及新披露；若身份、漏洞有效性或真实配置发生变化，回到 G4-4，不边部署边更换镜像。
+- 已冻结并执行的远端路径、资源范围、恢复点、维护窗口、责任、测试数据和观察阈值只对本次任务有效。异常时仍只允许预先批准且数据库兼容的应用回退；数据库恢复/rollback、停依赖故障演练和证据清理没有因 Gate 4 PASS 自动获批。
+- 最终运行：预生产 10 条 migration、outbox CHECK 17 种；app/单 worker/Nginx revision 均为 `4d370d6…`，app/worker 使用已扫描 index `sha256:508dea…453d`，`RCD_V2_STATE_MACHINE_ENABLED=true`，真实 RDS/Tair/高德、HTTPS、SLS 与 outbox 通过；owner `NOLOGIN` 和最小权限保持，V1 读兼容窗口未自动关闭。
+- 维护窗口原定 `2026-09-06T18:00:00+08:00 .. 20:00:00+08:00`；app/worker/Nginx 实际于 `21:13:32 / 21:29:52 / 21:47:20 +08:00` 切换，migration 绝对时间未知。原 `MAINTENANCE_WINDOW_RESULT=FAIL` 保留；`CONTROLLER_EXCEPTION=APPROVED_ONE_TIME` 只使本次 G4-5 非阻断。禁止重跑 migration、修改元数据、重新开放 owner 或伪造时间补证。
+- 后续发布脚本必须记录每阶段 UTC 时间并在窗口截止时阻止新的切换。Gate 4 PASS 不授权 develop/main 合并、生产发布或外部变更。
+
+#### 8.4.4 Gate 4 退出证据与 develop 交接（不是新子闸门）
+
+Gate 4 只定义 G4-1～G4-5；退出后不新增 G4-6～G4-10，也不为持续观察重新打开已通过的子闸门。后续工作是阶段交接：
+
+1. **证据固化**：每个子阶段完成后立即保存命令输出、截图、traceId、镜像 digest、数据库/SLS 核验、恢复点和例外裁决到受控验收目录、制品库或工单附件，并为最终证据包生成 SHA-256 清单。运行证据通常不进入 Git。
+2. **只读交接审计**：核对 `develop @ 4102ee1f85f89f363aeaa42f829a9c6d535f6d31`、Gate 4 交接 HEAD/文档 SHA、部署 RC `4d370d664c3710a4a03cb1b665cfdeddc7d32778`、应用 tree、提交边界、秘密扫描和三个拒绝 RC；审计白名单为空。
+3. **本地合入**：只有审计 `PASS` 后，主控才能另行授权 `feature/v2-stabilization --no-ff → local develop`，且不推送；已消费的部署许可不能替代合入许可。
+4. **合入后验证**：在新 develop 执行 `pnpm test`、`pnpm lint`、`pnpm exec tsc --noEmit`、`pnpm build`、`pnpm exec prisma validate`、部署制品专项测试与 `git diff --check`。禁止真实数据库、Redis/Tair、高德、云资源、migration 和部署。
+5. **只读稳定观察**：可并行进行 24 小时观察，覆盖容器健康/重启、单 worker 周期、outbox、SLS 错误与秘密模式、真实依赖、磁盘、证书和资源到期。它只追加运行证据，不改变代码 RC 或 Gate 编号。
+6. **统一治理同步**：阶段组完成且结论稳定后，用户以“提交并更新文档”授予 A8，主控才统一更新治理文档；A8 不授权 Git 提交、推送或外部操作，Git 提交仍需另行批准。代码 RC SHA、运行证据清单 SHA 与文档提交 SHA 必须分开记录。
+
+若中途出现 P0/P1，先保存缺陷与现场证据、返修并重验，不提交未稳定的治理状态。若验收必须先修改跟踪文档才能继续，应暂停并申请新的 A8。
 
 ## 9. 并行开发纪律
 
@@ -720,6 +818,8 @@ flowchart TD
 6. 对照阶段退出条件逐条验收。
 7. 输出结论。
 
+每个子阶段结束后立即保存运行证据，但不因单项 `PASS` 默认更新治理文档或提交 Git。阶段组完成且结论稳定后，由用户以“提交并更新文档”授予 A8，再统一更新治理文档；Git 提交仍需另行授权。
+
 结论定义：
 
 - `PASS`：无 P0/P1 未解决项，退出条件全部满足，允许进入下一阶段。
@@ -758,7 +858,7 @@ flowchart TD
 - 后续追加发现 ETA Top-8 仍会裁掉本轮 A 槽新生成的 delivery cursor，导致可连续进入 B 的订单误报 `ETA_UNAVAILABLE`；已恢复计划池全部 delivery→pickup 必要组合，并补 `buildEtaMatrix()` → `runDispatchV2()` A/B 串联回归。
 - G3-3 本地开发已闭环：司机类事件按受影响门店加载全部活动司机参与比较；相同逻辑计划重试不回收/重建 Assignment 或递增 `planVersion`；outbox 只有持有当前租约的 worker 才计为处理成功；锁忙、Redis 不可用降级、过期快照重算均有独立编排测试。
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
-- 当前工作阶段：应用候选 `958afca…@sha256:13e0…5bff` 与 Gate 3 `PASS` 证据保持不变；2C、2B、2A 与 P2 均已退出。T0 已合入本地 `develop @ 8ff70ccc…` 并回归通过；3A/3B 均为 `PASS / WARN`；`develop @ f835302…` 为 Gate 4 筹备来源，Gate 4 为 `PREFLIGHT / NOT_STARTED`。
+- 当前工作阶段：Gate 4 `PASS`。G4-1～G4-4 已通过；G4-5 已部署 `4d370d6…@sha256:508dea…453d`，完成 9→10 migration、真实依赖/业务/观测与 T6 审计，并以一次性维护窗口例外裁决 `FINAL_PASS_WITH_CONTROLLER_EXCEPTION`。三个旧 RC 继续拒绝。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
-- 当前执行限制：不得再次变更 app、worker 或 Nginx，不得执行 migration、重复基础资料、清理任何失败样本或直接写业务数据库。错误 helper 产生的独立 `G3FAULT` 订单必须保留并与冻结 10 单分开统计。
-- 下一动作：主控提交 Gate 4 激活同步并公布新的完整统一基线 SHA；随后按 Gate 4 独立任务卡启动稳定化与发布验收。远程同步、部署、migration 与云资源操作仍未授权。
+- 当前执行限制：本轮只获 A8 文档同步授权，未获 Git 提交或推送授权；不得更改代码/API/Schema/SQL、运行容器、秘密、真实数据或云资源。APP-006 和部署指南技术权威不变；已消费的 G4-5 部署授权不得继承。
+- 下一动作：先固化 Gate 4 运行证据包并做独立只读交接审计；通过后另行裁决本地 develop 合入与合入后全量验证。24 小时稳定观察可并行但不构成新 Gate；没有新授权时保持当前预生产运行与证据不变。

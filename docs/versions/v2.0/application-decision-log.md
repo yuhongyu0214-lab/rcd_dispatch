@@ -1,8 +1,8 @@
 # 人车单应用框架与依赖决策日志 V2
 
-> 决策版本：`RCD-APP-DECISIONS-V2.0-R5-20260810`
-> 状态：Gate 3 应用安全基线已批准
-> 唯一代码事实：`codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`
+> 决策版本：`RCD-APP-DECISIONS-V2.0-R6-20260903`
+> 状态：Gate 3 运行基线保留；Gate 4 本地安全返修例外已批准，远端 RC 待另行验收
+> 代码事实：预生产最近已核验为 `958afca537b412fb972b6e180561a9b37022834d`；Gate 4 本地候选为 `4d370d664c3710a4a03cb1b665cfdeddc7d32778`，本轮未连接云端
 
 本文件只记录应用框架、依赖来源和兼容边界。产品行为、HTTP 契约、领域枚举、数据模型和生产基础设施仍分别由对应权威文档定义。
 
@@ -51,6 +51,19 @@
 - Railway：已有 app/worker 运行记录只作为历史 Demo 证据，不再出现在现行 CLAUDE、README 或 runbook 的生产操作步骤中。
 - 生产平台：由 Gate 3-R 基础设施权威文档和后续真实部署证据另行裁决；不得从本决策推定阿里云资源已经部署或 Gate 3 已 PASS。
 
+## APP-006：Gate 4 运行镜像与传递依赖安全返修例外
+
+- 日期：2026-09-03
+- 状态：`ACCEPTED`（已批准的本地返修决策补记，不是远端发布授权）
+- 背景：`857705e…` RC 的固定 R55 扫描仍有未裁决 P0/P1；不能继续使用其历史豁免替代修复。
+- 决定：本候选运行阶段采用固定 digest 的 `gcr.io/distroless/nodejs22-debian13:nonroot`；构建阶段继续使用 Dockerfile 锁定的 Node 22/Bookworm，不升级 ECS 宿主系统、不更换 Nginx。Prisma 保持 `6.19.3`，批准精确 override `deepmerge-ts 8.0.0`；依赖来源与其余版本以候选 package/lock 为准，不扩展为任意 major 升级授权。
+- 兼容证据：`4d370d6…` 的实际运行 Node 为 `22.23.2`、UID/GID 为 `65532:65532`；bcrypt、Prisma CLI、worker 心跳、app 健康检查与完整 `813 passed / 7 expected skipped`、lint、TypeScript 通过。生产构建已有 `31/31` 日志与实际镜像证据，最后一轮独立复审未重复构建。
+- 不改变：Next.js 模块化单体、阿里云 ECS + Docker + Nginx、RDS/Tair/SLS、HTTP-only 单 worker、app/worker/migration 同一镜像；业务代码、API、Schema、19 份 SQL 和设计规则均未修改。
+- 安全结论边界：本地精确镜像在固定 R55 漏洞库（2026-09-01）下 Critical/High 均为 0；不代表其他等级、最新漏洞库、真实构建配置或远端 RC 已通过。详细身份与报告哈希见[状态总览](../../status/README.md#gate-4-本地安全返修证据2026-09-03)。
+- 运行约束：无 shell 的 exec-form 启动、健康检查和 migration 入口以[部署指南 §5.1](deployment-guide-v2.md#51-gate-4-无-shell-运行镜像与制品验收)为准；不得为排障向运行镜像补装 shell、包管理器、setuid/setgid 工具或 mount/umount。
+- 失效条件：更换基础镜像 digest、override、Prisma/原生模块、启动命令或运行权限后，必须重新进行兼容、完整工程和精确制品安全验收；不得沿用本地报告宣布新制品通过。
+- 批准人：用户；授权与独立复审记录见本轮审计证据。Git/ACR 推送、真实配置重建与部署均另行授权。
+
 ## 版本记录
 
 | 版本 | 日期       | 内容                                                                                                                                |
@@ -61,3 +74,4 @@
 | V2.0-r3 | 2026-08-03 | 对齐 Compose 命令修正候选 `492c86ea...`；仅部署说明与测试发生变化，不新增或修改 APP-001～005，框架、依赖来源和外部兼容边界保持不变 |
 | V2.0-r4 | 2026-08-08 | 对齐可观测性候选 `4eb3b485...`；发布 revision、结构化日志和轮转返修不新增或修改 APP-001～005，框架版本、依赖来源与外部兼容边界保持不变 |
 | V2.0-r5 | 2026-08-10 | 对齐当前候选 `958afca...`；Gate 3 最小 E2E、ETA/H5 与全实例高德 3 QPS 限流返修不新增或修改 APP-001～005，框架版本、依赖来源和外部兼容边界保持不变 |
+| V2.0-r6 | 2026-09-03 | 补记 APP-006：已批准的 Debian 13 Distroless 与 deepmerge-ts 8.0.0 本地安全例外；保留现有架构和本地/远端/部署分闸门边界 |

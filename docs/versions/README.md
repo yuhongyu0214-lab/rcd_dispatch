@@ -1,8 +1,8 @@
 # 人车单项目文档版本总入口
 
-> 版本戳：`RCD-DOC-REGISTRY-20260829-R51`
+> 版本戳：`RCD-DOC-REGISTRY-20260907-R62`
 > 建立日期：2026-07-13
-> 治理更新时间：2026-08-29
+> 治理更新时间：2026-09-07
 > 归档方式：现行权威集中到 `v2.0/`；已融合或冲突的旧方案从工作树清场，历史由 Git 追溯
 > 可视化导航：[Obsidian 项目全景白板](../rcd-v2-project-map.canvas)（仅作导航，不替代下方权威文档）
 
@@ -24,14 +24,14 @@
 | 代码与设计约束 | V2.0-r18 | 第二轮串行前置和 2A/2B/2C 唯一文件所有权已冻结 | [项目规则 V2](v2.0/project-rules-v2.md) |
 | API 契约 | V2.0-r18（develop 现行） | 2B `143a10a…` 已合入 `develop @ 2a621620…`；`DriverTaskV2.servicePlan` 必返收口正式生效 | [API 契约 V2](v2.0/api-contract-v2.md) |
 | 领域词汇 | V2.0-r13 | 当前候选领域术语与枚举零变化已登记 | [领域词汇 V2](v2.0/domain-glossary-v2.md) |
-| 应用框架与依赖决策 | V2.0-r5 | 当前候选未改变框架、依赖来源或兼容边界 | [应用决策日志](v2.0/application-decision-log.md) |
+| 应用框架与依赖决策 | V2.0-r6 | APP-006 补记已批准的 Debian 13 Distroless / deepmerge-ts 8.0.0 本地安全例外，业务与平台架构不变 | [应用决策日志](v2.0/application-decision-log.md) |
 | V1→V2 兼容映射 | V2.0 | Gate 0 已冻结 | [兼容矩阵](v2.0/v1-v2-compatibility-matrix.md) |
 | 生产基础设施架构 | V2.0-r6 | Gate 3 `PASS` 文档基线 `464ee5d…` 已远程核验；架构与正式生产未决边界不变 | [基础设施架构 V2](v2.0/infrastructure-v2.md) |
-| 构建、部署与回退 | V2.0-r13 | Gate 3 `PASS` 文档基线 `464ee5d…` 已远程核验；分阶段和禁止重复 migration 规则不变 | [部署指南 V2](v2.0/deployment-guide-v2.md) |
-| 生产运行与恢复 | V2.0-r6 | 最终运行资源、健康、10 单、outbox 和证据一致性通过；整机/RDS 灾备仍为独立演练 | [运维指南 V2](v2.0/operations-guide-v2.md) |
+| 构建、部署与回退 | V2.0-r14 | 无 shell Node 入口、Git 归档与 SQL raw 指纹、固定库/当前库分开扫描；G4-5 已退出，后续发布须重新授权 | [部署指南 V2](v2.0/deployment-guide-v2.md) |
+| 生产运行与恢复 | V2.0-r6 | Gate 4 预生产身份、健康、真实依赖、单 worker、SLS、outbox 和恢复路径通过；整机/RDS 灾备仍为独立演练 | [运维指南 V2](v2.0/operations-guide-v2.md) |
 | 基础设施决策与替代历史 | V2.0-r3 | INFRA-001～023 已登记；公网 IP 预生产演示获准，正式上线条件不变 | [基础设施决策日志](v2.0/infrastructure-decision-log.md) |
-| 项目当前状态 | 2026-08-29 | `develop @ f835302…` 为 Gate 4 筹备来源；3A/3B 均 `PASS / WARN`，Gate 4 为 `PREFLIGHT / NOT_STARTED` | [状态总览](../status/README.md) |
-| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260829-R51 | Layer 0；所有 Agent 必读；不超过 150 行；登记 Gate 4 筹备来源与启动边界 | [Agent 公共上下文](../context/agent-common-context.md) |
+| 项目当前状态 | 2026-09-07 / R62 | G4-5 `FINAL_PASS_WITH_CONTROLLER_EXCEPTION`；Gate 4 `PASS`。新 RC 已部署；当前进入运行证据归档、只读交接审计与 develop 合入前准备 | [状态总览](../status/README.md) |
+| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260907-R62 | Layer 0；Gate 4 已退出；子阶段证据与治理提交分层，下一步须另行裁决 develop/main/推送与正式发布 | [Agent 公共上下文](../context/agent-common-context.md) |
 | V1 产品与开发主线 | V1.x | 历史只读 | [V1 历史索引](v1/README.md) |
 
 ## 文档权威顺序（按领域拆分，唯一权威口径）
@@ -115,18 +115,18 @@ HTTP 契约               → v2.0/api-contract-v2.md
 - 本轮追加：指定测试文件、用例、Mock 条件、回归范围和失败判定。
 - 不进入上下文：决策日志全文、无关实现和云资源建设细节。
 
-### 3A/3B 冻结任务入口
+### Gate 4 当前任务入口（3A/3B 证据已冻结）
 
-状态统一为 `3A_PASS_WARN / 3B_PASS_WARN / GATE4_PREFLIGHT / NOT_STARTED`。T0 候选 `72cb11b…` 已合入本地 `develop @ 8ff70cccf29371229818058055d45de376eebdf7`，合入后 `812/7`、lint、tsc、31/31 build 与 diff check 通过；5 份退出治理文档随后形成 Gate 4 筹备来源 `develop @ f835302d555fc0481a37dfc388bf8e4e382a6230`。`origin/develop @ ae471484…` 未推送。
+3A/3B 保持 `PASS / WARN`，只作为历史入口证据。Gate 4 位于 `feature/v2-stabilization`、`.worktrees/v2-stabilization`；代码/RC tag/OCI revision 均为 `4d370d664c3710a4a03cb1b665cfdeddc7d32778`，应用 tree `5188c0efcb96d646a9609b7c47dd624d578841ee`。T5/T6 任务文档基线为 `8f69579d041c46e9a47b0ae0bfff746fd510a5b1`。G4-5 已完成 migration → app → 单 worker → Nginx、真实联调和独立审计；预生产为 10 条 migration，新 RC 正在运行，主控以一次性维护窗口例外裁决 `FINAL_PASS_WITH_CONTROLLER_EXCEPTION`，Gate 4 `PASS`。
 
 | 验证线 | 角色与入口 | 初始边界 | 隔离候选与结果摘要 |
 |---|---|---|---|
 | 3A | 数据库验证 Agent；`feature/v2-migration-validation`；`.worktrees/v2-migration-validation` | `PASS / WARN`；T0 7 文件差异不触及数据/迁移/兼容权威域 | 10 个 migration、迁移映射、双读/兼容窗口、数据核对、rollback 和零漂移通过 |
 | 3B | 测试 Agent；`feature/v2-e2e-validation @ 8ff70ccc…`；`.worktrees/v2-e2e-validation` | `PASS / WARN`；修改白名单为空 | PRD §13 14 项、故障、数据库/API、安全、Chrome/Edge 和工程命令通过；Edge 125% 为 `952×800` 等效布局证据 |
 
-3A/3B 的临时 PostgreSQL、端口、fixture、Mock 和构建产物均已清理，外部系统授权仍为无。Gate 4 只接受主控下发的、包含本次激活同步的完整提交 SHA；在该 SHA 公布前不得创建 Gate 4 任务、分支或 worktree。
+3A/3B、已结束的返修/扫描和已消费的 G4-5 授权均不继承。三个旧 RC `4102ee1… / a0c8bbd… / 857705e…` 继续 `REJECTED_DO_NOT_DEPLOY`，不得覆盖、删除或部署。代码锚点仍为 `4d370d6…`，develop 仍为 `4102ee1…`；最新已提交治理文档基线为 `e4f55c8…`。维护窗口超时和 migration 时间缺失的例外只绑定本次部署，不得用于以后任务；G4-5 证据与裁决见[主计划 §8.4.3](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md#843-g4-5-预生产继续联调方案t6-pass_with_controller_exceptiongate-4-pass)。
 
-共同停止条件：HEAD/基线不一致、工作区不干净、端口/数据库身份/空库状态不明、需要修改 Schema/migration/API 契约/业务代码、需要外部连接/新依赖/跨域文件、权威文档冲突，或 rollback 需要删除事实绕过保护。详细验收以[并行开发主计划 §8.2～§8.3](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md)为准。
+共同停止条件：代码/文档 SHA 不明、工作区不干净、缺少精确文件/资源白名单或阶段外部授权、制品/SQL/扫描对象不一致、权威口径冲突时立即停止。运维发布角色只追加基建/部署/运维权威与主计划 §8.4.3，测试/数据库/审计各按该节任务分配读取，不把业务全文塞入公共层。APP-006 r6 与部署指南 r14 保持技术权威；其本地返修阶段状态属于 R56 历史快照，最新放行状态以本轮状态总览为准。
 
 ### 未分配到默认角色上下文的文档
 
@@ -136,13 +136,14 @@ HTTP 契约               → v2.0/api-contract-v2.md
 
 ### 上下文同步规则
 
-状态、决策、代码基线或上表任一必读文档发生变化时，主控必须同步更新状态总览、本入口的版本/角色映射、Agent 公共上下文和 Canvas。同步完成前，不得把旧上下文交给新 Agent；若尚无可追溯的文档提交 SHA，Agent 只能进行只读盘点。
+状态、决策、代码基线或上表任一必读文档形成稳定结论后，主控必须在取得 A8 文档同步授权后统一更新状态总览、本入口的版本/角色映射、Agent 公共上下文和 Canvas。同步完成前，不得把旧上下文交给新 Agent；若尚无可追溯的文档提交 SHA，Agent 只能进行只读盘点。单个子阶段 `PASS` 只保存运行证据，不自动触发治理文档更新或 Git 提交。
 
 ### Codex 回合结束文档确认
 
 - 项目级 `.codex/hooks.json` 使用 `Stop` Hook，在每个主对话回合结束时提示：`如需提交项目状态上传到文档，回复"提交并更新文档"。`
-- 提示本身不修改任何文件；只有用户明确回复该口令后，当前 Agent 才能根据本轮已确认事实同步相关文档。
-- 口令只授权文档同步，不授权 Git 提交或推送，也不授权数据库、部署、云资源或其他外部系统操作。
+- 提示本身不修改任何文件；用户明确回复该口令即表示本轮获得 A8 文档同步授权。
+- A8 只在阶段组完成且结论稳定时用于统一同步治理文档；子阶段的命令输出、截图、traceId、digest、数据库与 SLS 核验等进入运行证据层，通常不提交 Git。
+- 口令只授权文档同步，不授权 Git 提交或推送，也不授权数据库、部署、云资源或其他外部系统操作；Git 提交须另行明确批准。
 - 没有发生变化的领域文档和决策日志不得为了“保持同步”而产生空修改。
 
 ## 已确定的基建与技术基线
@@ -151,12 +152,12 @@ HTTP 契约               → v2.0/api-contract-v2.md
 |---|---|---|
 | 正式生产云 | 中国大陆正式生产主线使用阿里云；Railway 仅保留历史 Demo 证据，CloudBase 仅限隔离预览/验证 | 架构已批准，阿里云生产尚未验收 |
 | 运行与入口 | 单 ECS 试运行；Docker + Nginx；同一不可变镜像分别运行 Next.js app、HTTP-only 单副本 worker、一次性 migration | app、worker、Nginx、自签名 HTTPS 与外部健康/登录路由已验收；正式可信 HTTPS 延后 |
-| 镜像与日志 | ACR 保存按 commit SHA 追溯的镜像；SLS 集中采集结构化日志 | ECS app/worker 当前按 `958afca…@sha256:13e0…5bff` 运行，Nginx 原镜像不变且 release revision 已对齐；本机轮转与 SLS 验收结论继续有效 |
-| 事实数据库 | 阿里云 RDS PostgreSQL 是唯一业务事实库；Prisma 负责 ORM 与 migration | 上海独立预生产库已完成 0805 全量备份、9 个 migration 和最小权限验收；正式生产另建物理实例 |
+| 镜像与日志 | ACR 保存按 commit SHA 追溯的镜像；SLS 集中采集结构化日志 | Gate 4 `4d370d6…@sha256:508dea…453d` 已部署到预生产 app/单 worker，Nginx revision 对齐；SLS app/worker/Nginx/revision 查询与秘密模式扫描通过 |
+| 事实数据库 | 阿里云 RDS PostgreSQL 是唯一业务事实库；Prisma 负责 ORM 与 migration | 预生产为 10 条 migration、outbox CHECK 17 种；app 最小权限、worker 零 DB 权限、owner `NOLOGIN`；恢复点 `3149081194` 与配置备份/回退路径有效 |
 | 实时数据 | 阿里云 Tair/Redis 保存最新位置、在线状态、ETA 短缓存和短锁，不得成为业务事实源 | 上海预生产 Tair 白名单、内网登录、固定前缀、隔离短锁竞争与恢复均已通过；自动化不可用降级已验收，PostgreSQL 继续作为唯一业务事实库 |
 | 地图与路径 | 高德 JS API 负责前端地图；高德服务端 API 负责地理编码、路径与真实 ETA | Key 分离，服务端 Key 不得进入浏览器 |
 | 应用技术栈 | Next.js 15.5.21、React 19.2.8、TypeScript、Tailwind CSS 3、shadcn/ui、Prisma 6、Pino、Vitest | 应用候选已完成依赖审计与回归 |
-| 构建与依赖 | pnpm 10.11.0；SheetJS 官方 CDN `xlsx 0.20.3`；受审计的精确 pnpm overrides | 已冻结，不得回退到 npm/yarn 或 npm `xlsx 0.18.x` |
+| 构建与依赖 | pnpm 10.11.0；SheetJS 官方 CDN `xlsx 0.20.3`；受审计的精确 pnpm overrides | APP-006 Distroless/deepmerge-ts 例外已在新远端 RC 通过验收；不改变包管理器、业务契约或阿里云主线 |
 
 详细组件职责、网络边界和未决事项分别见[基础设施架构 V2](v2.0/infrastructure-v2.md)与[基础设施决策日志](v2.0/infrastructure-decision-log.md)。本表是导航摘要，不替代原文。
 
@@ -171,7 +172,7 @@ remote commit: 958afca537b412fb972b6e180561a9b37022834d
 - 当前唯一代码/ACR/预生产运行候选只认完整 SHA `958afca537b412fb972b6e180561a9b37022834d`。该候选包含 Gate 3 最小 E2E 入口、ETA 诊断/受控重试、司机地图读取一致性、H5 导航/测试标记过滤与全实例高德 `3 QPS` 限流，并保持外部 HTTP 契约、领域枚举、Schema、9 个 migration、依赖和设计变量不变。
 - 最终 migration 清单与风险见 [2026-08-01 Gate 3 migration manifest](../status/2026-08-01-gate3-migration-manifest.md)，正向清单自身 SHA-256 为 `a5f70be102f46a026e7d482155364bb2a513ce6714b2871148a0e9031261d47d`，全部 17 个 SQL 聚合 SHA-256 为 `b35b7322cd6961249c006dca0d4e18e3a84dc52af8a5bd72a99d5e0b5b89ef5f`。
 - 最小显示与 ETA 返修构建证据见 [2026-08-09 最小 E2E 返修候选](../status/2026-08-09-gate3r-minimal-e2e-remediation-candidate.md)；随后加入全实例高德 `3 QPS` 限流形成 `958afca…@sha256:13e0…5bff`，本地、远程、ACR、预生产 app/worker 与 Nginx release revision 已对齐。冻结真实 10 单已通过：9 单完成，订单 7 按预期不可行并保留开放预警；第 6 单仅在独立证据中使用获准的 `-25` 目标，产品 `-30` 阈值、外部契约和数据结构零变化。详见[2026-08-10 真实 E2E 重验进度](../status/2026-08-10-gate3r-real-e2e-retest-progress.md)。既有运行/回退候选继续保留，运行不得使用 `latest` 或混用候选。
-- 真实预生产数据库实施见 [2026-08-05 RDS 迁移与最小权限验收](../status/2026-08-05-gate3r-rds-preprod-migration-permissions.md)：0805 全量备份、冻结的 9 个 migration、对象 owner、逐表 app 白名单、worker 零数据库权限和 owner 长期入口关闭均通过。公网入口、app、worker、Nginx、本机日志护栏与 SLS 集中观测均已通过。
+- 真实预生产数据库实施见 [2026-08-05 RDS 迁移与最小权限验收](../status/2026-08-05-gate3r-rds-preprod-migration-permissions.md)。2026-09-06 T0 复核确认 9 条 migration、对象 owner、修正后的逐表 app 白名单和 worker 零数据库权限；`rcd_v2_preprod_owner.rolcanlogin=false` 已闭合长期登录入口，既有密码状态不绕过 `NOLOGIN`。公网数据库/Redis 仍关闭；SLS 正式规则、留存与临时负责人通知测试已复核，测试规则随后关闭。
 - 隔离基础资料实施见 [2026-08-09 G3E2E R2.2 基础资料写入与核验](../status/2026-08-09-gate3r-g3e2e-base-data-bootstrap.md)：bootstrap 时 `3` 个门店、`6` 个用户、`5` 名司机和 `8` 台车辆已由 app 身份精确核验且订单、班次、位置为 `0`。其后首轮正式 E2E 已写入并保留三单失败样本；不得重复整批写入或未经授权清理。
 - 中间提交、来源分支和主工作区未提交文件仅用于历史追溯，不得作为 Gate 3 当前验收对象。
 - Railway 既有部署只保留历史 Demo 证据；现行生产平台边界以 Gate 3-R 基建裁决为准，旧 README、CLAUDE 或 runbook 不得继续定义 Railway 生产步骤。
@@ -182,7 +183,7 @@ remote commit: 958afca537b412fb972b6e180561a9b37022834d
 2. 新候选的 Schema/migration tree 与完成一次性空 PostgreSQL 演练的旧冻结候选完全相同；原有 9 个正向 migration、最终 Schema、8 个 rollback 和五类安全护栏结论继续有效。
 3. 冻结真实 10 单已完成：订单 1～6、8～10 共 9 单完成，订单 7 按预期为 `INFEASIBLE` 且保留 1 条开放预警；并发、旧版本、到达后改排拒绝与订单 10 幂等重放均通过。首轮失败、旧映射、边界抖动和错误 helper 现场继续保留，不得清理。
 4. 最终一致性审查确认本地/远程代码、ACR digest、ECS 运行身份、真实依赖、10 单结果和故障/回退证据一致；文档口径已返修，并以 `feature/v2-gate3-review-remediation @ 57ef86c43bf220f48774e130575c40b8c94a83d5` 形成可追溯基线，本地、upstream 与 GitHub 远程核验一致。
-5. 主控已于 2026-08-11 最终裁决 Gate 3 `PASS`；第二轮与 P2 随后退出。Gate 2 兼容返修与 T0 已依次进入本地 develop，应用代码树锚点为 `8ff70ccc…`。3A/3B 均完成重验并为 `PASS / WARN`；Edge 原生 125% 缩放仅缺工具级证据，等效布局与精确 H5 尺寸已通过。5 份退出治理文档已形成 Gate 4 筹备来源 `f835302…`，当前为 `PREFLIGHT / NOT_STARTED`；本次激活同步提交并由主控公布完整 SHA 后，才可创建 Gate 4 独立任务。远程仍为 `ae471484…`。
+5. Gate 4 从 `4102ee1…` 启动，G4-1～G4-4 保持通过；历史 G4-5 SQL CRLF 阻断及三个拒绝 RC 保留。G4-5 已部署并完成 T5/T6，功能、安全、身份、恢复、观测和最小权限通过；维护窗口超时与 migration 绝对时间缺失由主控批准一次性非阻断例外，最终 `G4_5=FINAL_PASS_WITH_CONTROLLER_EXCEPTION / GATE_4=PASS`。下一步是归档完整运行证据、完成只读交接审计，再另行裁决本地 `--no-ff` 合入 develop 与合入后全量验证；不自动推送、不进入 main 或正式生产。
 
 状态事实和阻断项统一在[状态总览](../status/README.md)维护；状态文档不得修改领域契约。
 
