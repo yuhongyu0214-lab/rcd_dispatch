@@ -1,7 +1,7 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3、第二轮、P2、3A/3B 与 Gate 4 已完成。G4-5 已部署 `4d370d6…@sha256:508dea…453d` 并完成 T5/T6；主控以一次性维护窗口例外裁决 `FINAL_PASS_WITH_CONTROLLER_EXCEPTION`，Gate 4 `PASS`。本轮 R61 只提交 5 份治理文档，不推送或操作外部系统。
+> 状态：总体架构已批准；Gate -1～Gate 3、第二轮、P2、3A/3B 与 Gate 4 已完成。G4-5 已部署 `4d370d6…@sha256:508dea…453d` 并完成 T5/T6；主控以一次性维护窗口例外裁决 `FINAL_PASS_WITH_CONTROLLER_EXCEPTION`，Gate 4 `PASS`。R62 冻结子阶段证据与治理提交分层纪律；本轮只更新文档，不提交、不推送或操作外部系统。
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
@@ -595,7 +595,7 @@ flowchart TD
 
 ### 8.4 Gate 4：稳定化与发布验收
 
-当前状态：`PASS / G4_1_TO_G4_4_PASS / G4_5_FINAL_PASS_WITH_CONTROLLER_EXCEPTION`。分支/worktree 不变，代码/RC tag/OCI revision 为 `4d370d664c3710a4a03cb1b665cfdeddc7d32778`，应用 tree `5188c0efcb96d646a9609b7c47dd624d578841ee`；T5/T6 任务文档基线为 `8f69579d041c46e9a47b0ae0bfff746fd510a5b1`。本轮 R61 只提交 5 份治理文件；不更改代码身份、不推送、不合并 develop，也不执行外部写操作。
+当前状态：`PASS / G4_1_TO_G4_4_PASS / G4_5_FINAL_PASS_WITH_CONTROLLER_EXCEPTION`。分支/worktree 不变，代码/RC tag/OCI revision 为 `4d370d664c3710a4a03cb1b665cfdeddc7d32778`，应用 tree `5188c0efcb96d646a9609b7c47dd624d578841ee`；T5/T6 任务文档基线为 `8f69579d041c46e9a47b0ae0bfff746fd510a5b1`，最新已提交治理文档基线为 `e4f55c8e4bff50bac646679607fb8c7c4b712c6f`。本轮不更改代码身份、不提交、不推送、不合并 develop，也不执行外部写操作。
 
 建议分支：`feature/v2-stabilization`
 
@@ -702,7 +702,20 @@ EXTERNAL_SYSTEM_AUTHORIZATION=COMPLETED_AS_SEPARATELY_AUTHORIZED_T1_A_TO_T6（�
 - 已冻结并执行的远端路径、资源范围、恢复点、维护窗口、责任、测试数据和观察阈值只对本次任务有效。异常时仍只允许预先批准且数据库兼容的应用回退；数据库恢复/rollback、停依赖故障演练和证据清理没有因 Gate 4 PASS 自动获批。
 - 最终运行：预生产 10 条 migration、outbox CHECK 17 种；app/单 worker/Nginx revision 均为 `4d370d6…`，app/worker 使用已扫描 index `sha256:508dea…453d`，`RCD_V2_STATE_MACHINE_ENABLED=true`，真实 RDS/Tair/高德、HTTPS、SLS 与 outbox 通过；owner `NOLOGIN` 和最小权限保持，V1 读兼容窗口未自动关闭。
 - 维护窗口原定 `2026-09-06T18:00:00+08:00 .. 20:00:00+08:00`；app/worker/Nginx 实际于 `21:13:32 / 21:29:52 / 21:47:20 +08:00` 切换，migration 绝对时间未知。原 `MAINTENANCE_WINDOW_RESULT=FAIL` 保留；`CONTROLLER_EXCEPTION=APPROVED_ONE_TIME` 只使本次 G4-5 非阻断。禁止重跑 migration、修改元数据、重新开放 owner 或伪造时间补证。
-- 后续发布脚本必须记录每阶段 UTC 时间并在窗口截止时阻止新的切换。本轮只提交 5 份治理文档且不推送；Gate 4 PASS 不授权 develop/main 合并、生产发布或外部变更。
+- 后续发布脚本必须记录每阶段 UTC 时间并在窗口截止时阻止新的切换。Gate 4 PASS 不授权 develop/main 合并、生产发布或外部变更。
+
+#### 8.4.4 Gate 4 退出证据与 develop 交接（不是新子闸门）
+
+Gate 4 只定义 G4-1～G4-5；退出后不新增 G4-6～G4-10，也不为持续观察重新打开已通过的子闸门。后续工作是阶段交接：
+
+1. **证据固化**：每个子阶段完成后立即保存命令输出、截图、traceId、镜像 digest、数据库/SLS 核验、恢复点和例外裁决到受控验收目录、制品库或工单附件，并为最终证据包生成 SHA-256 清单。运行证据通常不进入 Git。
+2. **只读交接审计**：核对 `develop @ 4102ee1f85f89f363aeaa42f829a9c6d535f6d31`、Gate 4 交接 HEAD/文档 SHA、部署 RC `4d370d664c3710a4a03cb1b665cfdeddc7d32778`、应用 tree、提交边界、秘密扫描和三个拒绝 RC；审计白名单为空。
+3. **本地合入**：只有审计 `PASS` 后，主控才能另行授权 `feature/v2-stabilization --no-ff → local develop`，且不推送；已消费的部署许可不能替代合入许可。
+4. **合入后验证**：在新 develop 执行 `pnpm test`、`pnpm lint`、`pnpm exec tsc --noEmit`、`pnpm build`、`pnpm exec prisma validate`、部署制品专项测试与 `git diff --check`。禁止真实数据库、Redis/Tair、高德、云资源、migration 和部署。
+5. **只读稳定观察**：可并行进行 24 小时观察，覆盖容器健康/重启、单 worker 周期、outbox、SLS 错误与秘密模式、真实依赖、磁盘、证书和资源到期。它只追加运行证据，不改变代码 RC 或 Gate 编号。
+6. **统一治理同步**：阶段组完成且结论稳定后，用户以“提交并更新文档”授予 A8，主控才统一更新治理文档；A8 不授权 Git 提交、推送或外部操作，Git 提交仍需另行批准。代码 RC SHA、运行证据清单 SHA 与文档提交 SHA 必须分开记录。
+
+若中途出现 P0/P1，先保存缺陷与现场证据、返修并重验，不提交未稳定的治理状态。若验收必须先修改跟踪文档才能继续，应暂停并申请新的 A8。
 
 ## 9. 并行开发纪律
 
@@ -805,6 +818,8 @@ EXTERNAL_SYSTEM_AUTHORIZATION=COMPLETED_AS_SEPARATELY_AUTHORIZED_T1_A_TO_T6（�
 6. 对照阶段退出条件逐条验收。
 7. 输出结论。
 
+每个子阶段结束后立即保存运行证据，但不因单项 `PASS` 默认更新治理文档或提交 Git。阶段组完成且结论稳定后，由用户以“提交并更新文档”授予 A8，再统一更新治理文档；Git 提交仍需另行授权。
+
 结论定义：
 
 - `PASS`：无 P0/P1 未解决项，退出条件全部满足，允许进入下一阶段。
@@ -845,5 +860,5 @@ EXTERNAL_SYSTEM_AUTHORIZATION=COMPLETED_AS_SEPARATELY_AUTHORIZED_T1_A_TO_T6（�
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
 - 当前工作阶段：Gate 4 `PASS`。G4-1～G4-4 已通过；G4-5 已部署 `4d370d6…@sha256:508dea…453d`，完成 9→10 migration、真实依赖/业务/观测与 T6 审计，并以一次性维护窗口例外裁决 `FINAL_PASS_WITH_CONTROLLER_EXCEPTION`。三个旧 RC 继续拒绝。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
-- 当前执行限制：本轮只批准提交 5 份治理文档，不推送；不得更改代码/API/Schema/SQL、运行容器、秘密、真实数据或云资源。APP-006 和部署指南技术权威不变；已消费的 G4-5 部署授权不得继承。
-- 下一动作：以新的治理文档 SHA 作为只读交接点，另行裁决 develop 合入/推送和后续发布阶段；没有新授权时保持当前预生产运行与证据不变。
+- 当前执行限制：本轮只获 A8 文档同步授权，未获 Git 提交或推送授权；不得更改代码/API/Schema/SQL、运行容器、秘密、真实数据或云资源。APP-006 和部署指南技术权威不变；已消费的 G4-5 部署授权不得继承。
+- 下一动作：先固化 Gate 4 运行证据包并做独立只读交接审计；通过后另行裁决本地 develop 合入与合入后全量验证。24 小时稳定观察可并行但不构成新 Gate；没有新授权时保持当前预生产运行与证据不变。

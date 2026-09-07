@@ -1,6 +1,6 @@
 # 人车单项目状态总览
 
-> 状态快照：2026-09-07 / R61
+> 状态快照：2026-09-07 / R62
 > 用途：说明项目做到哪一步、还差什么
 > 非权威范围：产品行为、状态机、Schema、枚举、HTTP 契约、技术栈和生产架构
 
@@ -12,7 +12,7 @@ Gate 3、第二轮、P2、3A/3B 与 Gate 4 均已退出。G4-5 已按 `migration
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
-| 文档治理 | `G4_5_FINAL_PASS_EXCEPTION_SYNC` | 本轮输入文档 SHA `8f69579d041c46e9a47b0ae0bfff746fd510a5b1`；代码/OCI revision `4d370d6…` 不变 | R61 只提交 5 份治理文档，不推送、不操作云资源 |
+| 文档治理 | `GATE4_EVIDENCE_GOVERNANCE_SYNC` | 最新已提交文档 SHA `e4f55c8e4bff50bac646679607fb8c7c4b712c6f`；代码/OCI revision `4d370d6…` 不变 | 子阶段证据与治理提交分层；本轮只更新文档，Git 提交、推送和外部操作均未授权 |
 | 应用候选 | `958AFCA_GATE3_ACCEPTED_DEVELOP_HANDOFF_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变运行身份；代码历史交接点为 `develop @ 51ddb5f…`，最终状态激活 HEAD 为 `ae471484…` |
 | 依赖安全 | `REMOTE_DUAL_DB_CRITICAL_HIGH_0 / SECRET_0 / INDEPENDENT_AUDIT_PASS` | 同一远端 amd64 `sha256:577dc2…f414`，R55 与 2026-09-03 验收时点当前库两组扫描均通过 | 仅固定镜像/库/严重等级成立；若联调延后或出现新披露，先复核扫描有效性 |
 | migration 指纹 | `PREPROD_10_APPLIED / OUTBOX_CHECK_17_PASS` | 第 10 条 `20260816120000_extend_dispatch_event_outbox_types` 已应用；outbox CHECK 精确允许 17 种事件 | migration 绝对执行时间未保留且已获一次性非阻断裁决；禁止重跑、改元数据或重开 owner 补证 |
@@ -34,6 +34,17 @@ Gate 3、第二轮、P2、3A/3B 与 Gate 4 均已退出。G4-5 已按 `migration
 | Gate 4 G4-4 | `PASS / REMOTE_RC_ACCEPTANCE_COMPLETE` | 新远端 `4d370d6…` 的身份、SQL、工程/运行探针、双库/秘密扫描及独立审计通过 | 主控裁决只针对本节完整 digest；不是部署或 Gate 4 总闸门 PASS |
 | Gate 4 G4-5 | `FINAL_PASS_WITH_CONTROLLER_EXCEPTION` | T1-A～T6 已完成；运行身份、migration、真实依赖、业务/观测和恢复路径通过，未决 P0/P1=0 | 保留维护窗口超时、migration 时间缺失、自签名证书和 Edge 等效布局边界 |
 | Gate 4 总闸门 | `PASS` | G4-1～G4-5 已通过；G4-5 含一次性主控例外 | Gate 4 退出不自动合并 develop、推送、进入 main 或宣布正式生产上线 |
+
+## Gate 4 退出后的证据治理与 develop 交接
+
+Gate 4 不新增 G4-6～G4-10 编号，也不重新打开已退出的 G4-1～G4-5。后续按以下顺序完成阶段交接：
+
+1. 把命令输出、截图、traceId、镜像 digest、数据库/SLS 核验、恢复点和例外裁决集中保存到受控验收目录、制品库或工单附件，并生成 SHA-256 清单；不得先删除 `%TEMP%`、浏览器或临时附件中的唯一证据。
+2. 以 `develop @ 4102ee1f85f89f363aeaa42f829a9c6d535f6d31`、Gate 4 交接 HEAD/文档基线和部署 RC `4d370d664c3710a4a03cb1b665cfdeddc7d32778` 做独立只读交接审计，核对提交边界、应用 tree、秘密、拒绝 RC 和运行证据，不修改文件。
+3. 只读审计 `PASS` 后，主控另行决定是否以 `--no-ff` 合入本地 develop；不推送。合入授权不从 Gate 4 部署授权继承。
+4. 合入后在新 develop 执行全量 test、lint、`tsc --noEmit`、build、Prisma validate、部署制品专项测试和 `git diff --check`；不得连接真实数据库、云资源或重复 migration。
+5. 可并行进行 24 小时只读稳定观察，覆盖容器健康/重启、单 worker 周期、outbox、SLS 错误与秘密模式、真实依赖、磁盘和证书/资源到期；它是 Gate 4 退出证据，不是新 Gate。
+6. 上述阶段组结论稳定后，再取得 A8 文档同步授权统一更新治理文档；代码 RC SHA、运行证据清单 SHA 和文档提交 SHA 分开记录。
 
 ## 3A/3B 退出记录
 
@@ -355,5 +366,7 @@ Gate 3 历史运行证据与 Gate 4 新候选须分开：最近已核验的预�
 
 - 状态文档可以登记完成度、证据、阻断项和下一步，不能修改任何领域规则。
 - 状态变化必须给出日期、证据和对应权威入口。
+- 每个子阶段必须保存运行证据，但单项 `PASS` 不默认更新治理文档或 Git 提交；阶段组完成且结论稳定后，经“提交并更新文档”（A8）统一同步。
+- 运行证据层与治理文档层分开；代码 RC SHA、证据清单 SHA、文档提交 SHA 不得混用。A8 不包含 Git 提交、推送或外部系统授权。
 - “架构已冻结”不等于“资源已创建”，“Demo 运行过”不等于“生产已验收”。
 - 结论冲突时回到[文档版本总入口](../versions/README.md)按领域裁决。

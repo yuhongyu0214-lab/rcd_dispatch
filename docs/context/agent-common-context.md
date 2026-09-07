@@ -1,7 +1,7 @@
 # 人车单 V2 Agent 公共上下文（Layer 0）
 
 > 文档类型：`DERIVED / LAYER_0`
-> 上下文版本：`RCD-AGENT-CONTEXT-20260907-R61`
+> 上下文版本：`RCD-AGENT-CONTEXT-20260907-R62`
 > 适用范围：所有新建或重新启动的 Agent
 > 权威范围：仅提供项目目标、当前阶段、公共纪律、模块边界和命令入口
 > 非权威范围：产品行为、Schema、HTTP DTO、枚举、基础设施细节和任务验收标准
@@ -12,7 +12,7 @@
 
 人车单调度系统 V2 面向汽车租赁调度，主线是订单接入、实时位置、司机班次、A/B/C 工单时间轴、真实 ETA、调度事务和执行闭环。
 
-Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。G4-5 已按 migration → app → 单 worker → Nginx 完成预生产部署、T5 联调和 T6 独立审计；`4d370d6…@sha256:508dea…453d` 正在运行，预生产为 10 条 migration，真实依赖、HTTPS、SLS、单 worker、outbox、恢复与最小权限通过，未决 P0/P1 为 0。app/worker/Nginx 实际切换超过维护窗口且 migration 绝对时间未保留，主控仅针对本次部署批准一次性非阻断例外，裁决 `G4_5=FINAL_PASS_WITH_CONTROLLER_EXCEPTION / GATE_4=PASS`。本轮只提交 5 份治理文档，不推送或操作云资源。
+Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。G4-5 已按 migration → app → 单 worker → Nginx 完成预生产部署、T5 联调和 T6 独立审计；`4d370d6…@sha256:508dea…453d` 正在运行，预生产为 10 条 migration，真实依赖、HTTPS、SLS、单 worker、outbox、恢复与最小权限通过，未决 P0/P1 为 0。app/worker/Nginx 实际切换超过维护窗口且 migration 绝对时间未保留，主控仅针对本次部署批准一次性非阻断例外，裁决 `G4_5=FINAL_PASS_WITH_CONTROLLER_EXCEPTION / GATE_4=PASS`。最新已提交治理文档基线为 `e4f55c8e4bff50bac646679607fb8c7c4b712c6f`；本轮只同步 Gate 4 退出后的证据治理和 develop 交接纪律，不改变代码 RC 或运行环境。
 
 ## 2. 当前版本与闸门
 
@@ -32,7 +32,7 @@ Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。G4-5 已按 migration →
 | Gate 3 | `PASS`（2026-08-11 最终裁决） |
 | Gate 4 子闸门 | `G4_1_TO_G4_4_PASS / G4_5_FINAL_PASS_WITH_CONTROLLER_EXCEPTION`；Gate 4 总闸门 `PASS` |
 | Gate 4 镜像 | 已验收远端 index `sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d`；完整 amd64/config 与扫描证据见状态总览；三个旧 RC `4102ee1… / a0c8bbd… / 857705e…` 继续 `REJECTED_DO_NOT_DEPLOY` |
-| Gate 4 下一步 | 本轮输入文档基线 `8f69579d041c46e9a47b0ae0bfff746fd510a5b1`；本地 `develop @ 4102ee1f85f89f363aeaa42f829a9c6d535f6d31` 未合入。先完成 R61 治理交接；develop 合入/推送、进入 main 或正式生产发布均须另行裁决，不继承已消费部署许可 |
+| Gate 4 下一步 | 最新已提交文档基线 `e4f55c8e4bff50bac646679607fb8c7c4b712c6f`；本地 `develop @ 4102ee1f85f89f363aeaa42f829a9c6d535f6d31` 未合入。先归档运行证据并完成只读交接审计；审计通过后仍须另行批准本地 `--no-ff` 合入及合入后全量验证。推送、进入 main 或正式生产发布均须另行裁决 |
 | Railway | 仅历史 Demo 证据，不是生产基线 |
 
 状态变化只认 [项目状态总览](../status/README.md)；文档入口只认 [文档版本总入口](../versions/README.md)。
@@ -124,7 +124,9 @@ Agent 开工前必须向主控确认：
 
 Agent 只提交本轮交付和验证证据，不自行宣布 Gate 通过。
 
-每个主对话回合结束时，项目 Hook 只提示是否需要同步文档；只有用户明确回复“提交并更新文档”后，Agent 才能按本轮事实更新相关文档。该口令不授权 Git 提交、推送或任何外部环境操作。
+每个子阶段必须保存命令输出、截图、traceId、digest、数据库与 SLS 核验等运行证据，但单项 `PASS` 不默认修改治理文档或产生 Git 提交。运行证据通常保存在受控验收目录、制品库或工单附件，不改变冻结的代码 RC SHA。
+
+只有阶段组完成、结论稳定，且用户明确回复“提交并更新文档”取得 A8 文档同步授权后，Agent 才能统一更新相关治理文档。该口令不授权 Git 提交、推送或任何外部环境操作；Git 提交仍须另行批准。若验收中途必须修改跟踪文档才能继续，应暂停并重新申请 A8。
 
 主控在阶段开始和结束时必须复核任务、进度、状态和决策。状态、决策、代码基线或任一角色必读文档发生变化时，应同步更新：
 
