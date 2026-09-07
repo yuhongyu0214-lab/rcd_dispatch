@@ -63,7 +63,7 @@ Gate -1 基线整理（已通过，develop @ 37ee8a3）
 
 - 每个 Gate 通过验收后才能创建下一阶段分支；不得提前建分支。
 - Gate 3 当前唯一代码/ACR/预生产运行候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`；app、worker 与 Nginx release revision 已对齐，Nginx 原镜像、配置、证书和端口未变。更早运行/回退候选继续保留，不得使用 `latest` 或混用候选。
-- Gate 3-R 生产主线为阿里云；Railway 只保留历史 Demo 证据。预生产备份、9 个 migration、最小权限、app/worker/Nginx/HTTPS/SLS、冻结真实 10 单、worker 积压恢复和应用回退均通过；`084649f4…` 回退 30 秒、`958afca…` 恢复 31 秒。2026-08-11 主控最终裁决 Gate 3 `PASS`。第二轮当前为 `PREFLIGHT / API_REMEDIATION_REBASE_READY`：本地第 10 个 outbox CHECK migration `c6850df…` 已通过隔离验收并进入 `develop`，预生产仍保持 9 个；API r16 统一依赖枚举为 `AMAP`。应用返修候选 `5b84ab4…` 必须在主控登记的新基线上重放，再仅补两份司机命令文件的跨门店释放并复审。形成新的批准 `develop` SHA 前不得启动 2A/2B/2C；远程同步稍后处理。禁止未经授权执行预生产 migration、部署、基础资料写入或证据清理。
+- Gate 3、第二轮、3A/3B 与 Gate 4 已退出。Gate 4 运行证据包 `gate4-evidence-package-20260907.zip` 的 SHA-256 为 `988b134205791d56e35dbfcdd4d4758004057643385763ddf43f59270cafbcf0`；独立只读交接审计未发现 P0/P1，保留“部分外部原始证据未完整入包”的非阻断 P2。`feature/v2-stabilization @ 089bc4da56022c1b077faac474c269d269d0930b` 已经用户单独批准，以 `--no-ff` 合入本地 `develop @ 6c42f0c6448fc712bca71d9ef7d82b22a105b3ec`，合并后 test、lint、TypeScript、31/31 build、Prisma validate、部署制品专项与 diff check 全部通过。预生产继续运行代码/OCI revision `4d370d664c3710a4a03cb1b665cfdeddc7d32778` 与 index digest `sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d`；代码 RC、证据包和治理文档 SHA 必须分开。`origin/develop` 仍为 `ae4714849fa965940b0df1c6766638cf398ac0ce`；推送、进入 `main`、正式生产发布或任何外部变更均未授权。
 - V2 分支命名 `feature/v2-*`；合并路径仍为 `feature/* → develop → main`。
 - 每个分支只能修改自己的独占文件范围；Schema、公共 DTO、共享样式、logger、调度事务各有唯一所有者线。
 

@@ -1,7 +1,7 @@
 # 人车单 V2 Agent 公共上下文（Layer 0）
 
 > 文档类型：`DERIVED / LAYER_0`
-> 上下文版本：`RCD-AGENT-CONTEXT-20260907-R62`
+> 上下文版本：`RCD-AGENT-CONTEXT-20260907-R63`
 > 适用范围：所有新建或重新启动的 Agent
 > 权威范围：仅提供项目目标、当前阶段、公共纪律、模块边界和命令入口
 > 非权威范围：产品行为、Schema、HTTP DTO、枚举、基础设施细节和任务验收标准
@@ -12,7 +12,7 @@
 
 人车单调度系统 V2 面向汽车租赁调度，主线是订单接入、实时位置、司机班次、A/B/C 工单时间轴、真实 ETA、调度事务和执行闭环。
 
-Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。G4-5 已按 migration → app → 单 worker → Nginx 完成预生产部署、T5 联调和 T6 独立审计；`4d370d6…@sha256:508dea…453d` 正在运行，预生产为 10 条 migration，真实依赖、HTTPS、SLS、单 worker、outbox、恢复与最小权限通过，未决 P0/P1 为 0。app/worker/Nginx 实际切换超过维护窗口且 migration 绝对时间未保留，主控仅针对本次部署批准一次性非阻断例外，裁决 `G4_5=FINAL_PASS_WITH_CONTROLLER_EXCEPTION / GATE_4=PASS`。最新已提交治理文档基线为 `e4f55c8e4bff50bac646679607fb8c7c4b712c6f`；本轮只同步 Gate 4 退出后的证据治理和 develop 交接纪律，不改变代码 RC 或运行环境。
+Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。G4-5 已按 migration → app → 单 worker → Nginx 完成预生产部署、T5 联调和 T6 独立审计；`4d370d6…@sha256:508dea…453d` 正在运行，预生产为 10 条 migration，真实依赖、HTTPS、SLS、单 worker、outbox、恢复与最小权限通过，未决 P0/P1 为 0。app/worker/Nginx 实际切换超过维护窗口且 migration 绝对时间未保留，主控仅针对本次部署批准一次性非阻断例外，裁决 `G4_5=FINAL_PASS_WITH_CONTROLLER_EXCEPTION / GATE_4=PASS`。运行证据包与独立只读交接审计已经完成；主控随后批准 `feature/v2-stabilization @ 089bc4da56022c1b077faac474c269d269d0930b` 以 `--no-ff` 合入本地 `develop @ 6c42f0c6448fc712bca71d9ef7d82b22a105b3ec`，合入后完整工程回归通过。本轮 A8 只同步该稳定结论，尚未产生新的治理文档提交 SHA，也不改变代码 RC 或运行环境。
 
 ## 2. 当前版本与闸门
 
@@ -32,7 +32,7 @@ Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。G4-5 已按 migration →
 | Gate 3 | `PASS`（2026-08-11 最终裁决） |
 | Gate 4 子闸门 | `G4_1_TO_G4_4_PASS / G4_5_FINAL_PASS_WITH_CONTROLLER_EXCEPTION`；Gate 4 总闸门 `PASS` |
 | Gate 4 镜像 | 已验收远端 index `sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d`；完整 amd64/config 与扫描证据见状态总览；三个旧 RC `4102ee1… / a0c8bbd… / 857705e…` 继续 `REJECTED_DO_NOT_DEPLOY` |
-| Gate 4 下一步 | 最新已提交文档基线 `e4f55c8e4bff50bac646679607fb8c7c4b712c6f`；本地 `develop @ 4102ee1f85f89f363aeaa42f829a9c6d535f6d31` 未合入。先归档运行证据并完成只读交接审计；审计通过后仍须另行批准本地 `--no-ff` 合入及合入后全量验证。推送、进入 main 或正式生产发布均须另行裁决 |
+| Gate 4 交接与下一步 | 交接文档提交 `089bc4da56022c1b077faac474c269d269d0930b` 已合入本地 `develop @ 6c42f0c6448fc712bca71d9ef7d82b22a105b3ec`；合并父提交为 `4102ee1f85f89f363aeaa42f829a9c6d535f6d31` 与 `089bc4da56022c1b077faac474c269d269d0930b`。证据包 SHA-256 为 `988b134205791d56e35dbfcdd4d4758004057643385763ddf43f59270cafbcf0`；独立审计 P0/P1=0，保留一个原始证据完整性 P2。合入后 `813 passed / 7 expected skipped`，lint、TypeScript、31/31 build、Prisma validate、部署制品专项与 diff check 均通过。`origin/develop` 仍为 `ae471484…`；本轮 A8 未授权 Git 提交、推送、进入 main 或正式生产发布 |
 | Railway | 仅历史 Demo 证据，不是生产基线 |
 
 状态变化只认 [项目状态总览](../status/README.md)；文档入口只认 [文档版本总入口](../versions/README.md)。
