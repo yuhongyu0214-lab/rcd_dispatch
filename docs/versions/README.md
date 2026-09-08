@@ -1,6 +1,6 @@
 # 人车单项目文档版本总入口
 
-> 版本戳：`RCD-DOC-REGISTRY-20260908-R64`
+> 版本戳：`RCD-DOC-REGISTRY-20260908-R65`
 > 建立日期：2026-07-13
 > 治理更新时间：2026-09-08
 > 归档方式：现行权威集中到 `v2.0/`；已融合或冲突的旧方案从工作树清场，历史由 Git 追溯
@@ -30,8 +30,8 @@
 | 构建、部署与回退 | V2.0-r14 | 无 shell Node 入口、Git 归档与 SQL raw 指纹、固定库/当前库分开扫描；G4-5 已退出，后续发布须重新授权 | [部署指南 V2](v2.0/deployment-guide-v2.md) |
 | 生产运行与恢复 | V2.0-r6 | Gate 4 预生产身份、健康、真实依赖、单 worker、SLS、outbox 和恢复路径通过；整机/RDS 灾备仍为独立演练 | [运维指南 V2](v2.0/operations-guide-v2.md) |
 | 基础设施决策与替代历史 | V2.0-r3 | INFRA-001～023 已登记；公网 IP 预生产演示获准，正式上线条件不变 | [基础设施决策日志](v2.0/infrastructure-decision-log.md) |
-| 项目当前状态 | 2026-09-08 / R64 | G4-5 `FINAL_PASS_WITH_CONTROLLER_EXCEPTION`；Gate 4 `PASS`。R63 治理提交已推送至 `origin/develop @ 95a1c06…`，本地 `main @ d9cdf2b…` 已接收相同树；`origin/main` 与正式生产未变化 | [状态总览](../status/README.md) |
-| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260908-R64 | Layer 0；develop 已远端对齐、本地 main 已合入；运行 RC、证据包、治理 SHA 与主线合并 SHA 分离，下一步须另行裁决 R64 文档提交、main 推送与正式发布 | [Agent 公共上下文](../context/agent-common-context.md) |
+| 项目当前状态 | 2026-09-08 / R65 | Gate 4 `PASS`；`main == origin/main == d9cdf2b…`，独立 main 全量验证通过。正式生产 T0 只读盘点已授权，所有外部写操作仍未授权 | [状态总览](../status/README.md) |
+| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260908-R65 | Layer 0；代码基线 `d9cdf2b…`，正式生产 T0 修改白名单为空、外部写授权为无；运行 RC、证据包、主线 SHA 与治理 SHA 分离 | [Agent 公共上下文](../context/agent-common-context.md) |
 | V1 产品与开发主线 | V1.x | 历史只读 | [V1 历史索引](v1/README.md) |
 
 ## 文档权威顺序（按领域拆分，唯一权威口径）
@@ -72,6 +72,7 @@ HTTP 契约               → v2.0/api-contract-v2.md
 | 地图调度 | `docs/versions/README.md` → [地图调度 Agent](#地图调度-agent) |
 | 代码审计 | `docs/versions/README.md` → [代码审计 Agent](#代码审计-agent) |
 | 测试 | `docs/versions/README.md` → [测试 Agent](#测试-agent) |
+| 运维发布 / 生产部署 | `docs/versions/README.md` → [运维发布与生产部署 Agent](#运维发布与生产部署-agent) |
 
 ### 主控 Agent
 
@@ -115,6 +116,13 @@ HTTP 契约               → v2.0/api-contract-v2.md
 - 本轮追加：指定测试文件、用例、Mock 条件、回归范围和失败判定。
 - 不进入上下文：决策日志全文、无关实现和云资源建设细节。
 
+### 运维发布与生产部署 Agent
+
+- 默认必读：[基础设施架构 V2](v2.0/infrastructure-v2.md)、[基础设施决策日志](v2.0/infrastructure-decision-log.md)、[部署指南 V2](v2.0/deployment-guide-v2.md)、[运维指南 V2](v2.0/operations-guide-v2.md)、[状态总览](../status/README.md)和[并行开发主计划](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md)的正式生产准备章节。
+- 当前 T0：只读盘点。代码基线 `d9cdf2bd36165ab3c3e012835c761458b455f61e`；文档基线为承载本 R65 内容的治理提交；修改白名单为空；外部写授权为无。
+- 允许：官方控制台和文档的 Describe/List/Query、价格与续费核验、购物车预览，以及域名/备案资格、可信证书、ECS/RDS/Tair/ACR/SLS/DNS 复用边界和恢复责任盘点；所有输出必须脱敏。
+- 禁止：购买或付款、提交备案、创建/修改/删除云资源、RAM/安全组/白名单/DNS/证书变更、构建或推送镜像、migration、部署、重启、生产数据连接及秘密读取。任何外部写操作必须由主控逐项重新授权。
+
 ### Gate 4 当前任务入口（3A/3B 证据已冻结）
 
 3A/3B 保持 `PASS / WARN`，只作为历史入口证据。Gate 4 位于 `feature/v2-stabilization`、`.worktrees/v2-stabilization`；代码/RC tag/OCI revision 均为 `4d370d664c3710a4a03cb1b665cfdeddc7d32778`，应用 tree `5188c0efcb96d646a9609b7c47dd624d578841ee`。T5/T6 任务文档基线为 `8f69579d041c46e9a47b0ae0bfff746fd510a5b1`。G4-5 已完成 migration → app → 单 worker → Nginx、真实联调和独立审计；预生产为 10 条 migration，新 RC 正在运行，主控以一次性维护窗口例外裁决 `FINAL_PASS_WITH_CONTROLLER_EXCEPTION`，Gate 4 `PASS`。
@@ -124,9 +132,9 @@ HTTP 契约               → v2.0/api-contract-v2.md
 | 3A | 数据库验证 Agent；`feature/v2-migration-validation`；`.worktrees/v2-migration-validation` | `PASS / WARN`；T0 7 文件差异不触及数据/迁移/兼容权威域 | 10 个 migration、迁移映射、双读/兼容窗口、数据核对、rollback 和零漂移通过 |
 | 3B | 测试 Agent；`feature/v2-e2e-validation @ 8ff70ccc…`；`.worktrees/v2-e2e-validation` | `PASS / WARN`；修改白名单为空 | PRD §13 14 项、故障、数据库/API、安全、Chrome/Edge 和工程命令通过；Edge 125% 为 `952×800` 等效布局证据 |
 
-3A/3B、已结束的返修/扫描和已消费的 G4-5 授权均不继承。三个旧 RC `4102ee1… / a0c8bbd… / 857705e…` 继续 `REJECTED_DO_NOT_DEPLOY`，不得覆盖、删除或部署。代码/运行锚点仍为 `4d370d6…`；交接文档提交 `089bc4d…` 已通过 `--no-ff` 进入 develop，R63 治理提交 `95a1c06…` 已推送并与 `origin/develop` 对齐。本地 `main @ d9cdf2b…` 随后通过 `--no-ff` 接收同一 develop 树；`origin/main @ 1de7b6b…` 未推送。证据包 `gate4-evidence-package-20260907.zip` 的 SHA-256 为 `988b1342…bcf0`；独立审计没有 P0/P1，保留一个外部原始证据完整性 P2。维护窗口超时和 migration 时间缺失的例外只绑定本次部署，不得用于以后任务；G4-5 证据与裁决见[主计划 §8.4.3](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md#843-g4-5-预生产继续联调方案t6-pass_with_controller_exceptiongate-4-pass)。
+3A/3B、已结束的返修/扫描和已消费的 G4-5 授权均不继承。三个旧 RC `4102ee1… / a0c8bbd… / 857705e…` 继续 `REJECTED_DO_NOT_DEPLOY`，不得覆盖、删除或部署。代码/运行锚点仍为 `4d370d6…`；R63 治理提交 `95a1c06…` 已推送至 `origin/develop`，R64 治理提交为 `964bd1c42f1d94b9b8f3d0bff4fd7a3f1521b235`。`main == origin/main == d9cdf2bd36165ab3c3e012835c761458b455f61e`，独立 main 全量验证通过且 refs 未改变。证据包 `gate4-evidence-package-20260907.zip` 的 SHA-256 为 `988b1342…bcf0`；独立审计没有 P0/P1，保留一个外部原始证据完整性 P2。维护窗口超时和 migration 时间缺失的例外只绑定本次预生产部署，不得用于正式生产任务；G4-5 证据与裁决见[主计划 §8.4.3](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md#843-g4-5-预生产继续联调方案t6-pass_with_controller_exceptiongate-4-pass)。正式生产 T0 只读盘点是独立新阶段，不继承任何部署或外部写授权。
 
-共同停止条件：代码/文档 SHA 不明、工作区不干净、缺少精确文件/资源白名单或阶段外部授权、制品/SQL/扫描对象不一致、权威口径冲突时立即停止。运维发布角色只追加基建/部署/运维权威与主计划 §8.4.3，测试/数据库/审计各按该节任务分配读取，不把业务全文塞入公共层。APP-006 r6 与部署指南 r14 保持技术权威；其本地返修阶段状态属于 R56 历史快照，最新放行状态以本轮状态总览为准。
+共同停止条件：代码/文档 SHA 不明、工作区不干净、缺少精确文件/资源白名单或阶段外部授权、制品/SQL/扫描对象不一致、权威口径冲突时立即停止。运维发布角色按正式生产 T0 只读任务追加基建/部署/运维权威，不把业务全文塞入公共层。APP-006 r6 与部署指南 r14 保持技术权威；其本地返修阶段状态属于 R56 历史快照，最新放行状态以本轮状态总览为准。
 
 ### 未分配到默认角色上下文的文档
 
@@ -183,7 +191,7 @@ remote commit: 958afca537b412fb972b6e180561a9b37022834d
 2. 新候选的 Schema/migration tree 与完成一次性空 PostgreSQL 演练的旧冻结候选完全相同；原有 9 个正向 migration、最终 Schema、8 个 rollback 和五类安全护栏结论继续有效。
 3. 冻结真实 10 单已完成：订单 1～6、8～10 共 9 单完成，订单 7 按预期为 `INFEASIBLE` 且保留 1 条开放预警；并发、旧版本、到达后改排拒绝与订单 10 幂等重放均通过。首轮失败、旧映射、边界抖动和错误 helper 现场继续保留，不得清理。
 4. 最终一致性审查确认本地/远程代码、ACR digest、ECS 运行身份、真实依赖、10 单结果和故障/回退证据一致；文档口径已返修，并以 `feature/v2-gate3-review-remediation @ 57ef86c43bf220f48774e130575c40b8c94a83d5` 形成可追溯基线，本地、upstream 与 GitHub 远程核验一致。
-5. Gate 4 从 `4102ee1…` 启动，G4-1～G4-4 保持通过；历史 G4-5 SQL CRLF 阻断及三个拒绝 RC 保留。G4-5 已部署并完成 T5/T6，功能、安全、身份、恢复、观测和最小权限通过；维护窗口超时与 migration 绝对时间缺失由主控批准一次性非阻断例外，最终 `G4_5=FINAL_PASS_WITH_CONTROLLER_EXCEPTION / GATE_4=PASS`。运行证据包、独立只读交接审计、develop 合入与完整工程回归已经完成；R63 治理提交 `95a1c06…` 已推送到 `origin/develop`，本地 `main @ d9cdf2b…` 已接收相同树。当前只执行 R64 治理同步；下一步须分别取得 R64 Git 提交、推送 `main` 或正式生产发布的独立授权。
+5. Gate 4 从 `4102ee1…` 启动，G4-1～G4-4 保持通过；历史 G4-5 SQL CRLF 阻断及三个拒绝 RC 保留。G4-5 已部署并完成 T5/T6，功能、安全、身份、恢复、观测和最小权限通过；维护窗口超时与 migration 绝对时间缺失由主控批准一次性非阻断例外，最终 `G4_5=FINAL_PASS_WITH_CONTROLLER_EXCEPTION / GATE_4=PASS`。运行证据包、独立只读交接审计、develop 合入与回归已经完成；R63 `95a1c06…` 已推送至 `origin/develop`，R64 为 `964bd1c…`。当前 `main == origin/main == d9cdf2b…`，独立 main 全量验证通过。R65 开始正式生产 T0 只读盘点；所有外部写操作仍须逐项独立授权。
 
 状态事实和阻断项统一在[状态总览](../status/README.md)维护；状态文档不得修改领域契约。
 

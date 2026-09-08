@@ -1,7 +1,7 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3、第二轮、P2、3A/3B 与 Gate 4 已完成。G4-5 已部署 `4d370d6…@sha256:508dea…453d` 并完成 T5/T6；主控以一次性维护窗口例外裁决 `FINAL_PASS_WITH_CONTROLLER_EXCEPTION`，Gate 4 `PASS`。R63 治理提交已推送至 `origin/develop @ 95a1c06…`，已验收 develop 随后以 `--no-ff` 合入本地 `main @ d9cdf2b…`；R64 只更新六份治理文件，不提交、不推送 main 或操作外部系统。
+> 状态：总体架构已批准；Gate -1～Gate 3、第二轮、P2、3A/3B 与 Gate 4 已完成。G4-5 已部署 `4d370d6…@sha256:508dea…453d` 并完成 T5/T6；主控以一次性维护窗口例外裁决 `FINAL_PASS_WITH_CONTROLLER_EXCEPTION`，Gate 4 `PASS`。R63 已推送至 `origin/develop @ 95a1c06…`，R64 治理提交为 `964bd1c…`；当前 `main == origin/main == d9cdf2b…` 且独立全量验证通过。R65 只登记正式生产 T0 只读盘点入口，不授权任何外部写操作。
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
@@ -595,7 +595,7 @@ flowchart TD
 
 ### 8.4 Gate 4：稳定化与发布验收
 
-当前状态：`PASS / G4_1_TO_G4_4_PASS / G4_5_FINAL_PASS_WITH_CONTROLLER_EXCEPTION / DEVELOP_PUSHED / MAIN_MERGED_LOCAL`。代码/RC tag/OCI revision 保持 `4d370d664c3710a4a03cb1b665cfdeddc7d32778`，应用 tree 保持 `5188c0efcb96d646a9609b7c47dd624d578841ee`；T5/T6 任务文档基线为 `8f69579d041c46e9a47b0ae0bfff746fd510a5b1`，交接文档提交为 `089bc4da56022c1b077faac474c269d269d0930b`。R63 治理提交及当前 develop/origin-develop 为 `95a1c06daa1c373f76f7026dd4bfe71d31a11df0`；本地 main 合入点为 `d9cdf2bd36165ab3c3e012835c761458b455f61e`，`origin/main` 未推送。证据包 ZIP SHA-256 为 `988b134205791d56e35dbfcdd4d4758004057643385763ddf43f59270cafbcf0`。本轮 R64 A8 不更改代码身份、不提交、不推送 main，也不执行外部写操作。
+当前状态：`PASS / G4_1_TO_G4_4_PASS / G4_5_FINAL_PASS_WITH_CONTROLLER_EXCEPTION / DEVELOP_PUSHED / MAIN_PUSHED / MAIN_FULL_VALIDATION_PASS`。代码/RC tag/OCI revision 保持 `4d370d664c3710a4a03cb1b665cfdeddc7d32778`，应用 tree 保持 `5188c0efcb96d646a9609b7c47dd624d578841ee`；T5/T6 任务文档基线为 `8f69579d041c46e9a47b0ae0bfff746fd510a5b1`，交接文档提交为 `089bc4da56022c1b077faac474c269d269d0930b`。R63 治理提交及 `origin/develop` 为 `95a1c06daa1c373f76f7026dd4bfe71d31a11df0`，R64 治理提交为 `964bd1c42f1d94b9b8f3d0bff4fd7a3f1521b235`；`main == origin/main == d9cdf2bd36165ab3c3e012835c761458b455f61e`。独立 main 全量验证通过 813/7、lint、TypeScript、31/31 build、Prisma validate、部署制品 5/5、diff check 与干净工作区，refs 未改变。证据包 ZIP SHA-256 为 `988b134205791d56e35dbfcdd4d4758004057643385763ddf43f59270cafbcf0`。正式生产 T0 只读盘点已授权，外部写操作仍为无。
 
 建议分支：`feature/v2-stabilization`
 
@@ -713,11 +713,31 @@ Gate 4 只定义 G4-1～G4-5；退出后不新增 G4-6～G4-10，也不为持续
 3. **develop 合入｜完成**：经用户单独批准，`feature/v2-stabilization @ 089bc4da56022c1b077faac474c269d269d0930b` 已以 `--no-ff` 合入本地 `develop @ 6c42f0c6448fc712bca71d9ef7d82b22a105b3ec`；父提交为 `4102ee1f…` 与 `089bc4d…`。
 4. **合入后验证｜完成**：新 develop 通过 `813 passed / 7 expected skipped`、lint、`pnpm exec tsc --noEmit`、31/31 build、Prisma validate、部署制品专项测试与 `git diff --check`；没有连接真实数据库、Redis/Tair、高德、云资源，也没有执行 migration 或部署。
 5. **R63 治理与 develop 推送｜完成**：六份治理文件形成 `95a1c06daa1c373f76f7026dd4bfe71d31a11df0`；推送前确认远端无独有提交或分叉，普通快进推送后 `develop == origin/develop == 95a1c06…`。
-6. **本地 main 合入｜完成**：经再次单独授权，已验收 develop 以 `--no-ff` 合入本地 `main @ d9cdf2bd36165ab3c3e012835c761458b455f61e`；父提交为 `1de7b6b89cfa2f55158208550865e8a9707a3b0c` 与 `95a1c06daa1c373f76f7026dd4bfe71d31a11df0`。main/develop 树同为 `4f3e60bffced3a6047afac21ee712ecf8576d13a`，diff check 与 worktree 洁净度通过；未重新运行应用验收。`origin/main` 保持 `1de7b6b…`。
-7. **只读稳定观察｜可选、非阻断**：如另行执行 24 小时观察，只追加容器健康/重启、单 worker、outbox、SLS、真实依赖、磁盘、证书和资源到期证据，不改变代码 RC 或 Gate 编号。
-8. **统一治理同步｜本轮 R64 A8**：用户已授权同步上述主线状态，修改白名单严格为六份治理文件；A8 不授权 Git 提交、推送 main 或外部操作。代码 RC SHA、运行证据包 SHA、治理提交 SHA 与主线合并 SHA 继续分开记录。
+6. **main 合入与推送｜完成**：经分别授权，已验收 develop 以 `--no-ff` 合入 `main @ d9cdf2bd36165ab3c3e012835c761458b455f61e`；确认远端无分叉后普通推送，当前 `main == origin/main == d9cdf2b…`，未使用强推。
+7. **main 独立全量验证｜完成**：在不改变 SHA/refs、不开外部连接的条件下通过 `813 passed / 7 expected skipped`、lint、`pnpm exec tsc --noEmit`、31/31 build、Prisma validate、部署制品 5/5、diff check 与干净工作区；42 个本地分支、13 个远端引用、0 个标签前后一致。
+8. **R64 治理提交｜完成**：六份治理文件形成 `964bd1c42f1d94b9b8f3d0bff4fd7a3f1521b235`，只位于本地 develop，未推送且不替代 main 代码基线。
+9. **R65 正式生产入口同步｜完成**：本提交只更新六份治理文件，登记 main 推送/验证和正式生产 T0 只读任务；R65 不推送、不执行外部写操作，完整 SHA 在提交后由主控下发。代码 RC SHA、运行 digest、证据包 SHA、主线 SHA 与治理 SHA 继续分开记录。
+10. **只读稳定观察｜可选、非阻断**：如另行执行 24 小时观察，只追加容器健康/重启、单 worker、outbox、SLS、真实依赖、磁盘、证书和资源到期证据，不改变代码 RC 或 Gate 编号。
 
 若中途出现 P0/P1，先保存缺陷与现场证据、返修并重验，不提交未稳定的治理状态。若验收必须先修改跟踪文档才能继续，应暂停并申请新的 A8。
+
+#### 8.4.5 正式生产发布准备（独立阶段；T0 只读盘点已授权）
+
+本阶段不属于 Gate 4，也不继承 G4-5 的预生产迁移、部署、维护窗口或云资源权限。正式生产 T0 的唯一目标是先形成可核验的资源、价格、备案、可信 HTTPS、隔离、恢复和责任方案；不会购买或创建资源。
+
+```text
+ROLE=PRODUCTION_RELEASE_T0_READONLY_INVENTORY
+CODE_BASELINE_SHA=d9cdf2bd36165ab3c3e012835c761458b455f61e
+DOCUMENT_BASELINE_SHA=承载 R65 内容的本轮治理提交（提交后由主控下发完整 SHA）
+MODIFICATION_WHITELIST=EMPTY
+EXTERNAL_WRITE_AUTHORIZATION=NONE
+```
+
+**成本与架构原则。** 优先安全复用现有 ECS、VPC、ACR、SLS、公网 IP、交换机和安全组，先核验现有 ECS 是否满足备案服务码条件；不得为了省钱长期在 2 GiB ECS 上并行运行预生产与生产。生产 RDS、Tair、账号、秘密和数据必须独立，禁止复用预生产数据面。域名比较 `.com/.cn` 首年、续费和三年总成本；可信 HTTPS 优先评估免费的 ACME/Let's Encrypt 自动续期，商业证书仅作兜底。生产 RDS/Tair 的付费创建可推迟到备案接近完成时。
+
+**T0 输出。** 必须给出“必须购买 / 可以复用 / 可延期 / 禁止复用”清单、最低成本与更稳妥方案、首月/首年/第二年成本（区分促销与续费）、域名候选与备案资格、备案前置和周期、采购顺序，以及后续每项外部写动作的独立授权口令。所有价格标明查询日期、`cn-shanghai` 与官方来源，账号、联系方式、密钥和连接信息必须脱敏。
+
+**只读边界与停止条件。** 只允许官方控制台/文档的 Describe/List/Query、报价和购物车预览。购买、付款、备案提交、创建/修改/删除 ECS/RDS/Tair/ACR/SLS/DNS/证书/RAM/安全组/白名单、构建或推送镜像、migration、部署、重启、生产数据连接及秘密读取均禁止。遇到文档/代码基线不符、账号主体不匹配、价格不可验证、准备复用预生产 RDS/Tair/秘密，或即将产生付费/不可逆/外部写入时立即停止并报告主控。
 
 ## 9. 并行开发纪律
 
@@ -862,5 +882,5 @@ Gate 4 只定义 G4-1～G4-5；退出后不新增 G4-6～G4-10，也不为持续
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
 - 当前工作阶段：Gate 4 `PASS`。G4-1～G4-4 已通过；G4-5 已部署 `4d370d6…@sha256:508dea…453d`，完成 9→10 migration、真实依赖/业务/观测与 T6 审计，并以一次性维护窗口例外裁决 `FINAL_PASS_WITH_CONTROLLER_EXCEPTION`。三个旧 RC 继续拒绝。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
-- 当前执行限制：本轮只获 R64 A8 文档同步授权，未获 Git 提交、推送 main 或外部操作授权；不得更改代码/API/Schema/SQL、运行容器、秘密、真实数据或云资源。APP-006 和部署指南技术权威不变；已消费的 G4-5 部署及主线合入授权不得继承。
-- 下一动作：证据包、独立交接审计、develop 合入/回归、R63 治理提交与 develop 推送、本地 main 合入均已完成。当前只同步六份治理文件；后续 R64 治理提交、推送 `main`、正式生产发布和任何外部变更均须另行批准。24 小时只读稳定观察可选且不构成新 Gate。
+- 当前执行限制：本轮获 R65 六份治理文档同步与提交授权；不推送 R65，不更改代码/API/Schema/SQL、运行容器、秘密、真实数据或云资源。正式生产 T0 仅允许只读盘点，修改白名单为空、外部写授权为无；已消费的 G4-5 权限不得继承。
+- 下一动作：证据包、独立交接审计、develop 合入/回归、R63/R64 治理、main 合入/推送和 main 独立全量验证均已完成。R65 完整 SHA 生成后可下发生产部署 Agent 开始 T0 只读盘点；域名购买、备案、可信证书、生产 RDS/Tair、镜像、migration 与部署均须逐项另行批准。
