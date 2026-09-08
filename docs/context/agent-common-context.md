@@ -1,7 +1,7 @@
 # 人车单 V2 Agent 公共上下文（Layer 0）
 
 > 文档类型：`DERIVED / LAYER_0`
-> 上下文版本：`RCD-AGENT-CONTEXT-20260907-R63`
+> 上下文版本：`RCD-AGENT-CONTEXT-20260908-R64`
 > 适用范围：所有新建或重新启动的 Agent
 > 权威范围：仅提供项目目标、当前阶段、公共纪律、模块边界和命令入口
 > 非权威范围：产品行为、Schema、HTTP DTO、枚举、基础设施细节和任务验收标准
@@ -12,7 +12,7 @@
 
 人车单调度系统 V2 面向汽车租赁调度，主线是订单接入、实时位置、司机班次、A/B/C 工单时间轴、真实 ETA、调度事务和执行闭环。
 
-Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。G4-5 已按 migration → app → 单 worker → Nginx 完成预生产部署、T5 联调和 T6 独立审计；`4d370d6…@sha256:508dea…453d` 正在运行，预生产为 10 条 migration，真实依赖、HTTPS、SLS、单 worker、outbox、恢复与最小权限通过，未决 P0/P1 为 0。app/worker/Nginx 实际切换超过维护窗口且 migration 绝对时间未保留，主控仅针对本次部署批准一次性非阻断例外，裁决 `G4_5=FINAL_PASS_WITH_CONTROLLER_EXCEPTION / GATE_4=PASS`。运行证据包与独立只读交接审计已经完成；主控随后批准 `feature/v2-stabilization @ 089bc4da56022c1b077faac474c269d269d0930b` 以 `--no-ff` 合入本地 `develop @ 6c42f0c6448fc712bca71d9ef7d82b22a105b3ec`，合入后完整工程回归通过。本轮 A8 只同步该稳定结论，尚未产生新的治理文档提交 SHA，也不改变代码 RC 或运行环境。
+Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。G4-5 已按 migration → app → 单 worker → Nginx 完成预生产部署、T5 联调和 T6 独立审计；`4d370d6…@sha256:508dea…453d` 正在运行，预生产为 10 条 migration，真实依赖、HTTPS、SLS、单 worker、outbox、恢复与最小权限通过，未决 P0/P1 为 0。app/worker/Nginx 实际切换超过维护窗口且 migration 绝对时间未保留，主控仅针对本次部署批准一次性非阻断例外，裁决 `G4_5=FINAL_PASS_WITH_CONTROLLER_EXCEPTION / GATE_4=PASS`。运行证据包、独立只读交接审计和 develop 合入后回归已经完成；R63 治理提交 `95a1c06daa1c373f76f7026dd4bfe71d31a11df0` 已普通推送至 `origin/develop`。主控随后单独授权把该 develop 以 `--no-ff` 合入本地 `main @ d9cdf2bd36165ab3c3e012835c761458b455f61e`；合并树与 develop 完全一致，`origin/main` 仍为 `1de7b6b…`。本轮 R64 A8 只同步该稳定结论，尚未产生新的治理文档提交 SHA，也不改变代码 RC 或运行环境。
 
 ## 2. 当前版本与闸门
 
@@ -32,12 +32,12 @@ Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。G4-5 已按 migration →
 | Gate 3 | `PASS`（2026-08-11 最终裁决） |
 | Gate 4 子闸门 | `G4_1_TO_G4_4_PASS / G4_5_FINAL_PASS_WITH_CONTROLLER_EXCEPTION`；Gate 4 总闸门 `PASS` |
 | Gate 4 镜像 | 已验收远端 index `sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d`；完整 amd64/config 与扫描证据见状态总览；三个旧 RC `4102ee1… / a0c8bbd… / 857705e…` 继续 `REJECTED_DO_NOT_DEPLOY` |
-| Gate 4 交接与下一步 | 交接文档提交 `089bc4da56022c1b077faac474c269d269d0930b` 已合入本地 `develop @ 6c42f0c6448fc712bca71d9ef7d82b22a105b3ec`；合并父提交为 `4102ee1f85f89f363aeaa42f829a9c6d535f6d31` 与 `089bc4da56022c1b077faac474c269d269d0930b`。证据包 SHA-256 为 `988b134205791d56e35dbfcdd4d4758004057643385763ddf43f59270cafbcf0`；独立审计 P0/P1=0，保留一个原始证据完整性 P2。合入后 `813 passed / 7 expected skipped`，lint、TypeScript、31/31 build、Prisma validate、部署制品专项与 diff check 均通过。`origin/develop` 仍为 `ae471484…`；本轮 A8 未授权 Git 提交、推送、进入 main 或正式生产发布 |
+| Gate 4 交接与下一步 | 交接文档提交 `089bc4da56022c1b077faac474c269d269d0930b` 已合入 `develop @ 6c42f0c6448fc712bca71d9ef7d82b22a105b3ec`；合入后 `813 passed / 7 expected skipped`，lint、TypeScript、31/31 build、Prisma validate、部署制品专项与 diff check 均通过。R63 治理提交及当前 develop 为 `95a1c06daa1c373f76f7026dd4bfe71d31a11df0`，已与 `origin/develop` 对齐。本地 `main @ d9cdf2bd36165ab3c3e012835c761458b455f61e` 以 `--no-ff` 接收该 develop，父提交为 `1de7b6b…` 与 `95a1c06…`，树哈希与 develop 同为 `4f3e60bffced3a6047afac21ee712ecf8576d13a`；`origin/main @ 1de7b6b…` 未推送。证据包 SHA-256 为 `988b134205791d56e35dbfcdd4d4758004057643385763ddf43f59270cafbcf0`；独立审计 P0/P1=0，保留一个原始证据完整性 P2。当前 R64 A8 不授权 Git 提交、推送 main 或正式生产发布 |
 | Railway | 仅历史 Demo 证据，不是生产基线 |
 
 状态变化只认 [项目状态总览](../status/README.md)；文档入口只认 [文档版本总入口](../versions/README.md)。
 
-Gate 3 运行证据和 G4-5 历史 T0/T1 记录保留：历史备份 `3143022530`，旧 T1 因 SQL CRLF 在写库前阻断。当前 ECS 已运行 Gate 4 `4d370d6…@sha256:508dea…453d`；app/worker/Nginx revision 对齐，第 10 条 migration 已应用，`RCD_V2_STATE_MACHINE_ENABLED=true`，RDS/Tair/高德、HTTPS、SLS 与 outbox 通过；V1 读兼容窗口未自动关闭。写入和部署授权已经消费；Git 推送、develop/main 合并、故障演练、数据库回退或数据清理均未授权。
+Gate 3 运行证据和 G4-5 历史 T0/T1 记录保留：历史备份 `3143022530`，旧 T1 因 SQL CRLF 在写库前阻断。当前 ECS 已运行 Gate 4 `4d370d6…@sha256:508dea…453d`；app/worker/Nginx revision 对齐，第 10 条 migration 已应用，`RCD_V2_STATE_MACHINE_ENABLED=true`，RDS/Tair/高德、HTTPS、SLS 与 outbox 通过；V1 读兼容窗口未自动关闭。Gate 4 部署、develop 合入/推送和本地 main 合入授权均已消费；推送 `main`、正式生产发布、故障演练、数据库回退或数据清理仍未授权。
 
 - G4-2：RDS/Tair 无公网入口；ECS 仅 80/443 公网开放，SSH 受限；自签名证书有效至 2026-10-06，仅代表预生产公网 IP 演示通过。SLS `runtime/security` 30/180 天留存与正式规则当前态已复核；临时规则 `g45-notify-test-20260906` 已触发负责人通知并关闭，未改变正式查询或阈值。
 - G4-3：2026-08-30 全量快照恢复点可用；隔离恢复库完成 9→10 Forward 与 10→9 rollback，checksum、DDL 恢复和业务行数不变通过，源预生产库零写入。
