@@ -96,6 +96,32 @@ describe("POST /api/auth/login", () => {
     expect(createDriverToken).not.toHaveBeenCalled();
   });
 
+  it("returns driver credentials for a dispatcher linked to a driver", async () => {
+    vi.mocked(findUserForLogin).mockResolvedValue({
+      id: "dispatcher-driver-1",
+      email: "linked-dispatcher@invalid.example",
+      name: "兼任司机的调度员",
+      password: "hash",
+      role: "dispatcher",
+      driverId: "driver-1"
+    });
+
+    const response = await POST(loginRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.data).toEqual({
+      id: "dispatcher-driver-1",
+      email: "linked-dispatcher@invalid.example",
+      name: "兼任司机的调度员",
+      role: "dispatcher",
+      driverId: "driver-1",
+      driverToken: "driver-token"
+    });
+    expect(createDriverToken).toHaveBeenCalledWith("driver-1");
+    expect(response.headers.get("set-cookie")).toContain("dispatch_session=");
+  });
+
   it("rejects an invalid password without returning identity data", async () => {
     vi.mocked(findUserForLogin).mockResolvedValue({
       id: "driver-user-1",

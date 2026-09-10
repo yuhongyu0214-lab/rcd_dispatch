@@ -8,6 +8,10 @@ import {
 } from "@/lib/auth/public-registration";
 import { isAdminRole } from "@/lib/auth/roles";
 
+import {
+  resolveLoginDestination,
+  resolveSafeLoginPath
+} from "./components/login-destination";
 import { LoginForm } from "./components/login-form";
 
 export default async function AdminLoginPage({
@@ -24,13 +28,13 @@ export default async function AdminLoginPage({
   const demoCredentials = shouldShowDemoCredentials()
     ? { account: "admin@dispatch.dev", password: "admin123" }
     : null;
-  const nextPath =
-    resolvedSearchParams.next && resolvedSearchParams.next.startsWith("/admin")
-      ? resolvedSearchParams.next
-      : "/admin/map";
+  const nextPath = resolveSafeLoginPath(resolvedSearchParams.next);
 
-  if (currentUser && isAdminRole(currentUser.role)) {
-    redirect(nextPath);
+  if (
+    currentUser &&
+    (isAdminRole(currentUser.role) || currentUser.role === "driver")
+  ) {
+    redirect(resolveLoginDestination(currentUser, nextPath));
   }
 
   return (
