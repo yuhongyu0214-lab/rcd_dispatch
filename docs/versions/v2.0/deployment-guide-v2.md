@@ -1,8 +1,9 @@
 # 人车单生产部署、迁移与回退指南 V2
 
-> 文档版本：`RCD-DEPLOY-V2.0-R14-20260903`
+> 文档版本：`RCD-DEPLOY-V2.0-R16-20260913`
 >
-> 状态：Gate 3 预生产最近已核验运行身份为 `958afca…`；Gate 4 本地 `4d370d6…` 安全返修与独立复审通过，远端 RC 尚待验收，G4-5 保持阻断；本次文档同步不授权构建、推送、部署或 migration
+> 状态：post-Gate-4 返修 `b2887d3…@sha256:c491f6a…d1ed` 已分阶段部署预生产并通过入口冒烟；未执行 migration，main 与正式生产提升仍未授权
+> 新候选：一号双端 `37d412c…` 仅本地实现/验证完成；本节新增发布前置，不表示已构建、扫描、授权数据库或部署
 >
 > 权威范围：构建、镜像、发布、迁移、启动、验证和回退顺序
 >
@@ -186,6 +187,8 @@ docker compose --env-file <受控配置文件> \
 
 裸执行 `docker compose up -d` 被设计为不启动任何业务服务；禁止使用 `--profile "*"` 一次性拉起全部角色。每个角色都必须锁定本轮批准的同一不可变镜像 digest。
 
+Compose 会在 profile 过滤前解析整份文件。对于已经证明没有 Schema/SQL 变化且明确禁止 migration 的发布，如果目标配置故意不保存 `MIGRATION_DATABASE_URL`，只允许在 `config` 以及显式 `app`、`worker`、`nginx` 命令的单个进程环境中临时提供不可达占位值 `postgresql://disabled:disabled@127.0.0.1:1/disabled`，仅用于通过插值解析。该值不得写入受控 env 文件、不得注入 app/worker、不得与 `--profile migration`、`run migration`、裸 `up` 或通配 profile 同时使用；需要真实迁移时必须改用受保护的真实迁移凭据并重新走完整迁移授权与闸门。
+
 ### 7.4 2026-08-10 预生产发布事实
 
 本节只登记已经完成的发布证据，不构成再次部署授权：
@@ -214,6 +217,29 @@ docker compose --env-file <受控配置文件> \
 - Nginx 两阶段均使用原 `nginx:1.27-alpine`、配置、证书和端口，只重建容器刷新 revision。
 - 未执行 migration、基础资料写入、直接数据库写入或清理；完整证据见
   [故障注入与应用回退验收](../../status/2026-08-10-gate3r-fault-rollback-acceptance.md)。
+
+### 7.6 2026-09-11 post-Gate-4 预生产返修发布事实
+
+本节只登记已完成事实，不授权重跑发布或扩大到正式生产：
+
+- 构建来源与 OCI revision 为 `b2887d3718f34bf3cc068d07b505d33065e77c7c`；ACR index 为 `sha256:c491f6a48007b86b22af2c6a4f514ba94167e33b6dc0e33f046270b52102d1ed`，linux/amd64 manifest 为 `sha256:cde35c27c322090618bb71cd141b25c0ed9a59e5d278822868ba0d2db40de886`，运行 UID/GID 为 `65532:65532`。
+- 干净 Git 归档、完整工程回归、31/31 build、Prisma 校验和部署制品检查通过；19/19 SQL raw checksum 精确匹配且 CR=0。固定扫描对象 Critical=0、High=0、Secrets=0。
+- 本次没有 Schema、migration 或 SQL 变化，因此 `MIGRATION_EXECUTED=NO`。Compose 的必填迁移变量只使用 §7.3 的进程级解析占位，未启动 migration service，也未把占位值注入 app/worker。
+- app → 冒烟 → 单 worker → Nginx 串行切换通过。最终 app/worker 健康并运行同一 index；Nginx revision 对齐，但仍使用 `nginx:1.27-alpine`，镜像、TLS 证书和端口绑定不变。HTTPS `/api/v2/health` 与 `/admin/login` 返回 200，HTTP 返回 308，最终 health traceId 为 `f21db5384affce93dc350fc057908f7d`。
+- 首次 app 切换尝试因缺少 Compose 解析变量停止；一次脚本转录又因引号不完整触发自动配置/应用回退。两次均未改变 worker/Nginx 或运行 migration。随后只使用传输哈希和 `bash -n` 均通过的受控脚本完成三阶段切换。
+- 上一稳定运行身份 `4d370d664c3710a4a03cb1b665cfdeddc7d32778@sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d` 保留为应用回退目标；受控准备与回退目录为 `/srv/rcd-dispatch/backups/preprod-before-b2887d3718f34bf3cc068d07b505d33065e77c7c-07R8JDsK`。其中 `preprod.env.rollback` 才是本次回退配置；`preprod.env.original` 只保存更早环境现场，不得误作当前回退来源。最终 `config/preprod.env` 的 owner/mode 保持并指向新 revision/digest。
+- 历史已退出 migration 容器 `rcd-v2-preprod-migration-20260805T150801Z` 仍保留为 orphan 证据；本次没有使用 `--remove-orphans`。预生产已具备真机测试入口，但自签名证书可能触发手机信任提示，不能据此宣布正式生产上线。
+
+### 7.7 一号双端发布前置（尚未执行）
+
+- 本轮代码来源必须锁定 `37d412c6510012a4ff01c773ab1cb21932e84aef`，不能使用随后仅修改治理文档的 HEAD 代替 OCI revision。最近已核验预生产仍为 §7.6 的 `b2887d3…`；新镜像/digest/扫描与运行验收尚无结果，不能复用旧扫描宣称新制品通过。
+- 无 Schema/migration 变化，但本人档案完善需要 app 数据库身份拥有 `Driver INSERT` 和 `User UPDATE(driverId, updatedAt)`；“无需迁移”不代表“无需检查权限”。SQL 及操作说明见[受控 ACL 交付目录](../../../feature-admin-workflow/deploy/dual-workspace-accounts/README.md)。
+- 由受控 DBA 在 `rcd_v2_preprod` 执行准备脚本，只补缺少的上述三项有效权限；确认数据库/操作者/服务地址，授权断言在 COMMIT 前完成。保持 owner NOLOGIN，不向 app 注入 DBA/owner 凭据，不给 worker 数据库权限，不新增 User INSERT、role/password UPDATE、DELETE 或 DDL。
+- 完整保存首次成功执行输出中的新增权限标志和 rollback_sql；重复执行输出不能代替首次基线。使用受控隔离测试数据验证 app 身份的新建/关联、并发冲突和事务回滚，证明其他账号档案不会被占用、停用档案不会自动激活。
+- 再按固定代码归档构建、精确镜像扫描与运行探针、app → 单 worker → Nginx 的受控发布流程推进。反向代理必须保持公开站点 authority 与应用 Host 一致，复核 `RCD_SERVER_NAME`，避免同源档案请求被错误拒绝。
+- 应用回退使用部署前新保存并核验的 `b2887d3…` 配置/镜像；数据库回退只撤销首次脚本实际新增的权限，先回退应用再撤权。新产生的业务账号/司机资料保留，不自动删除、解绑或重置密码。
+- 真机必须用同一账号在 Safari/微信与鸿蒙对照：三种历史 role 均可进入 Web/H5；缺档案走完善，已有档案保持归属；H5 只能执行本人任务。新司机离线状态及不能冒用他人身份必须作为反例验收。
+- 预生产邀请码注册仍是下一版计划；本候选 `/admin/register` 404、POST 注册 403。不得为了开户把 `NODE_ENV` 改成 development 或授予 app 全表 User 写入权限。
 
 ## 8. Nginx、域名与 HTTPS
 
@@ -338,3 +364,5 @@ docker compose --env-file <受控配置文件> \
 | V2.0-r12 | 2026-08-11 | 登记 Gate 3 最终 `PASS`；不可变镜像、分阶段发布、回退目标和禁止重复 migration/基础资料规则不变，第二轮部署仍需单独授权 |
 | V2.0-r13 | 2026-08-11 | 登记 Gate 3 PASS 文档内容基线 `464ee5d…` 已提交、推送并完成三方核验；运行镜像、部署、回退与 migration 边界不变 |
 | V2.0-r14 | 2026-09-03 | 落实 APP-006 无 shell runner/Node 入口、Git 归档与 19/19 SQL raw 指纹；区分本地 R55 PASS、远端双扫描和 G4-5 重新授权，补全 Compose config-only profile 核验 |
+| V2.0-r15 | 2026-09-11 | 登记 `b2887d3…@sha256:c491f6a…d1ed` 无 migration 分阶段部署、解析占位护栏、自动回退与最终健康/登录/308 冒烟；main 与正式生产授权不继承 |
+| V2.0-r16 | 2026-09-13 | 新增一号双端候选的最小 ACL、首次授权/回退证据、同源 Host、真实数据库与双端验收前置；无新镜像/部署事实，不开放注册 |

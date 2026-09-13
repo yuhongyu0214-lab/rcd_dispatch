@@ -1,10 +1,11 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3、第二轮、P2、3A/3B 与 Gate 4 已完成。G4-5 已部署 `4d370d6…@sha256:508dea…453d` 并完成 T5/T6；主控以一次性维护窗口例外裁决 `FINAL_PASS_WITH_CONTROLLER_EXCEPTION`，Gate 4 `PASS`。R63 登记证据包、独立交接审计、本地 develop 合入和合入后回归完成；本轮只更新六份治理文件，不提交、不推送或操作外部系统。
+> 状态：总体架构已批准；Gate -1～Gate 3、第二轮、P2、3A/3B 与 Gate 4 已完成。`main == origin/main == d9cdf2b…`，R65 治理基线为 `974d6d2…`。post-Gate-4 返修 `b2887d3…@sha256:c491f6a…d1ed` 已分阶段部署预生产并通过入口冒烟，未执行 migration，可进入真机测试；它尚未提升到 main 或正式生产。正式生产 T0 仍只授权基于 R65 的只读资源盘点，不授权任何外部写操作。
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
+> 最新任务：2026-09-13 一号双端 `37d412c…` 本地提交/验证完成，未部署；R67 同步见 §8.4.7。下一版邀请码注册仅计划，以上 `b2887d3…` 为最近已核验运行版本。
 
 ## 1. 目的
 
@@ -595,7 +596,7 @@ flowchart TD
 
 ### 8.4 Gate 4：稳定化与发布验收
 
-当前状态：`PASS / G4_1_TO_G4_4_PASS / G4_5_FINAL_PASS_WITH_CONTROLLER_EXCEPTION / MERGED_LOCAL / POST_MERGE_PASS`。代码/RC tag/OCI revision 保持 `4d370d664c3710a4a03cb1b665cfdeddc7d32778`，应用 tree 保持 `5188c0efcb96d646a9609b7c47dd624d578841ee`；T5/T6 任务文档基线为 `8f69579d041c46e9a47b0ae0bfff746fd510a5b1`，交接文档提交为 `089bc4da56022c1b077faac474c269d269d0930b`，本地 develop 合入点为 `6c42f0c6448fc712bca71d9ef7d82b22a105b3ec`。证据包 ZIP SHA-256 为 `988b134205791d56e35dbfcdd4d4758004057643385763ddf43f59270cafbcf0`。本轮 A8 不更改代码身份、不提交、不推送，也不执行外部写操作。
+当前状态：`PASS / G4_1_TO_G4_4_PASS / G4_5_FINAL_PASS_WITH_CONTROLLER_EXCEPTION / DEVELOP_PUSHED / MAIN_PUSHED / MAIN_FULL_VALIDATION_PASS`。代码/RC tag/OCI revision 保持 `4d370d664c3710a4a03cb1b665cfdeddc7d32778`，应用 tree 保持 `5188c0efcb96d646a9609b7c47dd624d578841ee`；T5/T6 任务文档基线为 `8f69579d041c46e9a47b0ae0bfff746fd510a5b1`，交接文档提交为 `089bc4da56022c1b077faac474c269d269d0930b`。R63 治理提交及 `origin/develop` 为 `95a1c06daa1c373f76f7026dd4bfe71d31a11df0`，R64 治理提交为 `964bd1c42f1d94b9b8f3d0bff4fd7a3f1521b235`；`main == origin/main == d9cdf2bd36165ab3c3e012835c761458b455f61e`。独立 main 全量验证通过 813/7、lint、TypeScript、31/31 build、Prisma validate、部署制品 5/5、diff check 与干净工作区，refs 未改变。证据包 ZIP SHA-256 为 `988b134205791d56e35dbfcdd4d4758004057643385763ddf43f59270cafbcf0`。正式生产 T0 只读盘点已授权，外部写操作仍为无。
 
 建议分支：`feature/v2-stabilization`
 
@@ -704,18 +705,59 @@ EXTERNAL_SYSTEM_AUTHORIZATION=COMPLETED_AS_SEPARATELY_AUTHORIZED_T1_A_TO_T6（�
 - 维护窗口原定 `2026-09-06T18:00:00+08:00 .. 20:00:00+08:00`；app/worker/Nginx 实际于 `21:13:32 / 21:29:52 / 21:47:20 +08:00` 切换，migration 绝对时间未知。原 `MAINTENANCE_WINDOW_RESULT=FAIL` 保留；`CONTROLLER_EXCEPTION=APPROVED_ONE_TIME` 只使本次 G4-5 非阻断。禁止重跑 migration、修改元数据、重新开放 owner 或伪造时间补证。
 - 后续发布脚本必须记录每阶段 UTC 时间并在窗口截止时阻止新的切换。Gate 4 PASS 不授权 develop/main 合并、生产发布或外部变更。
 
-#### 8.4.4 Gate 4 退出证据与 develop 交接（不是新子闸门）
+#### 8.4.4 Gate 4 退出证据与主线交接（不是新子闸门）
 
 Gate 4 只定义 G4-1～G4-5；退出后不新增 G4-6～G4-10，也不为持续观察重新打开已通过的子闸门。后续工作是阶段交接：
 
 1. **证据固化｜完成**：`gate4-evidence-package-20260907.zip` 的 SHA-256 为 `988b134205791d56e35dbfcdd4d4758004057643385763ddf43f59270cafbcf0`；内部 `SHA256SUMS` 文件 SHA-256 为 `00b0429c48796332f7fcee586f994cce0edce5b87c8d368ea1719fbcda43549e`。41/41 文件哈希、20/20 JSON 与 35/35 索引路径通过。运行证据不进入 Git。
 2. **只读交接审计｜完成并接受 WARN**：审计核对起始 `develop @ 4102ee1f…`、Gate 4 交接 HEAD `089bc4d…`、部署 RC `4d370d6…`、应用 tree、提交边界、秘密扫描和三个拒绝 RC；P0/P1=0。P2=1，限定为部分外部原始证据未完整入包，不影响本地合入，但不得冒充正式生产证据完整。
-3. **本地合入｜完成**：经用户单独批准，`feature/v2-stabilization @ 089bc4da56022c1b077faac474c269d269d0930b` 已以 `--no-ff` 合入本地 `develop @ 6c42f0c6448fc712bca71d9ef7d82b22a105b3ec`；父提交为 `4102ee1f…` 与 `089bc4d…`，未推送。
+3. **develop 合入｜完成**：经用户单独批准，`feature/v2-stabilization @ 089bc4da56022c1b077faac474c269d269d0930b` 已以 `--no-ff` 合入本地 `develop @ 6c42f0c6448fc712bca71d9ef7d82b22a105b3ec`；父提交为 `4102ee1f…` 与 `089bc4d…`。
 4. **合入后验证｜完成**：新 develop 通过 `813 passed / 7 expected skipped`、lint、`pnpm exec tsc --noEmit`、31/31 build、Prisma validate、部署制品专项测试与 `git diff --check`；没有连接真实数据库、Redis/Tair、高德、云资源，也没有执行 migration 或部署。
-5. **只读稳定观察｜可选、非阻断**：如另行执行 24 小时观察，只追加容器健康/重启、单 worker、outbox、SLS、真实依赖、磁盘、证书和资源到期证据，不改变代码 RC 或 Gate 编号。
-6. **统一治理同步｜本轮 A8**：用户已以“提交并更新文档”授权同步本节结果，修改白名单严格为六份治理文件；A8 不授权 Git 提交、推送或外部操作。代码 RC SHA、运行证据包 SHA 与后续治理提交 SHA 继续分开记录。
+5. **R63 治理与 develop 推送｜完成**：六份治理文件形成 `95a1c06daa1c373f76f7026dd4bfe71d31a11df0`；推送前确认远端无独有提交或分叉，普通快进推送后 `develop == origin/develop == 95a1c06…`。
+6. **main 合入与推送｜完成**：经分别授权，已验收 develop 以 `--no-ff` 合入 `main @ d9cdf2bd36165ab3c3e012835c761458b455f61e`；确认远端无分叉后普通推送，当前 `main == origin/main == d9cdf2b…`，未使用强推。
+7. **main 独立全量验证｜完成**：在不改变 SHA/refs、不开外部连接的条件下通过 `813 passed / 7 expected skipped`、lint、`pnpm exec tsc --noEmit`、31/31 build、Prisma validate、部署制品 5/5、diff check 与干净工作区；42 个本地分支、13 个远端引用、0 个标签前后一致。
+8. **R64 治理提交｜完成**：六份治理文件形成 `964bd1c42f1d94b9b8f3d0bff4fd7a3f1521b235`，只位于本地 develop，未推送且不替代 main 代码基线。
+9. **R65 正式生产入口同步｜完成**：六份治理文件形成 `974d6d2a786a9237b0b4b41d3290ffa050f40c32`，登记 main 推送/验证和正式生产 T0 只读任务；未授权外部写操作。代码 RC SHA、运行 digest、证据包 SHA、主线 SHA 与治理 SHA 继续分开记录。
+10. **只读稳定观察｜可选、非阻断**：如另行执行 24 小时观察，只追加容器健康/重启、单 worker、outbox、SLS、真实依赖、磁盘、证书和资源到期证据，不改变代码 RC 或 Gate 编号。
 
 若中途出现 P0/P1，先保存缺陷与现场证据、返修并重验，不提交未稳定的治理状态。若验收必须先修改跟踪文档才能继续，应暂停并申请新的 A8。
+
+#### 8.4.5 正式生产发布准备（独立阶段；T0 只读盘点已授权）
+
+本阶段不属于 Gate 4，也不继承 G4-5 的预生产迁移、部署、维护窗口或云资源权限。正式生产 T0 的唯一目标是先形成可核验的资源、价格、备案、可信 HTTPS、隔离、恢复和责任方案；不会购买或创建资源。
+
+```text
+ROLE=PRODUCTION_RELEASE_T0_READONLY_INVENTORY
+CODE_BASELINE_SHA=d9cdf2bd36165ab3c3e012835c761458b455f61e
+DOCUMENT_BASELINE_SHA=974d6d2a786a9237b0b4b41d3290ffa050f40c32
+MODIFICATION_WHITELIST=EMPTY
+EXTERNAL_WRITE_AUTHORIZATION=NONE
+```
+
+**成本与架构原则。** 优先安全复用现有 ECS、VPC、ACR、SLS、公网 IP、交换机和安全组，先核验现有 ECS 是否满足备案服务码条件；不得为了省钱长期在 2 GiB ECS 上并行运行预生产与生产。生产 RDS、Tair、账号、秘密和数据必须独立，禁止复用预生产数据面。域名比较 `.com/.cn` 首年、续费和三年总成本；可信 HTTPS 优先评估免费的 ACME/Let's Encrypt 自动续期，商业证书仅作兜底。生产 RDS/Tair 的付费创建可推迟到备案接近完成时。
+
+**T0 输出。** 必须给出“必须购买 / 可以复用 / 可延期 / 禁止复用”清单、最低成本与更稳妥方案、首月/首年/第二年成本（区分促销与续费）、域名候选与备案资格、备案前置和周期、采购顺序，以及后续每项外部写动作的独立授权口令。所有价格标明查询日期、`cn-shanghai` 与官方来源，账号、联系方式、密钥和连接信息必须脱敏。
+
+**只读边界与停止条件。** 只允许官方控制台/文档的 Describe/List/Query、报价和购物车预览。购买、付款、备案提交、创建/修改/删除 ECS/RDS/Tair/ACR/SLS/DNS/证书/RAM/安全组/白名单、构建或推送镜像、migration、部署、重启、生产数据连接及秘密读取均禁止。遇到文档/代码基线不符、账号主体不匹配、价格不可验证、准备复用预生产 RDS/Tair/秘密，或即将产生付费/不可逆/外部写入时立即停止并报告主控。
+
+#### 8.4.6 post-Gate-4 预生产返修（不是新 Gate）
+
+2026-09-11，用户单独授权的登录目标返修与 Next.js patch 升级形成 `codex/preprod-login-mobile-remediation @ b2887d3718f34bf3cc068d07b505d33065e77c7c`。固定 ACR index `sha256:c491f6a48007b86b22af2c6a4f514ba94167e33b6dc0e33f046270b52102d1ed`、amd64 `sha256:cde35c27c322090618bb71cd141b25c0ed9a59e5d278822868ba0d2db40de886` 通过 Critical/High/Secrets=0、19/19 SQL raw/CR=0 与运行探针；app、单 worker、Nginx 串行切换和 health/login/redirect 冒烟通过，Nginx 镜像/TLS/端口未变，migration 未执行。
+
+该结果只把预生产推进到 `REAL_DEVICE_TEST_READY`，不表示真机验收、main 提升或正式生产发布已经通过。正式生产 T0 仍可按 §8.4.5 做只读资源盘点；任何正式生产构建/部署前必须另行裁决是否把 `b2887d3…` 合入 main，并重新冻结代码/镜像身份。回退目标为 `4d370d6…@sha256:508dea…453d`，历史失败和 orphan 证据继续保留。
+
+#### 8.4.7 一号双端与后续邀请码注册（独立产品增量）
+
+用户 2026-09-13 明确批准所有注册人类账号共同拥有 Web 调度和司机 H5 能力，并选择下一版预生产邀请码开户。此项不是 APP-007 patch 的零契约变更，产品和 API 分别以 PRD r6 §7.4～7.5、API r19 为准；Schema、migration、系统/ingest 和 H5 本人任务边界不变。
+
+| 阶段 | 当前状态 | 退出要求 |
+|---|---|---|
+| 本地双端实现 | `LOCAL_CODE_COMMITTED / LOCAL_VALIDATION_PASS`；代码 `37d412c6510012a4ff01c773ab1cb21932e84aef`，分支 `feature/v2-dual-workspace-accounts` | 901 passed / 7 skipped、lint、tsc、32/32 build、匿名 HTTP 冒烟和独立审查 P0/P1=0；不冒充真实 DB/真机通过 |
+| 文档同步 | R67 获 A8，并沿用此前独立 Git 本地提交授权；保留 R66 部署事实 | 状态、PRD/API、APP-008、部署前置、入口、公共上下文和 Canvas 一致；治理 SHA 与代码 SHA 分开 |
+| 预生产发布 | 尚未构建新镜像、运行 ACL 脚本或部署；最近已核验仍为 `b2887d3…` | 按部署指南 §7.7 核验受控 DBA、最小权限及首次回退证据、真实事务/并发、不可变制品扫描，然后执行获批切换与同账号真机验收 |
+| 邀请码注册下一版 | `APPROVED_PLAN / NOT_IMPLEMENTED` | 一号双端完成并经授权部署后再实施登录页注册按钮、邀请码与原子 DB 开户；具体接口/数据设计另行冻结，正式生产保持关闭 |
+
+本轮只执行本地 Git 与文档工作，不从发布方向授权推定数据库脚本已执行；运行账号不获得 DBA、role/password UPDATE 或通用 User 写权限，worker 仍不访问数据库。用户回传的 401、Driver-only/关联缺失和 42501 证据保留；新候选上线前不得宣称 iOS 问题闭环。详细证据与限制见[状态总览](../../status/README.md#2026-09-13-一号双端本地交付与邀请码注册计划)。
 
 ## 9. 并行开发纪律
 
@@ -860,5 +902,5 @@ Gate 4 只定义 G4-1～G4-5；退出后不新增 G4-6～G4-10，也不为持续
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
 - 当前工作阶段：Gate 4 `PASS`。G4-1～G4-4 已通过；G4-5 已部署 `4d370d6…@sha256:508dea…453d`，完成 9→10 migration、真实依赖/业务/观测与 T6 审计，并以一次性维护窗口例外裁决 `FINAL_PASS_WITH_CONTROLLER_EXCEPTION`。三个旧 RC 继续拒绝。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
-- 当前执行限制：本轮只获 A8 文档同步授权，未获 Git 提交或推送授权；不得更改代码/API/Schema/SQL、运行容器、秘密、真实数据或云资源。APP-006 和部署指南技术权威不变；已消费的 G4-5 部署授权不得继承。
-- 下一动作：证据包、独立交接审计、本地 `--no-ff` 合入 `develop @ 6c42f0c…` 与合入后完整工程回归已完成。当前只同步六份治理文件；后续治理提交、`develop` 推送、进入 `main`、正式生产发布和任何外部变更均须另行批准。24 小时只读稳定观察可选且不构成新 Gate。
+- 当前执行限制：R65 `974d6d2…` 的正式生产 T0 仍只读；R67 本轮执行已授权本地代码/文档提交。`37d412c…` 双端候选未部署，不能把本地验证替换成运行结果；main 提升和正式生产外部写入仍须另行批准。
+- 下一动作：按 §8.4.7 完成双端预生产数据库/制品/扫描/部署与同账号真机闭环，再进入邀请码注册版本；正式生产 T0 可独立只读盘点，不继承上述预生产权限。

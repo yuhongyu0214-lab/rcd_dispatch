@@ -1,8 +1,8 @@
 # 人车单生产基础设施架构 V2
 
-> 文档版本：`RCD-INFRA-V2.0-R6-20260811`
+> 文档版本：`RCD-INFRA-V2.0-R7-20260911`
 >
-> 状态：Gate 3-R 预生产基础设施已实施，并通过真实 10 单、故障恢复与应用回退验收；正式域名、备案、可信证书和整机/RDS 灾备仍未验收
+> 状态：既有预生产基础设施继续使用；post-Gate-4 返修已分阶段部署并通过入口冒烟，正式域名、备案、可信证书和整机/RDS 灾备仍未验收
 >
 > 权威范围：生产基础设施架构、平台边界、组件职责和网络安全边界
 >
@@ -76,17 +76,17 @@ Railway 仅保留为历史 Demo 证据；CloudBase 只能承载假数据或脱�
 
 “目标架构”表示后续实施必须达到的方向，不表示相应云资源已经存在或已经通过生产验收。
 
-### 3.3 2026-08-10 预生产实施状态
+### 3.3 2026-09-11 预生产实施状态
 
 本小节只登记架构组件是否按冻结边界完成预生产实施，不替代部署、运维或业务验收证据：
 
 | 项目 | 当前状态 |
 |---|---|
-| Git / ACR / ECS 运行身份 | `958afca537b412fb972b6e180561a9b37022834d@sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff` 已完成一致性终审 |
+| Git / ACR / ECS 运行身份 | app/worker 为 `b2887d3718f34bf3cc068d07b505d33065e77c7c@sha256:c491f6a48007b86b22af2c6a4f514ba94167e33b6dc0e33f046270b52102d1ed`；Nginx release revision 对齐 |
 | ECS 运行角色 | app、HTTP-only 单副本 worker、Nginx 各 1 个；app/worker 使用同一不可变镜像，Nginx 沿用 `nginx:1.27-alpine` |
-| RDS PostgreSQL | 0805 全量备份、9 个 migration、最小权限与 owner 长期入口关闭通过；不得重复 migration |
+| RDS PostgreSQL | 既有 10 个 migration、outbox CHECK 17 种、最小权限与 owner 长期入口关闭继续有效；本次返修未执行 migration |
 | Redis/Tair 与高德 | 预生产真实依赖 readiness 通过；Redis/Tair 只保存实时/短期数据，高德只提供地图与 ETA 输入 |
-| 入口与日志 | 自签名 HTTPS、Nginx、本机 `json-file 20m × 5`、LoongCollector 与 SLS 子闸门通过；正式可信 HTTPS 延后 |
+| 入口与日志 | Nginx 镜像、配置、TLS 和端口不变；HTTPS 健康/登录 200、HTTP 308 通过。自签名仍只限预生产 IP 演示，正式可信 HTTPS 延后 |
 | 业务与恢复 | 冻结真实 10 单、worker 积压恢复、应用回退与当前候选恢复通过；整机与 RDS 灾备仍是独立演练 |
 
 完整状态与证据分别见[项目状态总览](../../status/README.md)、[真实 E2E 重验进度](../../status/2026-08-10-gate3r-real-e2e-retest-progress.md)、[故障与回退验收](../../status/2026-08-10-gate3r-fault-rollback-acceptance.md)和[最终闸门裁决](../../status/2026-08-11-gate3-final-gate-decision.md)。主控已于 2026-08-11 裁决 Gate 3 `PASS`，PASS 文档内容基线 `464ee5d…` 已远程核验；该结论不改变正式域名、备案、可信证书和整机/RDS 灾备仍待独立验收的边界。
@@ -232,3 +232,4 @@ Redis/Tair 故障时允许实时能力降级，但不得产生第二套业务事
 | V2.0-r4 | 2026-08-10 | 登记最终运行一致性审查与文档基线 `57ef86c…` 追溯完成；架构组件、正式生产可信入口和整机/RDS 灾备边界不变 |
 | V2.0-r5 | 2026-08-11 | 登记 Gate 3 最终 `PASS`；阿里云主线与预生产架构不变，正式可信入口和整机/RDS 灾备仍不在本次通过范围 |
 | V2.0-r6 | 2026-08-11 | 登记 Gate 3 PASS 文档内容基线 `464ee5d…` 已远程核验；架构组件与正式生产未决边界不变 |
+| V2.0-r7 | 2026-09-11 | 登记 `b2887d3…@sha256:c491f6a…d1ed` 已在既有预生产架构分阶段运行；Nginx/TLS/端口与数据库结构不变，正式生产隔离和可信入口边界不变 |
