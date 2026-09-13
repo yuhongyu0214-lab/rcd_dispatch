@@ -1,3 +1,5 @@
+import { isAdminRole } from "@/lib/auth/roles";
+
 type LoginIdentity = {
   role: string;
   driverId?: string | null;
@@ -22,15 +24,6 @@ export function resolveLoginDestination(
   identity: LoginIdentity,
   requestedPath: string
 ) {
-  const safeRequestedPath = resolveSafeLoginPath(requestedPath);
-
-  if (identity.role === "driver") {
-    return identity.driverId ? DRIVER_TASKS_PATH : DEFAULT_LOGIN_PATH;
-  }
-
-  if (safeRequestedPath === DRIVER_TASKS_PATH) {
-    return identity.driverId ? DRIVER_TASKS_PATH : DEFAULT_LOGIN_PATH;
-  }
-
-  return safeRequestedPath;
+  // 缺少司机档案时在 H5 内完善资料，不再跳回 Web 或首页。
+  return isAdminRole(identity.role) ? resolveSafeLoginPath(requestedPath) : "/";
 }

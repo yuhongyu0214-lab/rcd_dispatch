@@ -35,13 +35,13 @@ describe("resolveSafeLoginPath", () => {
 });
 
 describe("resolveLoginDestination", () => {
-  it("keeps a pure driver in the driver H5", () => {
+  it("allows a historical driver account to enter the Web workspace", () => {
     expect(
       resolveLoginDestination(
         { role: "driver", driverId: "driver-g3e2e-01" },
         "/admin/map"
       )
-    ).toBe("/driver/tasks");
+    ).toBe("/admin/map");
   });
 
   it("sends a linked dispatcher to the driver H5 when it was requested", () => {
@@ -62,15 +62,15 @@ describe("resolveLoginDestination", () => {
     ).toBe("/admin/orders");
   });
 
-  it("falls back when an unlinked dispatcher requests the driver H5", () => {
+  it("lets an unlinked dispatcher complete their profile inside H5", () => {
     expect(
       resolveLoginDestination({ role: "dispatcher" }, "/driver/tasks")
-    ).toBe("/admin/map");
+    ).toBe("/driver/tasks");
   });
 
-  it("does not treat an unbound driver role as an authenticated driver", () => {
+  it("lets an unlinked historical driver complete their profile inside H5", () => {
     expect(resolveLoginDestination({ role: "driver" }, "/driver/tasks")).toBe(
-      "/admin/map"
+      "/driver/tasks"
     );
   });
 
@@ -81,5 +81,9 @@ describe("resolveLoginDestination", () => {
         "//evil.example/admin/map"
       )
     ).toBe("/admin/map");
+  });
+
+  it.each(["system", "ingest", "unknown"])("does not grant interactive access to %s", (role) => {
+    expect(resolveLoginDestination({ role }, "/driver/tasks")).toBe("/");
   });
 });

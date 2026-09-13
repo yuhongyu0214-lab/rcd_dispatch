@@ -30,10 +30,7 @@ export default async function AdminLoginPage({
     : null;
   const nextPath = resolveSafeLoginPath(resolvedSearchParams.next);
 
-  if (
-    currentUser &&
-    (isAdminRole(currentUser.role) || currentUser.role === "driver")
-  ) {
+  if (currentUser && isAdminRole(currentUser.role)) {
     redirect(resolveLoginDestination(currentUser, nextPath));
   }
 
@@ -43,9 +40,9 @@ export default async function AdminLoginPage({
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium uppercase tracking-[0.25em] text-slate-500">
-              Admin Auth
+              Account Login
             </p>
-            <h1 className="mt-2 text-3xl font-semibold">后台登录</h1>
+            <h1 className="mt-2 text-3xl font-semibold">账号登录</h1>
           </div>
           <Link
             href="/"

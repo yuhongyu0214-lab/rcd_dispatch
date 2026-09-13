@@ -133,7 +133,7 @@ describe("dispatcher driver routes", () => {
         id: "driver-user-1",
         email: "driver@example.test",
         name: "司机",
-        role: "driver",
+      role: "ingest",
         driverId: "driver-1"
       });
 
