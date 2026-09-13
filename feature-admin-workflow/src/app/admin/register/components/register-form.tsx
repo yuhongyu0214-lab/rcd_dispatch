@@ -64,7 +64,7 @@ export function RegisterForm({ stores }: { stores: StoreOption[] }) {
         return;
       }
 
-      router.replace("/admin/login?registered=1&next=%2Fadmin%2Fmap");
+      router.replace("/admin/login?registered=1");
       router.refresh();
     } catch {
       setError("注册失败，请稍后重试");

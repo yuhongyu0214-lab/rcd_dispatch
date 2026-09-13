@@ -7,18 +7,16 @@ import {
   shouldShowDemoCredentials
 } from "@/lib/auth/public-registration";
 import { isAdminRole } from "@/lib/auth/roles";
+import { resolveSafeLoginPath } from "@/lib/navigation/admin-route-policy";
 
-import {
-  resolveLoginDestination,
-  resolveSafeLoginPath
-} from "./components/login-destination";
+import { resolveLoginDestination } from "./components/login-destination";
 import { LoginForm } from "./components/login-form";
 
 export default async function AdminLoginPage({
   searchParams
 }: {
   searchParams: Promise<{
-    next?: string;
+    next?: string | string[];
     registered?: string;
   }>;
 }) {
@@ -40,9 +38,9 @@ export default async function AdminLoginPage({
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium uppercase tracking-[0.25em] text-slate-500">
-              Account Login
+              Admin Auth
             </p>
-            <h1 className="mt-2 text-3xl font-semibold">账号登录</h1>
+            <h1 className="mt-2 text-3xl font-semibold">后台登录</h1>
           </div>
           <Link
             href="/"

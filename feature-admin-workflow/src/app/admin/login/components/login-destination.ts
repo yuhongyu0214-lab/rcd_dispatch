@@ -1,29 +1,26 @@
 import { isAdminRole } from "@/lib/auth/roles";
+import {
+  DRIVER_TASKS_PATH,
+  resolveSafeLoginPath
+} from "@/lib/navigation/admin-route-policy";
 
 type LoginIdentity = {
   role: string;
   driverId?: string | null;
 };
 
-const DEFAULT_LOGIN_PATH = "/admin/map";
-const DRIVER_TASKS_PATH = "/driver/tasks";
-
-export function resolveSafeLoginPath(requestedPath?: string | null) {
-  if (
-    requestedPath === DRIVER_TASKS_PATH ||
-    requestedPath === "/admin" ||
-    requestedPath?.startsWith("/admin/")
-  ) {
-    return requestedPath;
-  }
-
-  return DEFAULT_LOGIN_PATH;
-}
-
 export function resolveLoginDestination(
   identity: LoginIdentity,
-  requestedPath: string
+  requestedPath?: string | string[] | null
 ) {
-  // 缺少司机档案时在 H5 内完善资料，不再跳回 Web 或首页。
-  return isAdminRole(identity.role) ? resolveSafeLoginPath(requestedPath) : "/";
+  if (!isAdminRole(identity.role)) {
+    return "/";
+  }
+
+  // 历史纯司机账号仍默认进入 H5；缺档案时在 H5 内完成本人档案。
+  if (identity.role === "driver") {
+    return DRIVER_TASKS_PATH;
+  }
+
+  return resolveSafeLoginPath(requestedPath);
 }

@@ -45,8 +45,7 @@
   color: var(--on-nav);
 }
 
-.railBrand,
-.railLegacy {
+.railBrand {
   display: grid;
   width: 48px;
   min-width: 48px;
@@ -89,14 +88,12 @@
   letter-spacing: 0.08em;
 }
 
-.railItem,
-.railLegacy {
+.railItem {
   background: rgb(255 255 255 / 5%);
   color: color-mix(in srgb, var(--on-nav) 76%, transparent);
 }
 
-.railItem:hover,
-.railLegacy:hover {
+.railItem:hover {
   border-color: rgb(255 255 255 / 28%);
   background: rgb(255 255 255 / 10%);
   color: var(--on-nav);
@@ -110,11 +107,6 @@
 
 .railSpacer {
   flex: 1;
-}
-
-.railLegacy {
-  font-family: var(--font-mono);
-  font-size: 11px;
 }
 
 .orderPoolWorkspace {
@@ -2122,7 +2114,6 @@
 @media (prefers-reduced-motion: reduce) {
   .railItem,
   .railItemActive,
-  .railLegacy,
   .orderRow,
   .orderRowActive,
   .driverRow,

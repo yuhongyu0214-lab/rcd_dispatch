@@ -231,14 +231,6 @@ export function DispatcherOrderPool() {
             );
           })}
           <span className={styles.railSpacer} />
-          <Link
-            href="/admin/map"
-            className={styles.railLegacy}
-            title="返回 V1 调度地图"
-            aria-label="返回 V1 调度地图"
-          >
-            V1
-          </Link>
         </nav>
 
         <main className={styles.orderPoolWorkspace}>
