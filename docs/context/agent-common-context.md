@@ -1,7 +1,7 @@
 # 人车单 V2 Agent 公共上下文（Layer 0）
 
 > 文档类型：`DERIVED / LAYER_0`
-> 上下文版本：`RCD-AGENT-CONTEXT-20260913-R67`
+> 上下文版本：`RCD-AGENT-CONTEXT-20260913-R68`
 > 适用范围：所有新建或重新启动的 Agent；权威范围：仅提供项目目标、当前阶段、公共纪律、模块边界和命令入口
 > 非权威范围：产品行为、Schema、HTTP DTO、枚举、基础设施细节和任务验收标准
 > 冲突处理：以 [文档版本总入口](../versions/README.md) 登记的领域权威为准；无法裁决时立即停止
@@ -15,12 +15,15 @@ Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出；正式主线仍为 `main 
 
 2026-09-13 当前新增工作为一号双端：用户要求每个人类注册账号共享 Web/H5 能力，并选择下一版预生产邀请码开户。本地代码 `37d412c6510012a4ff01c773ab1cb21932e84aef` 已提交，901 passed / 7 skipped、lint/tsc/build/匿名冒烟与独立审查通过；无新镜像或预生产 DB/部署结果。真机反馈已出现账号及档案问题，不能把上一版“可开始真机测试”当成已经通过。PRD r6/API r19 是新任务的领域依据，邀请码版仅计划，当前注册仍关闭。
 
+2026-09-13 联合账号/入口候选为 `feature/v2-account-entry-integration @ bf9aeefcd3be02fdd08be0f42a4d165ef2d39765`。它以 `974d6d2…` 为统一基线，经双亲 merge `2d0bbdde93a390c8b1a2ecf8a8e7e09d99fb0ebf` 保留双端来源 `463c9ee…`，再叠加 13 个入口文件；联合边界 53 文件，无 Schema/migration。工程、113 项隔离 HTTP 与独立审计通过，真实 Chrome/Edge 控制连接失败，浏览器矩阵仍阻塞；不得把 HTTP 当成浏览器 PASS。普通旧 Web 入口转 V2，四类精确旧书签保留隐藏工具，内部旧模式切换是用户接受 P2。未推送、未部署、未执行外部写入，最近运行身份仍为 `b2887d3…`。
+
 ## 2. 当前版本与闸门
 
 | 项目 | 当前事实 |
 |---|---|
+| 联合账号与入口代码 | `feature/v2-account-entry-integration @ bf9aeefcd3be02fdd08be0f42a4d165ef2d39765`；`ENGINEERING_PASS / HTTP_PASS / CODE_AUDIT_PASS / BROWSER_BLOCKED / NOT_DEPLOYED`；53 文件联合边界，无 Schema/migration |
 | 一号双端本地代码 | `feature/v2-dual-workspace-accounts @ 37d412c6510012a4ff01c773ab1cb21932e84aef`；`LOCAL_VALIDATION_PASS / NOT_DEPLOYED`；代码 SHA 不等于后继治理 SHA |
-| 本轮治理与后续 | R67 已获 A8，沿用用户此前独立本地提交授权；只同步稳定事实，不执行外部写入。后续先完成双端 DB/镜像/部署/真机前置，再实施邀请码注册计划 |
+| 本轮治理与后续 | R68 已获 A8 与独立本地提交授权；代码 SHA 与治理提交分开。先在浏览器控制恢复后补 Chrome/Edge 矩阵，再另行申请 DB/镜像/部署/真机前置；邀请码注册仍是未实现计划 |
 | Gate 3 历史代码候选 | `codex/v2-gate3-app-candidate` |
 | Gate 3 历史本地 SHA | `958afca537b412fb972b6e180561a9b37022834d` |
 | Gate 3 历史远程 SHA | `958afca537b412fb972b6e180561a9b37022834d`，已完成普通快进推送与远端核验 |
@@ -36,7 +39,7 @@ Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出；正式主线仍为 `main 
 | Gate 4 子闸门 | `G4_1_TO_G4_4_PASS / G4_5_FINAL_PASS_WITH_CONTROLLER_EXCEPTION`；Gate 4 总闸门 `PASS` |
 | Gate 4 镜像 | 已验收远端 index `sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d`；完整 amd64/config 与扫描证据见状态总览；三个旧 RC `4102ee1… / a0c8bbd… / 857705e…` 继续 `REJECTED_DO_NOT_DEPLOY` |
 | post-Gate-4 预生产返修 | `codex/preprod-login-mobile-remediation @ b2887d3718f34bf3cc068d07b505d33065e77c7c`；index `sha256:c491f6a48007b86b22af2c6a4f514ba94167e33b6dc0e33f046270b52102d1ed`、amd64 `sha256:cde35c27c322090618bb71cd141b25c0ed9a59e5d278822868ba0d2db40de886`；Critical/High/Secrets=0，19/19 SQL raw/CR=0，预生产冒烟 PASS、真机测试 READY、migration NO |
-| 主线与下一步 | `main == origin/main == d9cdf2bd36165ab3c3e012835c761458b455f61e`；R65 `974d6d2…`。正式生产 T0 只读盘点已授权，代码基线 `d9cdf2b…`、文件白名单为空、外部写授权为无；正式构建/部署前须另行裁决 `b2887d3…` 的主线提升 |
+| 主线与下一步 | `main == origin/main == d9cdf2bd36165ab3c3e012835c761458b455f61e`；R65 `974d6d2…`。联合候选 `bf9aeef…` 尚未推送或部署；先补浏览器矩阵，再另行裁决发布前置与主线提升。正式生产 T0 仍只读，文件白名单为空、外部写授权为无 |
 | Railway | 仅历史 Demo 证据，不是生产基线 |
 
 状态变化只认 [项目状态总览](../status/README.md)，文档入口只认 [文档版本总入口](../versions/README.md)。Gate 3/Gate 4 运行证据和失败现场保留；最近已核验 ECS app/worker 为 `b2887d3…@sha256:c491f6a…d1ed`，Nginx revision 对齐，第 10 条 migration 结论不因无迁移部署改写。已有最小权限不保证满足新功能：双端本人档案需要部署指南 §7.7 的受控 ACL 核验，脚本未执行。上一稳定 `4d370d6…@sha256:508dea…453d` 保留为历史回退；新的双端发布须重新保存部署前 `b2887d3…` 配置。正式生产仍只读，本轮没有执行任何预生产外部变更。
