@@ -1,16 +1,16 @@
 # 人车单应用框架与依赖决策日志 V2
 
-> 决策版本：`RCD-APP-DECISIONS-V2.0-R6-20260903`
-> 状态：Gate 3 运行基线保留；Gate 4 本地安全返修例外已批准，远端 RC 待另行验收
-> 代码事实：预生产最近已核验为 `958afca537b412fb972b6e180561a9b37022834d`；Gate 4 本地候选为 `4d370d664c3710a4a03cb1b665cfdeddc7d32778`，本轮未连接云端
+> 决策版本：`RCD-APP-DECISIONS-V2.0-R8-20260913`
+> 状态：APP-008 一号双端本地实现通过；预生产仍为 APP-007，邀请码注册为下一版计划
+> 代码事实：预生产运行 `codex/preprod-login-mobile-remediation @ b2887d3718f34bf3cc068d07b505d33065e77c7c`；上一稳定运行版本为 `4d370d664c3710a4a03cb1b665cfdeddc7d32778`
 
-本文件只记录应用框架、依赖来源和兼容边界。产品行为、HTTP 契约、领域枚举、数据模型和生产基础设施仍分别由对应权威文档定义。
+本文件只记录应用框架、依赖来源、应用集成决策和兼容边界。产品行为、HTTP 契约、领域枚举、数据模型和生产基础设施仍分别由对应权威文档定义。
 
 ## APP-001：升级 Next.js 与 React 安全基线
 
-- 日期：2026-08-01
+- 日期：2026-08-01；2026-09-11 patch 更新
 - 状态：`ACCEPTED`
-- 决定：锁定 Next.js `15.5.21`、React / React DOM `19.2.8`，继续使用 App Router、TypeScript、Tailwind CSS 3、shadcn/ui、Prisma 6、Pino 和 Vitest。
+- 决定：锁定 Next.js `15.5.24`、React / React DOM `19.2.8`，继续使用 App Router、TypeScript、Tailwind CSS 3、shadcn/ui、Prisma 6、Pino 和 Vitest。
 - 原因：继承的旧框架基线存在无法在原 major 版本内完整消除的已知高危依赖问题；升级后完整依赖审计为 0 个已知漏洞。
 - 兼容处理：动态路由 `params`、页面 `searchParams` 和 `cookies()` 改为按 Next.js 15 规则异步读取；ESLint 改用 flat config。
 - 不改变：产品行为、HTTP 方法/路径/鉴权/DTO/状态码、领域枚举、Prisma Schema 和 migration。
@@ -64,10 +64,31 @@
 - 失效条件：更换基础镜像 digest、override、Prisma/原生模块、启动命令或运行权限后，必须重新进行兼容、完整工程和精确制品安全验收；不得沿用本地报告宣布新制品通过。
 - 批准人：用户；授权与独立复审记录见本轮审计证据。Git/ACR 推送、真实配置重建与部署均另行授权。
 
+## APP-007：post-Gate-4 登录返修与 Next.js patch 升级
+
+- 日期：2026-09-11
+- 状态：`ACCEPTED / PREPROD_DEPLOYED`
+- 决定：以 `bc3cb212844bf7bdc781a5dd25459a6759f931b1` 修复登录后司机目标保持逻辑，再以 `b2887d3718f34bf3cc068d07b505d33065e77c7c` 将 `next` 与 `eslint-config-next` 精确升级到 `15.5.24`；React / React DOM 保持 `19.2.8`。
+- 兼容边界：未修改 HTTP 方法/路径/DTO/状态码、业务状态机、领域枚举、Prisma Schema、migration、SQL 或设计变量；19/19 SQL raw checksum 与 Git 一致且 CR=0。
+- 验收：完整工程回归、31/31 生产构建与 Prisma 校验通过；固定镜像 index `sha256:c491f6a48007b86b22af2c6a4f514ba94167e33b6dc0e33f046270b52102d1ed`、amd64 manifest `sha256:cde35c27c322090618bb71cd141b25c0ed9a59e5d278822868ba0d2db40de886`，Critical/High/Secrets 均为 0，运行 UID/GID 为 `65532:65532`。
+- 运行结论：app、单 worker 与 Nginx release revision 已对齐 `b2887d3…`；Nginx 镜像、TLS 和端口未变，未执行 migration，健康/登录 200 与 HTTP 308 通过，可进入预生产真机测试。
+- 限制：该结论只覆盖当前固定 digest 和预生产运行；不自动授权合入 main、替换正式生产 T0 代码基线或正式生产发布。
+
+## APP-008：一号双端应用鉴权与档案集成
+
+- 日期：2026-09-13；状态：`ACCEPTED / LOCAL_VALIDATION_PASS / NOT_DEPLOYED`。
+- 来源：用户明确要求所有注册账号共享 Web 调度与 H5 能力；产品定义见 [PRD §7.4](prd-v2.md#74-一号双端2026-09-13-用户裁决)，HTTP 定义见 [API §1.7、§2.5～2.6](api-contract-v2.md)。不由本日志替代产品或 API 权威。
+- 实现：本地 `feature/v2-dual-workspace-accounts @ 37d412c6510012a4ff01c773ab1cb21932e84aef`；扩展人类账号工作台守卫并保持安全 next 目标，缺司机档案进入完善页。User/Driver 创建与本人关联集中在 Serializable 事务，默认新司机离线；不批量修改历史 role、密码或已有绑定。
+- 边界：H5 本人任务、系统/ingest 凭证和历史系统审计操作者选择不放宽；停用、占用和门店冲突拒绝自动处理。Schema、migration、依赖和设计变量不变；新增的是业务鉴权/开户兼容规则及一个 V2 账号端点，不沿用 APP-007 的“HTTP 零变化”结论。
+- 本地证据：901 passed / 7 skipped、lint、tsc、32/32 build 与匿名 HTTP 冒烟通过；独立审查 P0=0/P1=0。真实 PostgreSQL 事务/ACL 与 Safari/微信/鸿蒙双端尚待验收；不能把本地 Mock/SSR 当成真机结果。
+- 发布前置：按[部署指南 §7.7](deployment-guide-v2.md#77-一号双端发布前置尚未执行)核验最小 ACL、精确代码镜像、扫描及回退；脚本准备不等于 DB 授权已执行。本地代码 SHA、治理 SHA 和最近已核验运行 `b2887d3…` 分开记录。
+- 后续计划：用户选择预生产邀请码开户，需在一号双端完成并经授权部署后再实施登录页注册按钮及 DB 链路；当前预生产/生产公开注册继续关闭，不能用开发模式或 app 通用 User 写权限临时放开。
+
 ## 版本记录
 
 | 版本 | 日期       | 内容                                                                                                                                |
 | ---- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| V2.0-r8 | 2026-09-13 | 新增 APP-008，登记用户批准的一号双端应用集成、本地验证、受控 DB 权限前置与邀请码注册下一版计划；明确未部署 |
 | V2.0 | 2026-08-01 | 冻结 Next.js 15.5.21、React 19.2.8、SheetJS 官方 CDN 0.20.3、pnpm overrides、外部契约/枚举/Schema 零变化与应用候选/部署平台解耦决策 |
 | V2.0-r1 | 2026-08-02 | 对齐部署可用性返修后的唯一候选；Docker/健康检查/OpenSSL 与 ACR 发布属于既有平台解耦决策的实施证据，不改变 APP-001～005 |
 | V2.0-r2 | 2026-08-02 | 对齐部署入口加固候选；Compose profile、分阶段启动与 trace 入口过滤属于既有部署决策的实施证据，不新增或修改 APP-001～005 |
@@ -75,3 +96,4 @@
 | V2.0-r4 | 2026-08-08 | 对齐可观测性候选 `4eb3b485...`；发布 revision、结构化日志和轮转返修不新增或修改 APP-001～005，框架版本、依赖来源与外部兼容边界保持不变 |
 | V2.0-r5 | 2026-08-10 | 对齐当前候选 `958afca...`；Gate 3 最小 E2E、ETA/H5 与全实例高德 3 QPS 限流返修不新增或修改 APP-001～005，框架版本、依赖来源和外部兼容边界保持不变 |
 | V2.0-r6 | 2026-09-03 | 补记 APP-006：已批准的 Debian 13 Distroless 与 deepmerge-ts 8.0.0 本地安全例外；保留现有架构和本地/远端/部署分闸门边界 |
+| V2.0-r7 | 2026-09-11 | APP-001 更新为 Next.js 15.5.24；新增 APP-007，登记登录目标返修、固定镜像扫描和预生产分阶段部署通过，main/正式生产权限不继承 |

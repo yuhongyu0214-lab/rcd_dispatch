@@ -1,8 +1,8 @@
 # 人车单生产运维、监控与恢复指南 V2
 
-> 文档版本：`RCD-OPS-V2.0-R6-20260810`
+> 文档版本：`RCD-OPS-V2.0-R7-20260911`
 >
-> 状态：Gate 3-R 已冻结；最终运行资源、健康、10 单、outbox 和故障/回退证据一致性审查通过，整机与 RDS 灾备仍为独立演练
+> 状态：post-Gate-4 返修已在预生产分阶段运行并通过入口冒烟；真机测试可开始，整机/RDS 灾备和正式可信 HTTPS 仍为独立验收
 >
 > 权威范围：生产运行、监控、日志、备份、恢复、事故处理、安全复核和容量成本
 >
@@ -274,6 +274,14 @@ Redis/Tair 不是业务事实库，告警与恢复不得要求从缓存反向覆
   也不能单独证明灾难恢复 RPO。
 - 证据和失败现场见[故障注入与应用回退验收](../../status/2026-08-10-gate3r-fault-rollback-acceptance.md)。
 
+### 12.1 2026-09-11 预生产运行快照
+
+- app 与唯一 worker 运行 `b2887d3718f34bf3cc068d07b505d33065e77c7c@sha256:c491f6a48007b86b22af2c6a4f514ba94167e33b6dc0e33f046270b52102d1ed`，均为 healthy；Nginx release revision 同步为 `b2887d3…`，镜像仍为 `nginx:1.27-alpine`。
+- Nginx 镜像、TLS 证书和端口绑定均未改变；HTTPS 健康与登录为 200、HTTP 跳转为 308，最终 health traceId `f21db5384affce93dc350fc057908f7d`。
+- 本次没有运行 migration；数据库继续保持 10 条 migration 与 outbox CHECK 17 种。历史退出 migration orphan 容器保留，不作运行服务统计。
+- 回退制品为上一稳定 `4d370d664c3710a4a03cb1b665cfdeddc7d32778@sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d`，配置/脚本/日志保存在受控目录 `/srv/rcd-dispatch/backups/preprod-before-b2887d3718f34bf3cc068d07b505d33065e77c7c-07R8JDsK`。
+- 当前入口可用于受控真机测试；手机可能对自签名证书提示风险。真机测试结论、持续 SLS/outbox 观察和正式生产可信证书仍需分别保存证据，不能由一次 HTTP 冒烟替代。
+
 ## 13. R7 冻结与实施前置
 
 - `RPO ≤ 5 分钟`、`RTO ≤ 2 小时` 是第一版设计目标，必须通过演练验证；
@@ -293,3 +301,4 @@ Redis/Tair 不是业务事实库，告警与恢复不得要求从缓存反向覆
 | V2.0-r4 | 2026-08-09 | 登记 G3E2E R2.2 一次性 owner 凭据窗口、写入后 app 身份核验、失败现场保留、最小字段修正与 owner 关闭规则；基础资料子闸门通过，业务故障与恢复仍待验收 |
 | V2.0-r5 | 2026-08-10 | 登记 worker 基线积压 14 秒恢复、应用回退 30 秒与当前候选恢复 31 秒通过；整机/RDS 灾备和 RPO 仍为独立演练 |
 | V2.0-r6 | 2026-08-10 | 最终一致性审查确认 app/worker 健康、Nginx 配置、HTTPS 200、数据库/Redis/高德 readiness、单 worker、`20m × 5` 轮转、LoongCollector 运行、10 单 `9 COMPLETED + 1 INFEASIBLE/OPEN`、outbox `0/0` 与两组证据 checksum 一致；正式可信 HTTPS 和整机/RDS 灾备边界不变 |
+| V2.0-r7 | 2026-09-11 | 登记 post-Gate-4 返修 app/单 worker/Nginx 运行身份、入口冒烟与回退目录；未执行 migration，真机测试可开始但正式可信 HTTPS 与灾备边界不变 |

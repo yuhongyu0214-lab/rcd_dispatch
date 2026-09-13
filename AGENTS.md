@@ -62,8 +62,9 @@ Gate -1 基线整理（已通过，develop @ 37ee8a3）
 ```
 
 - 每个 Gate 通过验收后才能创建下一阶段分支；不得提前建分支。
-- Gate 3 当前唯一代码/ACR/预生产运行候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`；app、worker 与 Nginx release revision 已对齐，Nginx 原镜像、配置、证书和端口未变。更早运行/回退候选继续保留，不得使用 `latest` 或混用候选。
-- Gate 3、第二轮、3A/3B 与 Gate 4 已退出。Gate 4 运行证据包 `gate4-evidence-package-20260907.zip` 的 SHA-256 为 `988b134205791d56e35dbfcdd4d4758004057643385763ddf43f59270cafbcf0`；独立只读交接审计未发现 P0/P1，保留“部分外部原始证据未完整入包”的非阻断 P2。R63 治理提交 `95a1c06daa1c373f76f7026dd4bfe71d31a11df0` 已推送至 `origin/develop`，R64 治理提交为 `964bd1c42f1d94b9b8f3d0bff4fd7a3f1521b235`。已验收的 develop 以 `--no-ff` 合入 `main @ d9cdf2bd36165ab3c3e012835c761458b455f61e`，并普通推送至 `origin/main`；独立 main 全量验证通过 `813 passed / 7 expected skipped`、lint、TypeScript、31/31 build、Prisma validate、部署制品 5/5、diff check 与干净工作区，refs 全程未改变。预生产继续运行代码/OCI revision `4d370d664c3710a4a03cb1b665cfdeddc7d32778` 与 index digest `sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d`。下一阶段仅授权正式生产 T0 只读盘点：代码基线为 `d9cdf2b…`、修改白名单为空、外部写授权为无；域名购买、备案提交、可信证书签发、生产 RDS/Tair、镜像、迁移和部署仍须逐项另行授权。代码 RC、运行 digest、证据包、主线 SHA 与治理 SHA 必须分开。
+- Gate 3 历史代码/ACR/预生产候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d` 与 index `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`；更早运行/回退候选继续保留，不得使用 `latest` 或混用候选。
+- Gate 3、第二轮、3A/3B 与 Gate 4 已退出。Gate 4 证据包、R63～R65 治理、develop/main 交接和 `main == origin/main == d9cdf2bd36165ab3c3e012835c761458b455f61e` 均保留。2026-09-11 的 post-Gate-4 返修候选为 `codex/preprod-login-mobile-remediation @ b2887d3718f34bf3cc068d07b505d33065e77c7c`，ACR index 为 `sha256:c491f6a48007b86b22af2c6a4f514ba94167e33b6dc0e33f046270b52102d1ed`；app、单 worker 和 Nginx release revision 已对齐，Nginx 镜像、TLS 与端口未变，未执行 migration，HTTPS 健康/登录与 HTTP 308 通过。该候选只完成预生产分阶段部署并可进入真机测试，不自动成为 main 或正式生产 RC。正式生产 T0 仍仅允许以 `d9cdf2b…` 做只读资源盘点；任何购买、备案、生产资源、镜像、迁移、部署或把 `b2887d3…` 提升到 main 的动作均须另行授权。代码 SHA、运行 digest、证据包、主线 SHA 与治理 SHA 必须分开。
+- 2026-09-13 一号双端本地候选为 `feature/v2-dual-workspace-accounts @ 37d412c6510012a4ff01c773ab1cb21932e84aef`；用户批准的工作台能力以 PRD §7.4 和 API r19 为准，H5 本人任务与服务账号隔离保持。本地 901/7、lint/tsc/build/匿名冒烟及独立审查通过；无新镜像、真实 DB 授权或部署结果，最近已核验预生产仍为 `b2887d3…`。邀请码注册是下一版已批准计划，当前预生产/生产注册仍关闭；R67 文档/代码提交与运行 SHA 分开，不自动提升 main。
 - V2 分支命名 `feature/v2-*`；合并路径仍为 `feature/* → develop → main`。
 - 每个分支只能修改自己的独占文件范围；Schema、公共 DTO、共享样式、logger、调度事务各有唯一所有者线。
 
@@ -78,7 +79,7 @@ Gate -1 基线整理（已通过，develop @ 37ee8a3）
 
 ## 技术栈（锁定）【工程铁律：继续有效】
 
-- 全栈：Next.js `15.5.21`（App Router）+ React / React DOM `19.2.8` + TypeScript
+- 全栈：Next.js `15.5.24`（App Router）+ React / React DOM `19.2.8` + TypeScript
 - UI：Tailwind CSS + shadcn/ui
 - 数据库：PostgreSQL + Prisma ORM（迁移用 `prisma migrate dev`，查看用 `npx prisma studio`）
 - 地图：高德 API（服务端 Key：`AMAP_SERVER_KEY`；前端 Key：`NEXT_PUBLIC_AMAP_JS_KEY`）

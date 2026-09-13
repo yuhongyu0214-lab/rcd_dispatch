@@ -1,10 +1,10 @@
 # 人车单 V2 API 契约
 
-> 契约版本：`RCD-API-V2.0-R18-20260817`
-> 状态：第二轮司机任务读取契约已冻结；`DriverTaskV2.servicePlan` 已收口为共享 DTO
+> 契约版本：`RCD-API-V2.0-R19-20260913`
+> 状态：一号双端鉴权与本人司机档案接口已登记；当前只在本地候选实现，预生产尚未部署；既有司机任务 DTO 不变
 > 实施约束：本文件只冻结契约，不含任何代码；TypeScript DTO、错误类型和契约测试在 Gate 2 落地
 > 上游依据：[PRD V2](prd-v2.md) · [数据架构 V2](data-architecture-v2.md) · [项目规则 V2](project-rules-v2.md)
-> 代码事实：`codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`
+> 代码事实：本地双端候选 `37d412c6510012a4ff01c773ab1cb21932e84aef`；最近已核验预生产仍为 `b2887d3718f34bf3cc068d07b505d33065e77c7c`
 
 ## 1. 通用约定
 
@@ -54,7 +54,7 @@ PageResultV2<T> = { items: T[], total: number, page: number, pageSize: number }
 | 403 | `FORBIDDEN` | 角色无权限或越权访问他人资源 | — |
 | 404 | `NOT_FOUND` | 资源不存在 | — |
 | 409 | `PLAN_VERSION_CONFLICT` | 司机计划 `planVersion` 过期 | 单司机操作：`currentPlanVersion`；改派：`currentFromPlanVersion`、`currentToPlanVersion` |
-| 409 | `DUPLICATE_OPERATION` | 并发重复操作（短锁冲突） | — |
+| 409 | `DUPLICATE_OPERATION` | 并发重复操作（短锁冲突）；本人档案端点还覆盖 §2.5 的安全关联冲突 | — |
 | 413 | `PAYLOAD_TOO_LARGE` | 请求体超 1 MiB 或批次超 200 条 | `limit`、`observedBytes`（流式校验中止时为已读取字节数，语义是“至少”，不是完整体积）或 `actualRecords`（批次超条数时） |
 | 422 | `LOCATION_INVALID` | 位置样本被拒（精度/时钟/过期） | `reason` |
 | 500 | `INTERNAL_ERROR` | 未分类服务端错误 | — |
@@ -93,14 +93,15 @@ PageResultV2<T> = { items: T[], total: number, page: number, pageSize: number }
 
 `planVersion` 归属司机计划聚合（每名司机一个计数器），不属于单个 Assignment；定义见词汇表 §6 与数据架构 §6。
 
-### 1.7 角色（冻结）
+### 1.7 账号与工作台能力（r19 用户批准变更）
 
 | 角色 | 认证方式 | 说明 |
 |---|---|---|
-| `dispatcher` | 会话登录（沿用现有 auth，角色 admin） | 调度员 Web |
-| `driver` | 会话登录（绑定 driverId） | 司机 H5；只能操作自己的资源 |
+| 人类用户：`admin` / `dispatcher` / `driver` | 现有会话登录，保留历史 role | 三者均具备调度员 Web 能力（含 §2.1 的读写）与司机 H5 入口；H5 任务 API 仍须绑定本人 driverId，缺档案先走 §2.5 |
 | `ingest` | `X-Ingest-Key` 或 `Authorization: Bearer`，Origin 白名单；**每个凭证绑定唯一 `sourceSystem`**，投递的 `IngestEnvelope.sourceSystem` 与凭证绑定不一致返回 403 `FORBIDDEN`（防止来源冒充写入他源唯一键空间） | 订单来源（插件/外部 API） |
 | `system` | 服务端内部调用，不暴露公网 | 调度引擎、定时校验 |
+
+本变更来自 [PRD §7.4](prd-v2.md#74-一号双端2026-09-13-用户裁决)，不是框架适配的隐式授权扩张。后文 `dispatcher` / `driver` 表示工作台能力及路径边界，不再表示互斥的历史账号 role。服务账号与未知角色不获得交互权限；H5 对他人任务的 403、系统/ingest 凭证和调度写入前置均不变。r19 明确扩大历史 driver 账号的 Web 授权范围，是用户批准的访问策略变更；既有成功请求/响应与 DTO 不破坏兼容。
 
 ### 1.8 框架适配边界（冻结）
 
@@ -212,8 +213,23 @@ IngestRecord（规范化接入 DTO：字段为 Canonical 命名，由来源侧�
 | 方法 | 路径 | 用途 |
 |---|---|---|
 | GET | `/api/v2/health` | 匿名存活探针；只返回 `{ status: "ok" }` 与 traceId，**不暴露**数据库 / Redis / 高德的可达状态 |
-| GET | `/api/v2/health/readiness` | 详细依赖可达状态（db / redis / amap）；仅限 `dispatcher` 会话或 `system` 内部调用，匿名访问返回 401 |
+| GET | `/api/v2/health/readiness` | 详细依赖可达状态（db / redis / amap）；仅限具有 §1.7 调度能力的会话或 `system` 内部调用，匿名访问返回 401 |
 | POST | `/api/v2/system/dispatch-events/process?limit=1..100` | 按 UTC 十分钟稳定桶幂等确保当前 `BASELINE_RECALCULATION` 已入队，再领取并处理待重试的调度 outbox 事件；使用 `Authorization: Bearer <INTERNAL_CRON_SECRET>` 或 `X-Internal-Key`，未鉴权返回 401；供每分钟周期任务调用，不面向浏览器 |
+
+### 2.5 本人司机档案（account）
+
+- `POST /api/v2/account/driver-profile`：仅已登录的人类用户；`Content-Type: application/json`，请求为 `{}` 或 `{ "storeId": "..." }`。只接受可选字符串 `storeId`，拒绝其他字段和非 JSON 对象。
+- 身份来自会话，事务中重读 User；手机号/姓名使用数据库值，客户端不能指定 `userId`、`phone`、`driverId` 或 `role`。跨站请求或不匹配本站 Host 的 Origin 返回 403。
+- 已有 `driverId` 时幂等返回、不重绑；缺关联时可复用活跃且无其他账号归属的同手机号 Driver。已有档案保留原门店；传入不同门店返回 409。新建档案必须指定有效且活跃的门店，初始 `OFFLINE` / `onShift=false`。
+- 成功 200：统一 V2 envelope 的 `data = { driverId: string }`，响应头和体含同一 `traceId`。关联/新建使用 Serializable 事务，失败回滚，不产生半份档案；不涉及调度计划版本。
+- 失败：401 `UNAUTHORIZED`（无会话）；403 `FORBIDDEN`（非交互账号或跨站）；400 `VALIDATION_FAILED`（请求、缺失/无效门店，`details.fields.storeId`）；409 `DUPLICATE_OPERATION`（占用、停用、门店冲突或 P2002/P2034 并发冲突）；500 `INTERNAL_ERROR`（通用提示，不返回 SQL/连接串）。
+- 本接口仅补齐本人档案，不是注册、角色管理或司机激活接口，不放宽 §2.2 的本人资源约束。真实数据库事务/权限验收状态另见状态总览。
+
+### 2.6 既有注册入口兼容边界
+
+- `/api/auth/register` 保留 V1 响应，不迁移或删除路径。允许注册的本地开发环境中，请求必填 `account`（手机号）、`password`、`name`、`storeId`；忽略 `role` / `alsoDriver` 覆盖，固定创建 dispatcher User 并关联 Driver，成功 201 返回 `id/email/phone/name/role/driverId`，不返回密码。
+- 参数失败 400、档案/账号冲突 409、未分类错误 500，错误仍为 V1 字符串并带 traceId；没有有效门店或可安全关联档案时不留半注册数据。
+- 当前预生产/生产注册关闭：页面 `/admin/register` 为 404，POST 注册为 403。下一版邀请码注册遵循 [PRD §7.5](prd-v2.md#75-预生产邀请码注册下一版计划尚未实现)，其邀请码字段、存储、消费与错误契约尚未冻结，本版不宣称支持。
 
 ## 3. 核心 DTO（字段级冻结）
 
@@ -424,6 +440,7 @@ MapSnapshotV2 = {
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| V2.0-r19 | 2026-09-13 | 用户批准三种人类账号共用双端能力；新增本人司机档案 POST 契约及既有注册的原子双端边界；H5 本人任务、系统/ingest 及业务 DTO 不变；邀请码注册另待下一版 |
 | V2.0 | 2026-07-17 | Gate 0 首次冻结：路径、DTO、角色权限、状态流转引用、幂等、planVersion、错误码、traceId、时间格式与分页 |
 | V2.0-r1 | 2026-07-17 | Gate 0 二轮返修：`planVersion` 归属司机计划聚合，改派改为双版本（`expectedFromPlanVersion/expectedToPlanVersion`）；新增订单取消端点与取消语义；冻结 `IngestEnvelope` 与版本覆盖规则；新增 `DriverAvailability` 字段与设置端点；health 拆分匿名存活/内部 readiness；413 details 改 `observedBytes`；位置拒收补 `EXPIRED_AT_RECEIPT` |
 | V2.0-r2 | 2026-07-17 | Gate 0 三轮返修：§1.6 冻结命令两分类（计划编辑命令带 `expected*`，业务事实/控制命令服务端事务内递增）；§2.3 冻结来源取消遇终态的返回语义（`success` + `FOLLOW_UP_REQUIRED`，不整批 400）与 `sourceStatusRaw` 存储边界（仅 `OrderSourceEvent`）；§1.1 区分 V1 读/写接口存续时点；§1.7 ingest 凭证绑定唯一 `sourceSystem`；可用性设置幂等 `replayed` |

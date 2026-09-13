@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { isPublicAdminRegistrationEnabled } from "@/lib/auth/public-registration";
 import { isAdminRole } from "@/lib/auth/roles";
+import { prisma } from "@/lib/prisma";
 
 import { RegisterForm } from "./components/register-form";
 
@@ -16,6 +17,11 @@ export default async function AdminRegisterPage() {
   if (currentUser && isAdminRole(currentUser.role)) {
     redirect("/admin/map");
   }
+  const stores = await prisma.store.findMany({
+    where: { isActive: true },
+    select: { id: true, code: true, name: true },
+    orderBy: { code: "asc" }
+  });
 
   return (
     <main className="min-h-screen bg-slate-100 px-6 py-12 text-slate-900">
@@ -23,9 +29,9 @@ export default async function AdminRegisterPage() {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium uppercase tracking-[0.25em] text-slate-500">
-              Admin Auth
+              Account Registration
             </p>
-            <h1 className="mt-2 text-3xl font-semibold">后台注册</h1>
+            <h1 className="mt-2 text-3xl font-semibold">账号注册</h1>
           </div>
           <Link
             href="/admin/login?next=%2Fadmin%2Fmap"
@@ -35,7 +41,7 @@ export default async function AdminRegisterPage() {
           </Link>
         </div>
 
-        <RegisterForm />
+        <RegisterForm stores={stores} />
       </div>
     </main>
   );

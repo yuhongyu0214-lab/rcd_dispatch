@@ -75,9 +75,9 @@ export function LoginForm({
       className="flex flex-col gap-5 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm"
     >
       <div>
-        <h2 className="text-2xl font-semibold text-slate-900">管理员登录</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">账号登录</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          使用管理员账号和密码登录后，可访问调度后台。
+          一个账号通用调度工作台和司机 H5，登录后进入所选页面。
         </p>
       </div>
 

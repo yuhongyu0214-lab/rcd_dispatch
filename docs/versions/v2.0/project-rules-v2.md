@@ -1,9 +1,10 @@
 # 人车单项目代码与设计规则 V2
 
-> 规则版本：`RCD-RULES-V2.0-R18-20260813`
+> 规则版本：`RCD-RULES-V2.0-R20-20260913`
 > 状态：当前有效
 > 作用：统一代码一致性、开发边界、设计变量和 V1/V2 冲突处理
-> 当前应用事实：`codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`
+> 当前应用事实：预生产 `codex/preprod-login-mobile-remediation @ b2887d3718f34bf3cc068d07b505d33065e77c7c`；正式 main 仍为 `d9cdf2bd36165ab3c3e012835c761458b455f61e`
+> 本地新候选：`feature/v2-dual-workspace-accounts @ 37d412c6510012a4ff01c773ab1cb21932e84aef`；一号双端已本地验证、未部署，不套用上一 patch 的 HTTP 零变化结论
 
 ## 1. 规则来源与融合结论
 
@@ -25,7 +26,7 @@
 
 ### 3.1 继续锁定
 
-- Next.js `15.5.21` App Router + React / React DOM `19.2.8` + TypeScript。
+- Next.js `15.5.24` App Router + React / React DOM `19.2.8` + TypeScript。
 - Tailwind CSS + shadcn/ui，不引入第二套 UI 框架。
 - PostgreSQL + Prisma。
 - Redis/Tair 只保存实时或短期数据，数据库保存业务事实。
@@ -63,10 +64,11 @@
 - V2 新功能使用 `feature/v2-*` 分支或独立 worktree，不把 V2 schema 与 V1 页面修改混进同一提交。
 - 合并路径仍为 `feature/* → develop → main`。
 - V2 顺序：文档 → schema → 内部 DTO/API → Adapter → 调度引擎 → 页面 → 观测与稳定性。
-- Gate 3-R 当前已发布并运行的 Git/ACR/ECS 候选为 `958afca537b412fb972b6e180561a9b37022834d@sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`；首选应用回退为 `084649f498c7bce3c1418c2a5d9273282b085efc@sha256:4664fc50cbd1a6bf08e24e99447d2f03097e3d21a74fcdaa80d2c2c432b05947`。Gate 3 已 `PASS`，第二轮进入串行前置准备：先冻结司机 H5 契约、完成调度员 V2 API 接线并分配文件所有权，再创建并行分支。预生产候选与证据继续不可变，禁止重复部署、migration、基础资料写入或证据清理。
+- Gate 3 与 Gate 4 候选只作历史和回退证据。当前预生产运行 `b2887d3718f34bf3cc068d07b505d33065e77c7c@sha256:c491f6a48007b86b22af2c6a4f514ba94167e33b6dc0e33f046270b52102d1ed`，上一稳定运行版本为 `4d370d664c3710a4a03cb1b665cfdeddc7d32778@sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d`。本次只修改登录目标保持逻辑、对应测试和 Next.js/ESLint patch 依赖；HTTP 契约、Schema、migration、枚举和设计变量未变。该候选可进入预生产真机测试，但未获 main/正式生产提升授权。
 - 第二轮唯一所有权：调度员 V2 API 串行接线独占其路由和应用服务；2A 独占调度员页面与共享设计样式；2B 独占司机 H5、司机 V2 路由及其 DTO 增量；2C 独占 `logger`、trace、`/api/v2/alerts` 与 `/api/v2/logs`。任何路径只能有一个写入者。
 - Schema 变更先生成迁移 SQL 和 rollback SQL，再等待审查。
 - 每阶段退出前通过测试、构建和业务验收，不以“页面能打开”替代闭环验收。
+- 一号双端按 PRD §7.4 与 API r19 实施：工作台能力与历史 role 分离，H5 本人资源守卫继续有效；注册/补档案写入集中在应用事务，不从前端接收可冒用的 userId/phone/driverId。预生产邀请码注册为下一版计划，当前环境闸门不得绕过。
 
 ## 5. 设计系统 V2
 
@@ -206,3 +208,5 @@
 | V2.0-r16 | 2026-08-10 | 校正当前应用事实为 `958afca…@sha256:13e0…5bff` 并登记真实 10 单通过；仅运行状态与下一验收边界变化，业务规则、设计变量、HTTP 契约、Schema、migration 和枚举零变化 |
 | V2.0-r17 | 2026-08-10 | 登记 worker 积压恢复、应用回退和当前候选恢复通过，将当前边界收紧为只允许 Gate 3 终审；业务规则、设计变量、HTTP 契约、Schema、migration 和枚举零变化 |
 | V2.0-r18 | 2026-08-13 | Gate 3 PASS 后解除过期的第二轮禁令，改为“串行前置准备后启动”；冻结调度员 API/2A/2B/2C 唯一所有权，并重申 V2 接线不授权提前删除 V1 路由 |
+| V2.0-r19 | 2026-09-11 | 锁定 Next.js 15.5.24，并登记 `b2887d3…@sha256:c491f6a…d1ed` 已分阶段部署预生产；HTTP 契约、Schema、migration、枚举、设计变量与正式生产边界不变 |
+| V2.0-r20 | 2026-09-13 | 登记一号双端本地候选及 PRD/API 新鉴权边界，保留 H5 归属、事务与注册闸门；技术栈、Schema、migration 和设计变量不变 |

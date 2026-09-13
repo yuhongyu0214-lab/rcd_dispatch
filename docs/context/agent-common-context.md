@@ -1,9 +1,8 @@
 # 人车单 V2 Agent 公共上下文（Layer 0）
 
 > 文档类型：`DERIVED / LAYER_0`
-> 上下文版本：`RCD-AGENT-CONTEXT-20260908-R65`
-> 适用范围：所有新建或重新启动的 Agent
-> 权威范围：仅提供项目目标、当前阶段、公共纪律、模块边界和命令入口
+> 上下文版本：`RCD-AGENT-CONTEXT-20260913-R67`
+> 适用范围：所有新建或重新启动的 Agent；权威范围：仅提供项目目标、当前阶段、公共纪律、模块边界和命令入口
 > 非权威范围：产品行为、Schema、HTTP DTO、枚举、基础设施细节和任务验收标准
 > 冲突处理：以 [文档版本总入口](../versions/README.md) 登记的领域权威为准；无法裁决时立即停止
 > 使用要求：主控必须在任务单中提供代码基线、文档基线和本轮文件白名单；缺一项不得开工
@@ -12,12 +11,16 @@
 
 人车单调度系统 V2 面向汽车租赁调度，主线是订单接入、实时位置、司机班次、A/B/C 工单时间轴、真实 ETA、调度事务和执行闭环。
 
-Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。G4-5 已按 migration → app → 单 worker → Nginx 完成预生产部署、T5 联调和 T6 独立审计；`4d370d6…@sha256:508dea…453d` 正在运行，预生产为 10 条 migration，真实依赖、HTTPS、SLS、单 worker、outbox、恢复与最小权限通过，未决 P0/P1 为 0。维护窗口超时与 migration 绝对时间缺失只获本次非阻断例外。R63 治理提交 `95a1c06…` 已推送至 `origin/develop`，R64 治理提交为 `964bd1c42f1d94b9b8f3d0bff4fd7a3f1521b235`。已验收代码已合入并普通推送，当前 `main == origin/main == d9cdf2bd36165ab3c3e012835c761458b455f61e`；独立 main 全量验证通过 `813 passed / 7 expected skipped`、lint、TypeScript、31/31 build、Prisma validate、部署制品 5/5、diff check 与干净工作区，refs 未改变。下一阶段为独立的正式生产发布准备，当前仅 `PRODUCTION_RELEASE_T0_READONLY_INVENTORY=AUTHORIZED`，不等于购买、备案、创建生产资源、迁移或部署。
+Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出；正式主线仍为 `main == origin/main == d9cdf2bd36165ab3c3e012835c761458b455f61e`，R65 治理基线为 `974d6d2a786a9237b0b4b41d3290ffa050f40c32`。post-Gate-4 返修 `b2887d3…@sha256:c491f6a…d1ed` 已分阶段部署预生产：app/单 worker healthy、Nginx revision 对齐且镜像/TLS/端口不变，health/login 200、HTTP 308，未执行 migration，可进入受控真机测试。该 SHA 尚未进入 main。正式生产 T0 仍只授权以 R65 做只读资源盘点；购买、备案、生产资源、镜像、migration、部署及提升 `b2887d3…` 均未授权。
+
+2026-09-13 当前新增工作为一号双端：用户要求每个人类注册账号共享 Web/H5 能力，并选择下一版预生产邀请码开户。本地代码 `37d412c6510012a4ff01c773ab1cb21932e84aef` 已提交，901 passed / 7 skipped、lint/tsc/build/匿名冒烟与独立审查通过；无新镜像或预生产 DB/部署结果。真机反馈已出现账号及档案问题，不能把上一版“可开始真机测试”当成已经通过。PRD r6/API r19 是新任务的领域依据，邀请码版仅计划，当前注册仍关闭。
 
 ## 2. 当前版本与闸门
 
 | 项目 | 当前事实 |
 |---|---|
+| 一号双端本地代码 | `feature/v2-dual-workspace-accounts @ 37d412c6510012a4ff01c773ab1cb21932e84aef`；`LOCAL_VALIDATION_PASS / NOT_DEPLOYED`；代码 SHA 不等于后继治理 SHA |
+| 本轮治理与后续 | R67 已获 A8，沿用用户此前独立本地提交授权；只同步稳定事实，不执行外部写入。后续先完成双端 DB/镜像/部署/真机前置，再实施邀请码注册计划 |
 | Gate 3 历史代码候选 | `codex/v2-gate3-app-candidate` |
 | Gate 3 历史本地 SHA | `958afca537b412fb972b6e180561a9b37022834d` |
 | Gate 3 历史远程 SHA | `958afca537b412fb972b6e180561a9b37022834d`，已完成普通快进推送与远端核验 |
@@ -32,24 +35,21 @@ Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。G4-5 已按 migration →
 | Gate 3 | `PASS`（2026-08-11 最终裁决） |
 | Gate 4 子闸门 | `G4_1_TO_G4_4_PASS / G4_5_FINAL_PASS_WITH_CONTROLLER_EXCEPTION`；Gate 4 总闸门 `PASS` |
 | Gate 4 镜像 | 已验收远端 index `sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d`；完整 amd64/config 与扫描证据见状态总览；三个旧 RC `4102ee1… / a0c8bbd… / 857705e…` 继续 `REJECTED_DO_NOT_DEPLOY` |
-| Gate 4 交接与下一步 | 交接文档提交 `089bc4d…` 已合入 develop；R63 `95a1c06…` 已推送至 `origin/develop`，R64 为 `964bd1c42f1d94b9b8f3d0bff4fd7a3f1521b235`。`main == origin/main == d9cdf2bd36165ab3c3e012835c761458b455f61e`，树哈希 `4f3e60b…`；独立 main 验证 `813/7`、lint、TypeScript、31/31 build、Prisma、部署制品 5/5、diff check 和工作区全部通过。证据包 SHA-256 `988b1342…bcf0`；交接审计 P0/P1=0、P2=1。正式生产 T0 只读盘点已授权，代码基线 `d9cdf2b…`、文件白名单为空、外部写授权为无 |
+| post-Gate-4 预生产返修 | `codex/preprod-login-mobile-remediation @ b2887d3718f34bf3cc068d07b505d33065e77c7c`；index `sha256:c491f6a48007b86b22af2c6a4f514ba94167e33b6dc0e33f046270b52102d1ed`、amd64 `sha256:cde35c27c322090618bb71cd141b25c0ed9a59e5d278822868ba0d2db40de886`；Critical/High/Secrets=0，19/19 SQL raw/CR=0，预生产冒烟 PASS、真机测试 READY、migration NO |
+| 主线与下一步 | `main == origin/main == d9cdf2bd36165ab3c3e012835c761458b455f61e`；R65 `974d6d2…`。正式生产 T0 只读盘点已授权，代码基线 `d9cdf2b…`、文件白名单为空、外部写授权为无；正式构建/部署前须另行裁决 `b2887d3…` 的主线提升 |
 | Railway | 仅历史 Demo 证据，不是生产基线 |
 
-状态变化只认 [项目状态总览](../status/README.md)；文档入口只认 [文档版本总入口](../versions/README.md)。
+状态变化只认 [项目状态总览](../status/README.md)，文档入口只认 [文档版本总入口](../versions/README.md)。Gate 3/Gate 4 运行证据和失败现场保留；最近已核验 ECS app/worker 为 `b2887d3…@sha256:c491f6a…d1ed`，Nginx revision 对齐，第 10 条 migration 结论不因无迁移部署改写。已有最小权限不保证满足新功能：双端本人档案需要部署指南 §7.7 的受控 ACL 核验，脚本未执行。上一稳定 `4d370d6…@sha256:508dea…453d` 保留为历史回退；新的双端发布须重新保存部署前 `b2887d3…` 配置。正式生产仍只读，本轮没有执行任何预生产外部变更。
 
-Gate 3 运行证据和 G4-5 历史 T0/T1 记录保留：历史备份 `3143022530`，旧 T1 因 SQL CRLF 在写库前阻断。当前 ECS 已运行 Gate 4 `4d370d6…@sha256:508dea…453d`；app/worker/Nginx revision 对齐，第 10 条 migration 已应用，`RCD_V2_STATE_MACHINE_ENABLED=true`，RDS/Tair/高德、HTTPS、SLS 与 outbox 通过；V1 读兼容窗口未自动关闭。Gate 4 部署、develop 合入/推送、main 合入/推送和 main 全量验证授权均已消费；正式生产 T0 仅获只读盘点授权，故障演练、数据库回退、数据清理和任何正式生产写操作仍未授权。
+- G4-2/3：RDS/Tair 无公网入口，ECS 仅开放 80/443 且 SSH 受限；自签名只限预生产。SLS 留存/告警和 2026-08-30 隔离恢复库 9→10→9 演练通过，源预生产库零写入。
+- G4-4/5：固定 RC 扫描与一次性预生产部署 `PASS_WITH_CONTROLLER_EXCEPTION`；恢复点 `3149081194`、配置备份和兼容回退有效。时间例外、扫描时点和正式生产边界见[主计划 §8.4.3](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md#843-g4-5-预生产继续联调方案t6-pass_with_controller_exceptiongate-4-pass)。
 
-- G4-2：RDS/Tair 无公网入口；ECS 仅 80/443 公网开放，SSH 受限；自签名证书有效至 2026-10-06，仅代表预生产公网 IP 演示通过。SLS `runtime/security` 30/180 天留存与正式规则当前态已复核；临时规则 `g45-notify-test-20260906` 已触发负责人通知并关闭，未改变正式查询或阈值。
-- G4-3：2026-08-30 全量快照恢复点可用；隔离恢复库完成 9→10 Forward 与 10→9 rollback，checksum、DDL 恢复和业务行数不变通过，源预生产库零写入。
-- G4-4：新远端 RC `PASS`，只针对固定 digest、R55 库及验收时点库的 Critical/High 与已登记秘密扫描，不表示所有等级或未来漏洞为零。[APP-006](../versions/v2.0/application-decision-log.md#app-006gate-4-运行镜像与传递依赖安全返修例外)与[部署指南 §5.1](../versions/v2.0/deployment-guide-v2.md#51-gate-4-无-shell-运行镜像与制品验收)继续定义技术边界；其 R56 历史状态由本轮状态总览更新，不改平台架构。
-- G4-5：`FINAL_PASS_WITH_CONTROLLER_EXCEPTION`；[主计划 §8.4.3](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md#843-g4-5-预生产继续联调方案t6-pass_with_controller_exceptiongate-4-pass)登记最终证据与边界。维护窗口原定 `18:00–20:00 +08:00`，app/worker/Nginx 实际在 `21:13/21:29/21:47` 切换，migration 绝对时间未知；一次性例外不改变以后发布要求。恢复点 `3149081194`、配置备份和兼容回退镜像有效，未使用回退。
-
-正式生产 T0 使用以下固定 Layer 2；R65 完整文档 SHA 由承载本内容的治理提交生成后下发：
+正式生产 T0 使用以下固定 Layer 2：
 
 ```text
 ROLE=PRODUCTION_RELEASE_T0_READONLY_INVENTORY
 CODE_BASELINE_SHA=d9cdf2bd36165ab3c3e012835c761458b455f61e
-DOCUMENT_BASELINE_SHA=R65 治理提交完整 SHA
+DOCUMENT_BASELINE_SHA=974d6d2a786a9237b0b4b41d3290ffa050f40c32
 MODIFICATION_WHITELIST=EMPTY
 EXTERNAL_WRITE_AUTHORIZATION=NONE
 ```
@@ -147,6 +147,4 @@ Agent 只提交本轮交付和验证证据，不自行宣布 Gate 通过。
 2. `docs/status/README.md`；
 3. `docs/versions/README.md` 的版本与角色映射；
 4. 本公共上下文中的当前事实；
-5. `docs/rcd-v2-project-map.canvas`。
-
-同步完成前，旧上下文不得继续用于新任务。
+5. `docs/rcd-v2-project-map.canvas`；同步完成前，旧上下文不得继续用于新任务。

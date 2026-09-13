@@ -8,6 +8,10 @@ import {
 } from "@/lib/auth/public-registration";
 import { isAdminRole } from "@/lib/auth/roles";
 
+import {
+  resolveLoginDestination,
+  resolveSafeLoginPath
+} from "./components/login-destination";
 import { LoginForm } from "./components/login-form";
 
 export default async function AdminLoginPage({
@@ -24,13 +28,10 @@ export default async function AdminLoginPage({
   const demoCredentials = shouldShowDemoCredentials()
     ? { account: "admin@dispatch.dev", password: "admin123" }
     : null;
-  const nextPath =
-    resolvedSearchParams.next && resolvedSearchParams.next.startsWith("/admin")
-      ? resolvedSearchParams.next
-      : "/admin/map";
+  const nextPath = resolveSafeLoginPath(resolvedSearchParams.next);
 
   if (currentUser && isAdminRole(currentUser.role)) {
-    redirect(nextPath);
+    redirect(resolveLoginDestination(currentUser, nextPath));
   }
 
   return (
@@ -39,9 +40,9 @@ export default async function AdminLoginPage({
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium uppercase tracking-[0.25em] text-slate-500">
-              Admin Auth
+              Account Login
             </p>
-            <h1 className="mt-2 text-3xl font-semibold">后台登录</h1>
+            <h1 className="mt-2 text-3xl font-semibold">账号登录</h1>
           </div>
           <Link
             href="/"

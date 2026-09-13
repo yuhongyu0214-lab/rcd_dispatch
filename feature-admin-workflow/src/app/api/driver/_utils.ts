@@ -2,8 +2,6 @@ import crypto from "crypto";
 
 import type { Prisma } from "@prisma/client";
 
-import { ADMIN_ROLES } from "@/lib/auth/roles";
-
 // ============================================================================
 // 坐标校验 — GCJ02 中国境内范围
 // ============================================================================
@@ -319,7 +317,8 @@ export async function resolveSystemOperatorUserId(
   tx: Prisma.TransactionClient
 ) {
   const user = await tx.user.findFirst({
-    where: { role: { in: [...ADMIN_ROLES] } },
+    // 自动事件的历史记账人选择不随双端入口权限扩展而改变。
+    where: { role: { in: ["admin", "dispatcher"] } },
     orderBy: { createdAt: "asc" },
     select: { id: true }
   });
