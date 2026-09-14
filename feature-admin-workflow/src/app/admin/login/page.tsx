@@ -23,6 +23,9 @@ export default async function AdminLoginPage({
   const resolvedSearchParams = await searchParams;
   const currentUser = await getCurrentUser();
   const allowPublicRegistration = isPublicAdminRegistrationEnabled();
+  const allowInvitationRegistration =
+    (process.env.WORKSPACE_REGISTRATION_INVITE_SECRET?.trim().length ?? 0) >=
+    32;
   const demoCredentials = shouldShowDemoCredentials()
     ? { account: "admin@dispatch.dev", password: "admin123" }
     : null;
@@ -58,7 +61,13 @@ export default async function AdminLoginPage({
 
         <LoginForm
           nextPath={nextPath}
-          allowPublicRegistration={allowPublicRegistration}
+          registrationMode={
+            allowInvitationRegistration
+              ? "invitation"
+              : allowPublicRegistration
+                ? "public"
+                : null
+          }
           demoCredentials={demoCredentials}
         />
       </div>

@@ -31,6 +31,7 @@ describe("H5 entry identity compatibility", () => {
   it("opens profile setup for an old unlinked admin, querying only its database phone", async () => {
     const html = renderToStaticMarkup(await DriverTasksPage());
     expect(html).toContain("你的账号已拥有双端权限");
+    expect(html).toContain("退出登录");
     expect(html).toContain("本人门店");
     expect(prisma.driver.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { phone: "19900000011" } }));
     expect(prisma.store.findMany).toHaveBeenCalledWith(expect.objectContaining({
@@ -59,6 +60,7 @@ describe("H5 entry identity compatibility", () => {
     vi.mocked(requireDriverPage).mockResolvedValue({ ...user, driverId: "driver-own" });
     const html = renderToStaticMarkup(await DriverTasksPage());
     expect(html).toContain('data-driver-id="driver-own"');
+    expect(html).toContain("退出登录");
     expect(html).not.toContain("首次使用");
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
     expect(prisma.driver.findUnique).not.toHaveBeenCalled();

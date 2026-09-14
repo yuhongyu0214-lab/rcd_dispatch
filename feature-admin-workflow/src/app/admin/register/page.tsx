@@ -9,8 +9,16 @@ import { prisma } from "@/lib/prisma";
 
 import { RegisterForm } from "./components/register-form";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminRegisterPage() {
-  if (!isPublicAdminRegistrationEnabled()) {
+  const allowInvitationRegistration =
+    (process.env.WORKSPACE_REGISTRATION_INVITE_SECRET?.trim().length ?? 0) >=
+    32;
+  if (
+    !allowInvitationRegistration &&
+    !isPublicAdminRegistrationEnabled()
+  ) {
     notFound();
   }
   const currentUser = await getCurrentUser();
@@ -25,7 +33,7 @@ export default async function AdminRegisterPage() {
   });
 
   return (
-    <main className="min-h-screen bg-slate-100 px-6 py-12 text-slate-900">
+    <main className="h-dvh overflow-y-auto bg-slate-100 px-6 py-12 text-slate-900">
       <div className="mx-auto flex max-w-xl flex-col gap-8">
         <div className="flex items-center justify-between">
           <div>
@@ -42,7 +50,10 @@ export default async function AdminRegisterPage() {
           </Link>
         </div>
 
-        <RegisterForm stores={stores} />
+        <RegisterForm
+          stores={stores}
+          requiresInviteCode={allowInvitationRegistration}
+        />
       </div>
     </main>
   );

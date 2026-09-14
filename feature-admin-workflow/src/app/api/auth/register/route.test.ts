@@ -1,3 +1,5 @@
+import { createHmac } from "node:crypto";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/prisma", () => ({ prisma: {} }));
@@ -16,10 +18,32 @@ import { createWorkspaceAccount } from "@/lib/auth/workspace-account";
 
 import { POST } from "./route";
 
+const INVITATION_SECRET = "test-invitation-secret-with-at-least-32-characters";
+
+function createInvitation(
+  phone: string,
+  expiresAt = Math.floor(Date.now() / 1000) + 3600
+) {
+  const payload = Buffer.from(
+    JSON.stringify({
+      version: 1,
+      phone,
+      expiresAt,
+      nonce: "test-invitation-nonce"
+    })
+  ).toString("base64url");
+  const signedValue = `v1.${payload}`;
+  const signature = createHmac("sha256", INVITATION_SECRET)
+    .update(signedValue)
+    .digest("base64url");
+  return `${signedValue}.${signature}`;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv("NODE_ENV", "development");
   vi.stubEnv("ALLOW_PUBLIC_ADMIN_REGISTRATION", "true");
+  vi.stubEnv("WORKSPACE_REGISTRATION_INVITE_SECRET", "");
 });
 
 afterEach(() => {
@@ -99,5 +123,89 @@ describe("POST /api/auth/register", () => {
       error: "公开注册已关闭",
       traceId: "trace-register-closed"
     });
+  });
+
+  it("accepts a valid phone-bound invitation in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("ALLOW_PUBLIC_ADMIN_REGISTRATION", "false");
+    vi.stubEnv("WORKSPACE_REGISTRATION_INVITE_SECRET", INVITATION_SECRET);
+    vi.mocked(createWorkspaceAccount).mockResolvedValue({
+      id: "user-invited",
+      email: "19900000011@dispatch.local",
+      phone: "19900000011",
+      name: "受邀用户",
+      role: "dispatcher",
+      driverId: "driver-invited"
+    });
+
+    const response = await POST(
+      new Request("https://dispatch.example/api/auth/register", {
+        method: "POST",
+        headers: { Origin: "https://dispatch.example" },
+        body: JSON.stringify({
+          account: "19900000011",
+          name: "受邀用户",
+          password: "test-only",
+          storeId: "store-1",
+          inviteCode: createInvitation("19900000011")
+        })
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(createWorkspaceAccount).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["malformed", "not-an-invitation"],
+    ["different phone", createInvitation("19900000012")],
+    [
+      "expired",
+      createInvitation("19900000011", Math.floor(Date.now() / 1000) - 1)
+    ]
+  ])("rejects a %s invitation without creating an account", async (_name, inviteCode) => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("ALLOW_PUBLIC_ADMIN_REGISTRATION", "false");
+    vi.stubEnv("WORKSPACE_REGISTRATION_INVITE_SECRET", INVITATION_SECRET);
+
+    const response = await POST(
+      new Request("https://dispatch.example/api/auth/register", {
+        method: "POST",
+        headers: { Origin: "https://dispatch.example" },
+        body: JSON.stringify({
+          account: "19900000011",
+          name: "受邀用户",
+          password: "test-only",
+          storeId: "store-1",
+          inviteCode
+        })
+      })
+    );
+
+    expect(response.status).toBe(403);
+    expect(createWorkspaceAccount).not.toHaveBeenCalled();
+  });
+
+  it("rejects a cross-site invitation request before account creation", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("ALLOW_PUBLIC_ADMIN_REGISTRATION", "false");
+    vi.stubEnv("WORKSPACE_REGISTRATION_INVITE_SECRET", INVITATION_SECRET);
+
+    const response = await POST(
+      new Request("https://dispatch.example/api/auth/register", {
+        method: "POST",
+        headers: { Origin: "https://attacker.example" },
+        body: JSON.stringify({
+          account: "19900000011",
+          name: "受邀用户",
+          password: "test-only",
+          storeId: "store-1",
+          inviteCode: createInvitation("19900000011")
+        })
+      })
+    );
+
+    expect(response.status).toBe(403);
+    expect(createWorkspaceAccount).not.toHaveBeenCalled();
   });
 });

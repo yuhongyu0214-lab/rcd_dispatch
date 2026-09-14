@@ -47,6 +47,7 @@ import {
   type OrderDetailData
 } from "./dispatcher-console-support";
 import { DispatcherConsoleTimeline } from "./dispatcher-console-timeline";
+import { LogoutButton } from "./logout-button";
 import styles from "./dispatcher-console.module.css";
 
 type ConsoleEntry = "map" | "orders";
@@ -562,6 +563,9 @@ export function DispatcherConsole({
             );
           })}
           <span className={styles.railSpacer} />
+          <div className={styles.railLogout}>
+            <LogoutButton />
+          </div>
         </nav>
 
         <aside className={styles.workPanel}>

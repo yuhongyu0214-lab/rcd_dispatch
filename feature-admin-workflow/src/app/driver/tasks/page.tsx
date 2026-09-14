@@ -1,9 +1,27 @@
+import type { ReactNode } from "react";
+
+import { LogoutButton } from "@/app/admin/components/logout-button";
 import { requireDriverPage } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/prisma";
 
 import { DriverWorkspace } from "../components/driver-workspace";
 import { DriverProfileSetup } from "../components/driver-profile-setup";
 import { getVisibleDisplayValue } from "../components/driver-task-display";
+
+function DriverSessionShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex h-dvh min-w-0 flex-col overflow-hidden bg-[var(--bg)] text-[var(--ink)]">
+      <header className="flex min-h-14 shrink-0 items-center justify-end border-b border-[var(--line)] bg-[var(--surface)] px-3">
+        <div className="[&>button]:min-h-11 [&>button]:rounded-xl [&>button]:border [&>button]:border-[var(--line)] [&>button]:px-4 [&>button]:font-medium [&>button]:no-underline">
+          <LogoutButton />
+        </div>
+      </header>
+      <div className="min-h-0 flex-1 overflow-hidden [&>div]:!h-full [&>main]:!h-full [&>main]:!min-h-0 [&>main]:overflow-y-auto">
+        {children}
+      </div>
+    </div>
+  );
+}
 
 export default async function DriverTasksPage() {
   const user = await requireDriverPage();
@@ -49,20 +67,24 @@ export default async function DriverTasksPage() {
             orderBy: { code: "asc" }
           });
     return (
-      <DriverProfileSetup
-        stores={stores}
-        existingStoreId={existing?.store.id}
-        blockedReason={blockedReason}
-      />
+      <DriverSessionShell>
+        <DriverProfileSetup
+          stores={stores}
+          existingStoreId={existing?.store.id}
+          blockedReason={blockedReason}
+        />
+      </DriverSessionShell>
     );
   }
 
   return (
-    <DriverWorkspace
-      driverId={user.driverId}
-      driverName={getVisibleDisplayValue(user.name) ?? "司机工作台"}
-      amapKey={process.env.NEXT_PUBLIC_AMAP_JS_KEY ?? ""}
-      amapSecurityCode={process.env.NEXT_PUBLIC_AMAP_SECURITY_JS_CODE ?? ""}
-    />
+    <DriverSessionShell>
+      <DriverWorkspace
+        driverId={user.driverId}
+        driverName={getVisibleDisplayValue(user.name) ?? "司机工作台"}
+        amapKey={process.env.NEXT_PUBLIC_AMAP_JS_KEY ?? ""}
+        amapSecurityCode={process.env.NEXT_PUBLIC_AMAP_SECURITY_JS_CODE ?? ""}
+      />
+    </DriverSessionShell>
   );
 }

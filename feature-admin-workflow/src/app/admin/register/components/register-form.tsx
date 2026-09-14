@@ -30,12 +30,19 @@ type StoreOption = {
   name: string;
 };
 
-export function RegisterForm({ stores }: { stores: StoreOption[] }) {
+export function RegisterForm({
+  stores,
+  requiresInviteCode = false
+}: {
+  stores: StoreOption[];
+  requiresInviteCode?: boolean;
+}) {
   const router = useRouter();
   const [account, setAccount] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [storeId, setStoreId] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,7 +61,8 @@ export function RegisterForm({ stores }: { stores: StoreOption[] }) {
           account,
           name,
           password,
-          storeId
+          storeId,
+          inviteCode
         })
       });
       const payload = (await response.json()) as RegisterResponse;
@@ -84,6 +92,23 @@ export function RegisterForm({ stores }: { stores: StoreOption[] }) {
           注册后同时拥有调度工作台和司机 H5 权限，无需单独开通。
         </p>
       </div>
+
+      {requiresInviteCode ? (
+        <label className="flex flex-col gap-2 text-sm text-slate-700">
+          <span className="font-medium text-slate-900">邀请码</span>
+          <input
+            type="text"
+            required
+            autoComplete="one-time-code"
+            value={inviteCode}
+            onChange={(event) => setInviteCode(event.target.value.trim())}
+            className="h-11 rounded-xl border border-slate-300 px-4 outline-none ring-0 transition focus:border-slate-900"
+          />
+          <span className="text-xs text-slate-500">
+            邀请码仅限指定手机号，并在标注的有效期内使用。
+          </span>
+        </label>
+      ) : null}
 
       <label className="flex flex-col gap-2 text-sm text-slate-700">
         <span className="font-medium text-slate-900">手机号账号</span>

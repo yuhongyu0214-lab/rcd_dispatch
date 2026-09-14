@@ -22,6 +22,15 @@ describe("dual workspace account forms", () => {
     expect(html).not.toContain('type="checkbox"');
     expect(html).not.toContain("运营管理员");
   });
+  it("requires the invitation code only for invited registration", () => {
+    const html = renderToStaticMarkup(
+      <RegisterForm stores={stores} requiresInviteCode />
+    );
+    expect(html).toContain("邀请码");
+    expect(html).toContain('autoComplete="one-time-code"');
+    expect(html).toMatch(/type="text"[^>]*required/);
+    expect(html).toContain("仅限指定手机号");
+  });
   it("lets historical unlinked accounts open H5 with setup instead of bouncing home", () => {
     const html = renderToStaticMarkup(<DriverProfileSetup stores={stores} />);
     expect(html).toContain("你的账号已拥有双端权限");

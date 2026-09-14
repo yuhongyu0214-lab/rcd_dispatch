@@ -1,6 +1,10 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const { storeFindManyMock } = vi.hoisted(() => ({
+  storeFindManyMock: vi.fn()
+}));
 
 vi.mock("@/lib/auth/current-user", () => ({
   getCurrentUser: vi.fn(),
@@ -11,13 +15,25 @@ vi.mock("next/navigation", () => ({
   redirect: (path: string) => {
     throw new Error(`REDIRECT:${path}`);
   },
+  notFound: () => {
+    throw new Error("NOT_FOUND");
+  },
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() })
+}));
+
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    store: {
+      findMany: storeFindManyMock
+    }
+  }
 }));
 
 import AdminPage from "@/app/admin/page";
 import AdminLoginPage from "@/app/admin/login/page";
 import AdminMapPage from "@/app/admin/map/page";
 import AdminOrdersPage from "@/app/admin/orders/page";
+import AdminRegisterPage from "@/app/admin/register/page";
 import { DispatcherConsole } from "@/app/admin/components/dispatcher-console";
 import { DispatcherOrderPool } from "@/app/admin/components/dispatcher-order-pool";
 import { getCurrentUser, requireAdminPage } from "@/lib/auth/current-user";
@@ -93,8 +109,14 @@ describe("admin route policy", () => {
 describe("admin page routing and navigation", () => {
   beforeEach(() => {
     vi.stubGlobal("React", React);
+    vi.stubEnv("WORKSPACE_REGISTRATION_INVITE_SECRET", "");
     vi.mocked(getCurrentUser).mockResolvedValue(null);
     vi.mocked(requireAdminPage).mockReset();
+    storeFindManyMock.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("redirects the short admin URL to the guarded V2 page", () => {
@@ -166,6 +188,27 @@ describe("admin page routing and navigation", () => {
     expect(renderToStaticMarkup(page)).toContain("后台登录");
   });
 
+  it("shows the invited registration entry when a signing secret is configured", async () => {
+    vi.stubEnv(
+      "WORKSPACE_REGISTRATION_INVITE_SECRET",
+      "test-invitation-secret-with-at-least-32-characters"
+    );
+    const page = await AdminLoginPage({ searchParams: Promise.resolve({}) });
+    expect(renderToStaticMarkup(page)).toContain("有邀请码，去注册");
+  });
+
+  it("keeps the long invited registration form scrollable inside the viewport", async () => {
+    vi.stubEnv(
+      "WORKSPACE_REGISTRATION_INVITE_SECRET",
+      "test-invitation-secret-with-at-least-32-characters"
+    );
+    const page = await AdminRegisterPage();
+    const html = renderToStaticMarkup(page);
+
+    expect(html).toContain("h-dvh overflow-y-auto");
+    expect(html).toContain("账号注册");
+  });
+
   it.each([
     [
       "map",
@@ -185,6 +228,7 @@ describe("admin page routing and navigation", () => {
       expect(navigation).not.toContain("V1");
       expect(navigation).not.toContain("/admin/import");
       expect(navigation).not.toContain("mode=");
+      expect(navigation).toContain("退出登录");
     }
   );
 });

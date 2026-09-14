@@ -27,11 +27,11 @@ type LoginResponse =
 
 export function LoginForm({
   nextPath,
-  allowPublicRegistration,
+  registrationMode,
   demoCredentials
 }: {
   nextPath: string;
-  allowPublicRegistration: boolean;
+  registrationMode: "invitation" | "public" | null;
   demoCredentials: { account: string; password: string } | null;
 }) {
   const router = useRouter();
@@ -125,13 +125,15 @@ export function LoginForm({
         {submitting ? "登录中..." : "登录"}
       </button>
 
-      {allowPublicRegistration ? (
+      {registrationMode ? (
         <button
           type="button"
           className="text-sm text-slate-600 underline underline-offset-4"
           onClick={() => router.push("/admin/register")}
         >
-          没有账号，去注册
+          {registrationMode === "invitation"
+            ? "有邀请码，去注册"
+            : "没有账号，去注册"}
         </button>
       ) : null}
     </form>
