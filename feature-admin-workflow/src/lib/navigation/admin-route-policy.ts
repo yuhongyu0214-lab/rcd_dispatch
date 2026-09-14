@@ -4,6 +4,25 @@ export const DRIVER_TASKS_PATH = "/driver/tasks";
 
 const LEGACY_TOOL_MODES = ["drivers", "vehicles", "alerts", "logs"];
 
+function containsParentDirectorySegment(requestedPath: string) {
+  const [rawPathname] = requestedPath.split(/[?#]/, 1);
+  let candidate = rawPathname;
+
+  for (let pass = 0; pass < 4; pass += 1) {
+    if (candidate.split("/").includes("..")) return true;
+
+    try {
+      const decoded = decodeURIComponent(candidate);
+      if (decoded === candidate) return false;
+      candidate = decoded;
+    } catch {
+      return true;
+    }
+  }
+
+  return true;
+}
+
 export function resolveAdminOrdersDestination(mode?: string | string[] | null) {
   return typeof mode === "string" && LEGACY_TOOL_MODES.includes(mode)
     ? null
@@ -20,6 +39,10 @@ export function resolveSafeLoginPath(requestedPath?: string | string[] | null) {
     return ADMIN_MAP_V2_PATH;
   }
 
+  if (containsParentDirectorySegment(requestedPath)) {
+    return ADMIN_MAP_V2_PATH;
+  }
+
   const url = new URL(requestedPath, "https://navigation.invalid");
   const pathname = url.pathname.replace(/\/$/, "");
 
@@ -28,11 +51,12 @@ export function resolveSafeLoginPath(requestedPath?: string | string[] | null) {
   }
 
   if (pathname === "/admin/orders") {
-    const modes = url.searchParams.getAll("mode");
-    const destination = resolveAdminOrdersDestination(
-      modes.length === 1 ? modes[0] : modes
-    );
-    return destination ?? `${pathname}${url.search}${url.hash}`;
+    const mode = url.searchParams.get("mode");
+    const exactLegacyToolPath = `/admin/orders?mode=${mode}`;
+    return resolveAdminOrdersDestination(mode) === null &&
+      requestedPath === exactLegacyToolPath
+      ? requestedPath
+      : ADMIN_ORDERS_V2_PATH;
   }
 
   if (

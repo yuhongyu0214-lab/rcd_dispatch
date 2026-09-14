@@ -66,6 +66,11 @@ describe("admin route policy", () => {
     ["/admin/map", "/admin/map/v2"],
     ["/admin/map/", "/admin/map/v2"],
     ["/admin/orders", "/admin/orders/v2"],
+    ["/admin/orders/?mode=logs", "/admin/orders/v2"],
+    ["/admin/orders?mode=logs&extra=1", "/admin/orders/v2"],
+    ["/admin/orders?mode=logs&mode=logs", "/admin/orders/v2"],
+    ["/admin/orders?mode=%6cogs", "/admin/orders/v2"],
+    ["/admin/orders?mode=logs#tool", "/admin/orders/v2"],
     ["/admin/orders?mode=orders", "/admin/orders/v2"],
     ["/admin/orders?mode=unknown", "/admin/orders/v2"],
     ["/admin/orders?mode=logs&mode=orders", "/admin/orders/v2"],
@@ -102,6 +107,18 @@ describe("admin route policy", () => {
     "/admin/map\n",
     "javascript:alert(1)"
   ])("falls back safely for %j", (requested) => {
+    expect(resolveSafeLoginPath(requested)).toBe("/admin/map/v2");
+  });
+
+  it.each([
+    "/admin/map/../orders?mode=logs",
+    "/admin/map/%2e%2e/orders?mode=logs",
+    "/admin/map/%2E%2E/orders?mode=logs",
+    "/admin/map/%2e./orders?mode=logs",
+    "/admin/map/.%2e/orders?mode=logs",
+    "/admin/map/%2e%2e%2forders?mode=logs",
+    "/admin/map/%252e%252e/orders?mode=logs"
+  ])("rejects the pre-normalization traversal path %s", (requested) => {
     expect(resolveSafeLoginPath(requested)).toBe("/admin/map/v2");
   });
 });
