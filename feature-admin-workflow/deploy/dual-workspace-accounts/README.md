@@ -31,10 +31,10 @@
 1. 复核新代码 diff、测试、镜像扫描；保存新代码 SHA、digest，与旧候选区分。
 2. 由受控 DBA 使用 psql 连接 `rcd_v2_preprod`，执行本目录
    `prepare-preprod-acl.sql`；连接凭据通过受控机制提供，不写命令、日志或源码。
-   完整保存**首次成功执行**的输出，尤其是三项新增权限标志和 rollback_sql。
-3. 脚本只补缺少的 Driver INSERT、User UPDATE(driverId)、User UPDATE(updatedAt)。
-   这支持旧账号自助补齐司机档案；不会赋予应用 User INSERT、密码/role UPDATE、
-   DELETE、DDL、迁移权限或把任何权限授予 worker。预生产开户仍走受控管理身份。
+   完整保存**首次成功执行**的输出，尤其是四项新增权限标志和 rollback_sql。
+3. 脚本只补缺少的 Driver INSERT、User INSERT、User UPDATE(driverId)、
+   User UPDATE(updatedAt)。这同时支持邀请码开户和旧账号自助补齐司机档案；
+   不会赋予应用密码/role UPDATE、DELETE、DDL、迁移权限或把任何权限授予 worker。
 4. 用应用数据库身份，在隔离的预生产测试数据上验证新增档案/关联与事务回滚。
    确认无法改密码/角色、无法删除；若部署时已有额外权限，应单独记录，不能把它们误算成本次新增。
 5. 此次没有 Schema 或 migration 变化。沿用分阶段部署和健康检查流程，不能在运行容器里临时提权。
