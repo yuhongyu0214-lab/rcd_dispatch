@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type RegisterResponse =
@@ -30,33 +30,21 @@ type StoreOption = {
   name: string;
 };
 
-export function RegisterForm() {
+export function RegisterForm({
+  stores,
+  requiresInviteCode = false
+}: {
+  stores: StoreOption[];
+  requiresInviteCode?: boolean;
+}) {
   const router = useRouter();
   const [account, setAccount] = useState("");
-  const [name, setName] = useState("运营管理员");
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
-  const [alsoDriver, setAlsoDriver] = useState(false);
   const [storeId, setStoreId] = useState("");
-  const [stores, setStores] = useState<StoreOption[]>([]);
+  const [inviteCode, setInviteCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // 加载门店列表（供"同时作为司机"选择所属门店）
-  useEffect(() => {
-    fetch("/api/map")
-      .then((r) => r.json())
-      .then((p: { success: boolean; data?: { stores: StoreOption[] } }) => {
-        if (p.success && p.data?.stores) {
-          setStores(p.data.stores);
-          if (p.data.stores.length > 0) {
-            setStoreId(p.data.stores[0].id);
-          }
-        }
-      })
-      .catch(() => {
-        // 门店加载失败不影响注册表单主流程
-      });
-  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -73,8 +61,8 @@ export function RegisterForm() {
           account,
           name,
           password,
-          alsoDriver,
-          storeId: alsoDriver ? storeId : undefined
+          storeId,
+          inviteCode
         })
       });
       const payload = (await response.json()) as RegisterResponse;
@@ -84,8 +72,7 @@ export function RegisterForm() {
         return;
       }
 
-      const driverMsg = payload.data.driverId ? "&driver=1" : "";
-      router.replace(`/admin/login?registered=1${driverMsg}&next=%2Fadmin%2Fmap`);
+      router.replace("/admin/login?registered=1");
       router.refresh();
     } catch {
       setError("注册失败，请稍后重试");
@@ -100,16 +87,34 @@ export function RegisterForm() {
       className="flex flex-col gap-5 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm"
     >
       <div>
-        <h2 className="text-2xl font-semibold text-slate-900">管理员注册</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">账号注册</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          使用手机号创建运营管理员账号，注册成功后返回登录页。
+          注册后同时拥有调度工作台和司机 H5 权限，无需单独开通。
         </p>
       </div>
+
+      {requiresInviteCode ? (
+        <label className="flex flex-col gap-2 text-sm text-slate-700">
+          <span className="font-medium text-slate-900">邀请码</span>
+          <input
+            type="text"
+            required
+            autoComplete="one-time-code"
+            value={inviteCode}
+            onChange={(event) => setInviteCode(event.target.value.trim())}
+            className="h-11 rounded-xl border border-slate-300 px-4 outline-none ring-0 transition focus:border-slate-900"
+          />
+          <span className="text-xs text-slate-500">
+            邀请码仅限指定手机号，并在标注的有效期内使用。
+          </span>
+        </label>
+      ) : null}
 
       <label className="flex flex-col gap-2 text-sm text-slate-700">
         <span className="font-medium text-slate-900">手机号账号</span>
         <input
           type="tel"
+          required
           autoComplete="tel"
           value={account}
           onChange={(event) => setAccount(event.target.value)}
@@ -121,6 +126,7 @@ export function RegisterForm() {
         <span className="font-medium text-slate-900">姓名</span>
         <input
           type="text"
+          required
           autoComplete="name"
           value={name}
           onChange={(event) => setName(event.target.value)}
@@ -132,6 +138,7 @@ export function RegisterForm() {
         <span className="font-medium text-slate-900">密码</span>
         <input
           type="password"
+          required
           autoComplete="new-password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
@@ -139,27 +146,16 @@ export function RegisterForm() {
         />
       </label>
 
-      {/* 一人多角色：同时注册为司机 */}
-      <label className="flex items-center gap-3 cursor-pointer select-none">
-        <input
-          type="checkbox"
-          checked={alsoDriver}
-          onChange={(event) => setAlsoDriver(event.target.checked)}
-          className="h-5 w-5 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-        />
-        <span className="text-sm font-medium text-slate-900">
-          同时注册为司机（可登录小程序端接单）
-        </span>
-      </label>
-
-      {alsoDriver && stores.length > 0 ? (
+      {stores.length > 0 ? (
         <label className="flex flex-col gap-2 text-sm text-slate-700">
           <span className="font-medium text-slate-900">所属门店</span>
           <select
+            required
             value={storeId}
             onChange={(event) => setStoreId(event.target.value)}
             className="h-11 rounded-xl border border-slate-300 px-4 outline-none ring-0 transition focus:border-slate-900 bg-white"
           >
+            <option value="">请选择所属门店</option>
             {stores.map((store) => (
               <option key={store.id} value={store.id}>
                 {store.code} — {store.name}
@@ -169,14 +165,14 @@ export function RegisterForm() {
         </label>
       ) : null}
 
-      {alsoDriver && stores.length === 0 ? (
+      {stores.length === 0 ? (
         <div className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-700">
-          门店列表加载中或暂无可用门店，请稍后重试。
+          暂无可用门店，请先由管理员建立门店。
         </div>
       ) : null}
 
       <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-        <p>当前阶段默认注册为运营管理员权限。</p>
+        <p>司机档案默认下班，不会自动参与派单。</p>
       </div>
 
       {error ? (
@@ -187,7 +183,7 @@ export function RegisterForm() {
 
       <button
         type="submit"
-        disabled={submitting}
+        disabled={submitting || stores.length === 0}
         className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-900 px-5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300"
       >
         {submitting ? "注册中..." : "注册"}

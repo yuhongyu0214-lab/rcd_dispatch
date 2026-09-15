@@ -86,7 +86,7 @@ describe("GET /api/v2/logs", () => {
   it("rejects non-dispatcher roles with matching trace IDs", async () => {
     vi.mocked(getCurrentUser).mockResolvedValue({
       ...dispatcher,
-      role: "driver",
+      role: "ingest",
       driverId: "driver-1"
     });
 

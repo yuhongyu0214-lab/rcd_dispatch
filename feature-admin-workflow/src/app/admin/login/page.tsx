@@ -7,30 +7,32 @@ import {
   shouldShowDemoCredentials
 } from "@/lib/auth/public-registration";
 import { isAdminRole } from "@/lib/auth/roles";
+import { resolveSafeLoginPath } from "@/lib/navigation/admin-route-policy";
 
+import { resolveLoginDestination } from "./components/login-destination";
 import { LoginForm } from "./components/login-form";
 
 export default async function AdminLoginPage({
   searchParams
 }: {
   searchParams: Promise<{
-    next?: string;
+    next?: string | string[];
     registered?: string;
   }>;
 }) {
   const resolvedSearchParams = await searchParams;
   const currentUser = await getCurrentUser();
   const allowPublicRegistration = isPublicAdminRegistrationEnabled();
+  const allowInvitationRegistration =
+    (process.env.WORKSPACE_REGISTRATION_INVITE_SECRET?.trim().length ?? 0) >=
+    32;
   const demoCredentials = shouldShowDemoCredentials()
     ? { account: "admin@dispatch.dev", password: "admin123" }
     : null;
-  const nextPath =
-    resolvedSearchParams.next && resolvedSearchParams.next.startsWith("/admin")
-      ? resolvedSearchParams.next
-      : "/admin/map";
+  const nextPath = resolveSafeLoginPath(resolvedSearchParams.next);
 
   if (currentUser && isAdminRole(currentUser.role)) {
-    redirect(nextPath);
+    redirect(resolveLoginDestination(currentUser, nextPath));
   }
 
   return (
@@ -59,7 +61,13 @@ export default async function AdminLoginPage({
 
         <LoginForm
           nextPath={nextPath}
-          allowPublicRegistration={allowPublicRegistration}
+          registrationMode={
+            allowInvitationRegistration
+              ? "invitation"
+              : allowPublicRegistration
+                ? "public"
+                : null
+          }
           demoCredentials={demoCredentials}
         />
       </div>

@@ -8,7 +8,46 @@ import {
   findV1WriteGuardMatch,
   isV2StateMachineEnabled
 } from "@/lib/compatibility/v1-write-guard";
+import { ADMIN_ORDERS_V2_PATH } from "@/lib/navigation/admin-route-policy";
 import { getOrCreateTraceId } from "@/lib/observability-v2/trace";
+
+const EXACT_LEGACY_TOOL_PATHS = new Set([
+  "/admin/orders?mode=drivers",
+  "/admin/orders?mode=vehicles",
+  "/admin/orders?mode=alerts",
+  "/admin/orders?mode=logs"
+]);
+const ORIGINAL_REQUEST_URI_HEADER = "X-Rcd-Original-Request-Uri";
+
+function getRawPathAndSearch(requestUrl: string) {
+  const schemeSeparatorIndex = requestUrl.indexOf("://");
+  const pathStartIndex = requestUrl.indexOf("/", schemeSeparatorIndex + 3);
+
+  return pathStartIndex === -1 ? "" : requestUrl.slice(pathStartIndex);
+}
+
+function redirectToV2Orders(request: NextRequest) {
+  return NextResponse.redirect(new URL(ADMIN_ORDERS_V2_PATH, request.url));
+}
+
+function handleAdminOrdersRequest(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  if (pathname !== "/admin/orders" && pathname !== "/admin/orders/") {
+    return null;
+  }
+
+  const normalizedPathAndSearch = getRawPathAndSearch(request.url);
+  const originalRequestUri = request.headers.get(ORIGINAL_REQUEST_URI_HEADER);
+  if (
+    originalRequestUri !== null &&
+    EXACT_LEGACY_TOOL_PATHS.has(originalRequestUri) &&
+    EXACT_LEGACY_TOOL_PATHS.has(normalizedPathAndSearch)
+  ) {
+    return NextResponse.next();
+  }
+
+  return redirectToV2Orders(request);
+}
 
 /**
  * 全链路 Trace ID 中间件
@@ -24,6 +63,9 @@ import { getOrCreateTraceId } from "@/lib/observability-v2/trace";
  * - api-response 保证响应体 JSON 内也包含 traceId
  */
 export function middleware(request: NextRequest) {
+  const adminOrdersResponse = handleAdminOrdersRequest(request);
+  if (adminOrdersResponse) return adminOrdersResponse;
+
   const traceId = getOrCreateTraceId(request.headers);
   const v1WriteMatch = findV1WriteGuardMatch(
     request.method,
@@ -63,8 +105,8 @@ export function middleware(request: NextRequest) {
 }
 
 /**
- * 仅拦截 API 路由，避免影响静态资源、NextAuth 页面等。
+ * 仅拦截 API 与旧订单工具入口，避免影响静态资源和其他页面。
  */
 export const config = {
-  matcher: "/api/:path*"
+  matcher: ["/api/:path*", "/admin/orders", "/admin/orders/"]
 };

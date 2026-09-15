@@ -47,6 +47,7 @@ import {
   type OrderDetailData
 } from "./dispatcher-console-support";
 import { DispatcherConsoleTimeline } from "./dispatcher-console-timeline";
+import { LogoutButton } from "./logout-button";
 import styles from "./dispatcher-console.module.css";
 
 type ConsoleEntry = "map" | "orders";
@@ -562,14 +563,9 @@ export function DispatcherConsole({
             );
           })}
           <span className={styles.railSpacer} />
-          <Link
-            href="/admin/map"
-            className={styles.railLegacy}
-            title="返回 V1 调度地图"
-            aria-label="返回 V1 调度地图"
-          >
-            V1
-          </Link>
+          <div className={styles.railLogout}>
+            <LogoutButton />
+          </div>
         </nav>
 
         <aside className={styles.workPanel}>

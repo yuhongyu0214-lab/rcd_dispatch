@@ -88,7 +88,7 @@ describe("GET /api/v2/health/readiness", () => {
       id: "driver-user-1",
       email: "driver@example.invalid",
       name: "Driver",
-      role: "driver",
+      role: "ingest",
       driverId: "driver-1"
     });
 

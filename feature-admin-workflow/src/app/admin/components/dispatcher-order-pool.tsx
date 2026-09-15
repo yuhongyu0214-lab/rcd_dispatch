@@ -32,6 +32,7 @@ import {
   type MapSnapshotData,
   type OrderDetailData
 } from "./dispatcher-console-support";
+import { LogoutButton } from "./logout-button";
 import styles from "./dispatcher-console.module.css";
 
 type OrderPoolFilter = "ALL" | "UNASSIGNED" | "PLANNED" | "RISK";
@@ -231,14 +232,9 @@ export function DispatcherOrderPool() {
             );
           })}
           <span className={styles.railSpacer} />
-          <Link
-            href="/admin/map"
-            className={styles.railLegacy}
-            title="返回 V1 调度地图"
-            aria-label="返回 V1 调度地图"
-          >
-            V1
-          </Link>
+          <div className={styles.railLogout}>
+            <LogoutButton />
+          </div>
         </nav>
 
         <main className={styles.orderPoolWorkspace}>

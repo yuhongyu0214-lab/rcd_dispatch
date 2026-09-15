@@ -50,12 +50,12 @@ describe("GET /api/v2/map/snapshot", () => {
     expect(getMapSnapshot).not.toHaveBeenCalled();
   });
 
-  it("returns 403 for a non-dispatcher", async () => {
+  it("returns 403 for a service account without interactive workspace access", async () => {
     vi.mocked(getCurrentUser).mockResolvedValue({
       id: "driver-user",
       email: "driver@example.test",
       name: "司机",
-      role: "driver",
+      role: "ingest",
       driverId: "driver-1"
     });
 
@@ -69,7 +69,10 @@ describe("GET /api/v2/map/snapshot", () => {
     expect(getMapSnapshot).not.toHaveBeenCalled();
   });
 
-  it("returns the dispatcher snapshot in the unified envelope", async () => {
+  it.each(["admin", "dispatcher", "driver"])("returns the workspace snapshot for %s in the unified envelope", async (role) => {
+    vi.mocked(getCurrentUser).mockResolvedValue({
+      id: "user-1", email: "test@invalid.example", name: "测试", role, driverId: null
+    });
     const response = await GET(request());
     const body = await response.json();
 

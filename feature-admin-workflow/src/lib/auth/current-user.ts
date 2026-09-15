@@ -98,7 +98,7 @@ export async function requireDriverPage() {
     redirect("/admin/login?next=/driver/tasks");
   }
 
-  if (!currentUser.driverId) {
+  if (!isAdminRole(currentUser.role)) {
     redirect("/");
   }
 
