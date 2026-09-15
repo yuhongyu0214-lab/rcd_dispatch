@@ -1,9 +1,9 @@
 # 人车单生产部署、迁移与回退指南 V2
 
-> 文档版本：`RCD-DEPLOY-V2.0-R16-20260913`
+> 文档版本：`RCD-DEPLOY-V2.0-R17-20260915`
 >
 > 状态：post-Gate-4 返修 `b2887d3…@sha256:c491f6a…d1ed` 已分阶段部署预生产并通过入口冒烟；未执行 migration，main 与正式生产提升仍未授权
-> 新候选：一号双端 `37d412c…` 仅本地实现/验证完成；本节新增发布前置，不表示已构建、扫描、授权数据库或部署
+> 新候选：联合账号/入口 `40b4a0f…` 仅本地实现、浏览器与审计完成；本节更新发布前置，不表示已构建、扫描、授权数据库或部署
 >
 > 权威范围：构建、镜像、发布、迁移、启动、验证和回退顺序
 >
@@ -232,14 +232,15 @@ Compose 会在 profile 过滤前解析整份文件。对于已经证明没有 Sc
 
 ### 7.7 一号双端发布前置（尚未执行）
 
-- 本轮代码来源必须锁定 `37d412c6510012a4ff01c773ab1cb21932e84aef`，不能使用随后仅修改治理文档的 HEAD 代替 OCI revision。最近已核验预生产仍为 §7.6 的 `b2887d3…`；新镜像/digest/扫描与运行验收尚无结果，不能复用旧扫描宣称新制品通过。
-- 无 Schema/migration 变化，但本人档案完善需要 app 数据库身份拥有 `Driver INSERT` 和 `User UPDATE(driverId, updatedAt)`；“无需迁移”不代表“无需检查权限”。SQL 及操作说明见[受控 ACL 交付目录](../../../feature-admin-workflow/deploy/dual-workspace-accounts/README.md)。
-- 由受控 DBA 在 `rcd_v2_preprod` 执行准备脚本，只补缺少的上述三项有效权限；确认数据库/操作者/服务地址，授权断言在 COMMIT 前完成。保持 owner NOLOGIN，不向 app 注入 DBA/owner 凭据，不给 worker 数据库权限，不新增 User INSERT、role/password UPDATE、DELETE 或 DDL。
+- 本轮代码来源必须锁定 `40b4a0fca3c9f9b4cfd392341f89663fdbbcb418`，不能使用随后仅修改治理文档的 HEAD 代替 OCI revision。最近已核验预生产仍为 §7.6 的 `b2887d3…`；新镜像/digest/扫描与运行验收尚无结果，不能复用旧扫描宣称新制品通过。
+- 无 Schema/migration 变化，但本人档案完善与受邀开户需要 app 数据库身份拥有 `Driver INSERT`、`User INSERT` 和 `User UPDATE(driverId, updatedAt)`；“无需迁移”不代表“无需检查权限”。SQL 及操作说明见[受控 ACL 交付目录](../../../feature-admin-workflow/deploy/dual-workspace-accounts/README.md)。
+- 由受控 DBA 在 `rcd_v2_preprod` 执行准备脚本，只补缺少的上述四项有效权限；确认数据库/操作者/服务地址，授权断言在 COMMIT 前完成。保持 owner NOLOGIN，不向 app 注入 DBA/owner 凭据，不给 worker 数据库权限，不授予 User DELETE、role/password UPDATE、DDL 或超出脚本列边界的通用写权限。
 - 完整保存首次成功执行输出中的新增权限标志和 rollback_sql；重复执行输出不能代替首次基线。使用受控隔离测试数据验证 app 身份的新建/关联、并发冲突和事务回滚，证明其他账号档案不会被占用、停用档案不会自动激活。
 - 再按固定代码归档构建、精确镜像扫描与运行探针、app → 单 worker → Nginx 的受控发布流程推进。反向代理必须保持公开站点 authority 与应用 Host 一致，复核 `RCD_SERVER_NAME`，避免同源档案请求被错误拒绝。
+- 发布前生成至少 32 字符的 `WORKSPACE_REGISTRATION_INVITE_SECRET`，只注入 app；worker、migration、Nginx 不接收。Nginx 必须是唯一公网入口，在每个 app 代理位置覆盖可信原始 URI 头，并保留 `/admin/orders/` 固定 V2 跳转；不得直接发布 app 端口或透传客户端同名头。
 - 应用回退使用部署前新保存并核验的 `b2887d3…` 配置/镜像；数据库回退只撤销首次脚本实际新增的权限，先回退应用再撤权。新产生的业务账号/司机资料保留，不自动删除、解绑或重置密码。
 - 真机必须用同一账号在 Safari/微信与鸿蒙对照：三种历史 role 均可进入 Web/H5；缺档案走完善，已有档案保持归属；H5 只能执行本人任务。新司机离线状态及不能冒用他人身份必须作为反例验收。
-- 预生产邀请码注册仍是下一版计划；本候选 `/admin/register` 404、POST 注册 403。不得为了开户把 `NODE_ENV` 改成 development 或授予 app 全表 User 写入权限。
+- 受邀注册已进入本地联合候选但尚未部署；未配置合格密钥时 `/admin/register` 404、POST 注册 403。不得为了开户把 `NODE_ENV` 改成 development、开放公开注册或授予 app 全表 User 写入权限。
 
 ## 8. Nginx、域名与 HTTPS
 
@@ -366,3 +367,4 @@ Compose 会在 profile 过滤前解析整份文件。对于已经证明没有 Sc
 | V2.0-r14 | 2026-09-03 | 落实 APP-006 无 shell runner/Node 入口、Git 归档与 19/19 SQL raw 指纹；区分本地 R55 PASS、远端双扫描和 G4-5 重新授权，补全 Compose config-only profile 核验 |
 | V2.0-r15 | 2026-09-11 | 登记 `b2887d3…@sha256:c491f6a…d1ed` 无 migration 分阶段部署、解析占位护栏、自动回退与最终健康/登录/308 冒烟；main 与正式生产授权不继承 |
 | V2.0-r16 | 2026-09-13 | 新增一号双端候选的最小 ACL、首次授权/回退证据、同源 Host、真实数据库与双端验收前置；无新镜像/部署事实，不开放注册 |
+| V2.0-r17 | 2026-09-15 | 对齐联合候选 `40b4a0f…`：最小 ACL 增加受邀开户所需 User INSERT，app 单独注入邀请密钥，Nginx 覆盖可信原始 URI 且保持唯一公网入口；均为未执行发布前置 |

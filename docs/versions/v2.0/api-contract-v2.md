@@ -1,10 +1,10 @@
 # 人车单 V2 API 契约
 
-> 契约版本：`RCD-API-V2.0-R19-20260913`
-> 状态：一号双端鉴权与本人司机档案接口已登记；当前只在本地候选实现，预生产尚未部署；既有司机任务 DTO 不变
+> 契约版本：`RCD-API-V2.0-R20-20260915`
+> 状态：一号双端、本人司机档案与受邀注册接口已登记；当前只在本地联合候选实现，预生产尚未部署；既有司机任务 DTO 不变
 > 实施约束：本文件只冻结契约，不含任何代码；TypeScript DTO、错误类型和契约测试在 Gate 2 落地
 > 上游依据：[PRD V2](prd-v2.md) · [数据架构 V2](data-architecture-v2.md) · [项目规则 V2](project-rules-v2.md)
-> 代码事实：本地双端候选 `37d412c6510012a4ff01c773ab1cb21932e84aef`；最近已核验预生产仍为 `b2887d3718f34bf3cc068d07b505d33065e77c7c`
+> 代码事实：本地联合候选 `40b4a0fca3c9f9b4cfd392341f89663fdbbcb418`；最近已核验预生产仍为 `b2887d3718f34bf3cc068d07b505d33065e77c7c`
 
 ## 1. 通用约定
 
@@ -227,9 +227,10 @@ IngestRecord（规范化接入 DTO：字段为 Canonical 命名，由来源侧�
 
 ### 2.6 既有注册入口兼容边界
 
-- `/api/auth/register` 保留 V1 响应，不迁移或删除路径。允许注册的本地开发环境中，请求必填 `account`（手机号）、`password`、`name`、`storeId`；忽略 `role` / `alsoDriver` 覆盖，固定创建 dispatcher User 并关联 Driver，成功 201 返回 `id/email/phone/name/role/driverId`，不返回密码。
-- 参数失败 400、档案/账号冲突 409、未分类错误 500，错误仍为 V1 字符串并带 traceId；没有有效门店或可安全关联档案时不留半注册数据。
-- 当前预生产/生产注册关闭：页面 `/admin/register` 为 404，POST 注册为 403。下一版邀请码注册遵循 [PRD §7.5](prd-v2.md#75-预生产邀请码注册下一版计划尚未实现)，其邀请码字段、存储、消费与错误契约尚未冻结，本版不宣称支持。
+- `/api/auth/register` 保留 V1 响应，不迁移或删除路径。请求必填 `account`（手机号）、`password`、`name`、`storeId`；受邀模式另必填 `inviteCode`。忽略 `role` / `alsoDriver` 覆盖，固定创建 dispatcher User 并关联 Driver，成功 201 返回 `id/email/phone/name/role/driverId`，不返回密码或邀请码内容。
+- 邀请码为 `v1.<base64url-payload>.<base64url-hmac>`；payload 冻结为 `{ version: 1, phone: string, expiresAt: integer, nonce: string }`。签名密钥只来自服务端 `WORKSPACE_REGISTRATION_INVITE_SECRET`，至少 32 字符；手机号必须与 `account` 一致、`expiresAt` 晚于当前 Unix 秒、nonce 长度 16～128，编码与签名必须规范。邀请码缺失/无效/过期/手机号不匹配或注册跨站返回 403。
+- 参数失败 400、档案/账号冲突 409、未分类错误 500，错误仍为 V1 字符串并带 traceId；没有有效门店或可安全关联档案时不留半注册数据。User/Driver 使用 Serializable 事务原子创建或关联，同手机号唯一约束拒绝重复和并发开户。
+- 未配置合格邀请密钥且未处于显式允许公开注册的开发环境时，页面 `/admin/register` 为 404、POST 注册为 403。预生产 Compose 要求邀请密钥但尚未部署；正式生产公开注册继续关闭，正式生产受邀模式也未配置或授权。产品边界见 [PRD §7.5](prd-v2.md#75-受邀注册2026-09-15-本地候选)。
 
 ## 3. 核心 DTO（字段级冻结）
 
@@ -440,6 +441,7 @@ MapSnapshotV2 = {
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| V2.0-r20 | 2026-09-15 | 冻结既有注册入口的受邀模式：`inviteCode` HMAC 结构、手机号/有效期/nonce、同源与失败码；保持 V1 响应、双端原子开户和无密钥失败关闭，当前仅本地候选未部署 |
 | V2.0-r19 | 2026-09-13 | 用户批准三种人类账号共用双端能力；新增本人司机档案 POST 契约及既有注册的原子双端边界；H5 本人任务、系统/ingest 及业务 DTO 不变；邀请码注册另待下一版 |
 | V2.0 | 2026-07-17 | Gate 0 首次冻结：路径、DTO、角色权限、状态流转引用、幂等、planVersion、错误码、traceId、时间格式与分页 |
 | V2.0-r1 | 2026-07-17 | Gate 0 二轮返修：`planVersion` 归属司机计划聚合，改派改为双版本（`expectedFromPlanVersion/expectedToPlanVersion`）；新增订单取消端点与取消语义；冻结 `IngestEnvelope` 与版本覆盖规则；新增 `DriverAvailability` 字段与设置端点；health 拆分匿名存活/内部 readiness；413 details 改 `observedBytes`；位置拒收补 `EXPIRED_AT_RECEIPT` |

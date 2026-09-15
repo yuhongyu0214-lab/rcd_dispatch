@@ -1,21 +1,21 @@
 # 人车单项目状态总览
 
-> 状态快照：2026-09-13 / R68
+> 状态快照：2026-09-15 / R69
 > 用途：说明项目做到哪一步、还差什么
 > 非权威范围：产品行为、状态机、Schema、枚举、HTTP 契约、技术栈和生产架构
 
 ## 一句话结论
 
-Gate 4 与主线交接已完成，最近已核验正式主线仍为 `d9cdf2bd36165ab3c3e012835c761458b455f61e`，预生产仍为 `b2887d3718f34bf3cc068d07b505d33065e77c7c@sha256:c491f6a48007b86b22af2c6a4f514ba94167e33b6dc0e33f046270b52102d1ed`。一号双端来源 `463c9ee44352a66ec43b25a1ccb66453ae9826ed` 已按真实 merge 拓扑与 13 文件 V2 入口交付合成联合候选 `feature/v2-account-entry-integration @ bf9aeefcd3be02fdd08be0f42a4d165ef2d39765`。155 项专项、955 passed / 7 expected skipped 全量、lint、类型检查、33/33 build、113 项隔离 HTTP 与独立只读审计通过；真实 Chrome/Edge 控制连接连续返回 `nodeRepl.fetch request failed`，浏览器矩阵保持 `BLOCKED`，不得写成 PASS。候选未推送、未部署，未执行数据库、Redis、高德或云资源写入；下一版邀请码注册仍未实现，正式生产 T0 仍只读。
+Gate 4 与主线交接已完成，最近已核验正式主线仍为 `d9cdf2bd36165ab3c3e012835c761458b455f61e`，预生产仍为 `b2887d3718f34bf3cc068d07b505d33065e77c7c@sha256:c491f6a48007b86b22af2c6a4f514ba94167e33f046270b52102d1ed`。一号双端来源 `463c9ee44352a66ec43b25a1ccb66453ae9826ed` 已按真实 merge 拓扑与 V2 入口、受邀注册、双端退出及原始 URI 精确治理合成联合候选 `feature/v2-account-entry-integration @ 40b4a0fca3c9f9b4cfd392341f89663fdbbcb418`。最终专项 217/217、全量 994 passed / 7 expected skipped、lint、类型检查、32/32 build、隔离 HTTP、Chrome 100%、Edge 100%/125% 与独立审计 `APPROVE`；P0/P1=0，保留两项非阻断 P2。候选未推送、未部署，真实 Nginx、数据库 ACL、邀请密钥、镜像和外部系统均未实施；正式生产 T0 仍只读。
 
 ## 当前工作流状态
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
-| 文档治理 | `R68_A8_SYNC / LOCAL_COMMIT_AUTHORIZED` | PRD r7、兼容矩阵 r5、项目规则 r21 与联合状态同步；承载本节的治理提交与代码候选分开，完整治理 SHA 由提交完成后的 Git 记录和交付报告登记 | 本轮只做本地提交与文档同步，不执行推送、数据库或部署 |
-| 联合账号与入口候选 | `ENGINEERING_PASS / HTTP_PASS / BROWSER_BLOCKED / NOT_DEPLOYED` | `feature/v2-account-entry-integration @ bf9aeefcd3be02fdd08be0f42a4d165ef2d39765`；两提交拓扑、53 文件联合边界、155/955 测试、lint/tsc/build、113 HTTP、独立审计 P0/P1/新增 P2=0 | 恢复真实 Chrome/Edge 控制连接后补桌面与等效窄视口矩阵；其后才可申请发布前置 |
-| 一号双端来源 | `INTEGRATED_INTO_BF9AEEF / NOT_DEPLOYED` | 来源提交 `463c9ee44352a66ec43b25a1ccb66453ae9826ed`，功能锚点 `37d412c6510012a4ff01c773ab1cb21932e84aef`；真实合并父提交 `2d0bbdde93a390c8b1a2ecf8a8e7e09d99fb0ebf` | 不单独部署来源分支；运行候选仍须以联合代码 SHA 重新构建、扫描和授权 |
-| 邀请码注册 | `APPROVED_PLAN / NOT_IMPLEMENTED` | 用户选择预生产邀请码；注册后默认双端，正式生产保持关闭 | 一号双端完成并经授权部署后再冻结具体注册接口/数据设计与实施白名单 |
+| 文档治理 | `R69_A8_SYNC / LOCAL_COMMIT_AUTHORIZED` | PRD r8、兼容矩阵 r6、项目规则 r22 与联合状态同步；承载本节的治理提交与代码候选分开，完整治理 SHA 由提交完成后的 Git 记录和交付报告登记 | 只做本地文档提交；不得推送、合并或执行外部写入 |
+| 联合账号与入口候选 | `ENGINEERING_PASS / HTTP_PASS / BROWSER_PASS / CODE_AUDIT_APPROVE / NOT_DEPLOYED` | `feature/v2-account-entry-integration @ 40b4a0fca3c9f9b4cfd392341f89663fdbbcb418`；59 路径边界、217/994 测试、lint/tsc/build、隔离 HTTP、Chrome/Edge、独立审计 P0/P1=0 | 返回主控另行裁决是否合入 develop；发布前置须重新授权 |
+| 一号双端来源 | `INTEGRATED_INTO_40B4A0F / NOT_DEPLOYED` | 来源提交 `463c9ee44352a66ec43b25a1ccb66453ae9826ed`，功能锚点 `37d412c6510012a4ff01c773ab1cb21932e84aef`；真实合并父提交 `2d0bbdde93a390c8b1a2ecf8a8e7e09d99fb0ebf` | 不单独部署来源分支；运行候选仍须以联合代码 SHA 重新构建、扫描和授权 |
+| 邀请码注册与双端退出 | `LOCAL_CANDIDATE_PASS / NOT_DEPLOYED` | 密钥闸门、手机号/有效期 HMAC 邀请、原子开户、V2/H5 退出及最小 ACL 制品已实现并审计；真实密钥和 ACL 未执行 | 与联合候选一同进入主控合入裁决；任何真实环境实施须另行授权 |
 | post-Gate-4 预生产返修 | `PREPROD_DEPLOYED / SMOKE_PASS / REAL_DEVICE_TEST_READY` | `b2887d3…` → index `sha256:c491f6a…d1ed`；app/worker healthy，Nginx revision 对齐；health/login 200、HTTP 308 | 开展受控真机测试；自签名证书提示必须如实记录，不得写成正式可信 HTTPS |
 | 正式生产 T0 | `READONLY_INVENTORY_AUTHORIZED / NOT_STARTED` | 代码基线仍为 `main == origin/main == d9cdf2b…`；R65 文档基线 `974d6d2…`；修改白名单为空，外部写授权为无 | 可继续只读盘点；正式生产构建/部署前必须另行审查并批准是否提升 `b2887d3…` |
 | Gate 3 历史应用候选 | `958AFCA_GATE3_ACCEPTED_DEVELOP_HANDOFF_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 只作历史与追溯，不再表述为当前预生产运行身份 |
@@ -41,7 +41,43 @@ Gate 4 与主线交接已完成，最近已核验正式主线仍为 `d9cdf2bd361
 | Gate 4 总闸门 | `PASS` | G4-1～G4-5 已通过；G4-5 含一次性主控例外 | develop/main 主线交接、main 推送和独立全量验证均已完成；仍不等于正式生产上线 |
 | Gate 4 证据与主线交接 | `EVIDENCE_FROZEN / AUDIT_WARN_ACCEPTED / DEVELOP_PUSHED / MAIN_PUSHED / MAIN_FULL_VALIDATION_PASS` | ZIP SHA-256 `988b1342…bcf0`；审计 P0/P1=0、P2=1；`main == origin/main == d9cdf2b…`；main 验证 813/7、lint、tsc、31/31 build、Prisma、制品 5/5、diff/clean PASS | 主线交接退出；正式生产必须使用独立任务卡和逐项授权 |
 
-## 2026-09-13 一号双端与 V2 默认入口联合候选
+## 2026-09-15 联合候选最终闭环
+
+### 冻结身份、拓扑与范围
+
+| 项目 | 稳定事实 |
+|---|---|
+| 统一起点 | `974d6d2a786a9237b0b4b41d3290ffa050f40c32`；main 应用锚点 `d9cdf2bd36165ab3c3e012835c761458b455f61e` |
+| 账号来源 | `feature/v2-dual-workspace-accounts @ 463c9ee44352a66ec43b25a1ccb66453ae9826ed`；功能锚点 `37d412c6510012a4ff01c773ab1cb21932e84aef` |
+| 联合代码候选 | `feature/v2-account-entry-integration @ 40b4a0fca3c9f9b4cfd392341f89663fdbbcb418` |
+| 提交拓扑 | `2d0bbdde93a390c8b1a2ecf8a8e7e09d99fb0ebf` 保留账号来源双亲 merge；其后按序为入口 `bf9aeef…`、R68 治理 `299fa38…`、受邀注册/退出 `2979d93…`、预生产密钥/ACL `fa38569…`、登录 next 收紧 `acc759a…`、入口原始 URI 收紧 `40b4a0f…` |
+| 精确范围 | 相对统一起点 59 路径：原联合并集 53、明确批准的 `compose.preprod.yml`/部署测试/middleware及测试/Nginx 5、既有 R68 兼容矩阵 1；额外代码 0，Schema/migration 0，`next.config.mjs` 与基线一致 |
+
+### 冲突裁决与最终行为
+
+- 保留 R67 一号双端、H5 本人归属、服务端门店与 Serializable 原子账号/司机事务，并叠加 admin/dispatcher 默认 V2、纯司机默认 H5、兼任账号安全 `next`。
+- 配置至少 32 字符邀请密钥时登录页展示受邀注册；邀请码使用 HMAC-SHA256、手机号、有效期、nonce 和规范 Base64URL，同源请求及唯一约束继续生效。预生产 Compose 对 app 强制注入密钥，worker/migration/Nginx 不接收。
+- V2 地图、订单池、司机 H5 和档案完善页均可退出；退出只清会话，不结束司机班次。
+- `/admin`、`/admin/map` 和普通 `/admin/orders` 进入 V2；仅四条原始 path+query 完全精确的隐藏工具网址放行。Nginx 覆盖可信原始 URI 头，中间件再与规范化 URL 双重比对；编码、额外/重复参数、尾斜杠、缺头和伪造不匹配均失败关闭到 V2。
+- V1 组件、API、Adapter、兼容层与 `/admin/import` 仍保留；不物理删除 V1，不改变兼容窗口写接口纪律。
+
+### 验证、审计与证据
+
+- 最终独立专项：217/217；全量 994 passed / 7 expected skipped；lint、`tsc --noEmit --incremental false`、Next.js 15.5.24 build 32/32、`git diff --check` 均 PASS。
+- 隔离 HTTP 验证覆盖邀请、角色分流、安全 next、两端退出和原始 URI 边界；精确旧工具、缺头、编码、extra、repeat、伪造头、尾斜杠、API trace 与 V1 410 均符合规则，服务已停止、端口无监听。
+- 用户复验 Chrome 100%、Edge 100%、Edge 125% 均 PASS，控制台无 error/warn；邀请注册、默认/安全 next、V2 无 V1 返回、两端退出、刷新/后退和隐藏工具矩阵通过。最后 4 文件入口返修另以部署制品静态断言和独立 HTTP 复验，未启动真实 Nginx 或重新跑浏览器。
+- 最终独立只读审计 `APPROVE`：P0=0、P1=0。P2 两项：精确旧书签进入后 `OrdersWorkflow` 内部仍可切换旧模式；退出请求网络/非 2xx 失败没有显式反馈。URL fragment 不发送到服务端，代码无 hash 消费方，作为信息性边界记录。
+- 受控证据目录为 `C:\Users\yhy\.codex\visualizations\2026\09\13\01a09b9c-e1e2-7210-a5b7-04e24d0b38cf`；闭环材料为 `final-code-validation-report-40b4a0f.md` 与 `final-independent-audit-report-40b4a0f.md`，均位于工作区外，不属于 Git 文档树。
+
+### 当前结论与未执行事项
+
+联合候选状态为 `ENGINEERING_PASS / HTTP_PASS / MANUAL_BROWSER_PASS / CODE_AUDIT_APPROVE / NOT_DEPLOYED`。代码候选与治理提交严格分开；Git 提交对象不能稳定自引用自身 SHA，因此本节以“承载本节的 R69 治理提交”标识，完整治理 SHA 由提交完成后的 Git 记录与最终交付报告给出。
+
+未执行且未授权：推送、合入 develop/main、镜像构建/推送/扫描、真实 Nginx、邀请密钥配置、数据库 ACL/事务或 migration、Redis/Tair、高德、预生产/生产部署及正式生产写操作。下一步必须返回主控另行裁决是否合入 develop；发布动作不继承本轮权限。
+
+大白话：登录、注册、退出和新版入口已经合成一份本地代码，电脑检查、人工浏览器和独立审计都通过了。服务器现在还没有换成这版，邀请码密钥和数据库权限也没有真的执行；下一步只能由主控决定是否合入开发主线或另开发布任务。
+
+## 2026-09-13 一号双端与 V2 默认入口联合候选（R68 历史快照）
 
 ### 代码拓扑与冲突裁决
 

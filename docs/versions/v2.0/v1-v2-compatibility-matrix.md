@@ -1,7 +1,7 @@
 # V1 → V2 兼容映射矩阵
 
-> 矩阵版本：`RCD-COMPAT-V2.0-R5-20260913`
-> 状态：当前有效；Gate 0 数据映射保持冻结，r5 追加用户批准的页面级入口分流
+> 矩阵版本：`RCD-COMPAT-V2.0-R6-20260915`
+> 状态：当前有效；Gate 0 数据映射保持冻结，r6 收紧隐藏工具的原始网址精确边界
 > 作用：唯一权威的 V1 状态、司机状态、字段与默认迁移策略映射；数据迁移（Gate 1 及迁移验证阶段）以本文件为准
 > 原则：V1 枚举和接口在兼容窗口内保留；删除前必须完成迁移验收并获得用户批准
 
@@ -146,16 +146,18 @@ V1 `DriverStatus`（6 值）→ V2 班次 + 可用性 + 位置新鲜度 + 执行
 |---|---|---|
 | `/admin`、`/admin/map` | 转到 `/admin/map/v2` | 身份校验与安全 `next` 继续生效 |
 | `/admin/orders`、`mode=orders`、未知或重复 `mode` | 转到 `/admin/orders/v2` | 刷新、回退和直接输入均不得恢复 V1 普通入口 |
-| `/admin/orders?mode=drivers|vehicles|alerts|logs` | 仅精确单值旧书签可进入隐藏工具 | V2 正常导航不展示入口；进入后旧组件内部模式切换是已接受 P2 |
+| `/admin/orders?mode=drivers|vehicles|alerts|logs` | 仅原始 path+query 完全等于四条固定网址之一时进入隐藏工具 | V2 正常导航不展示入口；进入后旧组件内部模式切换是已接受 P2 |
 | `/admin/import`、`/admin/import/result` | 继续保留 | 不属于 V1 调度主入口 |
 
 - V1 API、Adapter、兼容层和 `OrdersWorkflow` 源码仍保留；V1 写接口的 410 时点、V1 读接口整体下线时点及用户批准要求仍按 §7，不由页面入口分流自动提前。
 - 三种人类账号的 Web/H5 能力按 PRD §7.4 执行；历史纯司机默认登录进入 H5，不等于撤销其经鉴权的 Web 能力。
+- 编码参数名/值、额外或重复参数、尾斜杠及无法取得可信原始 URI 的请求都不是精确旧书签，必须失败关闭到 `/admin/orders/v2`；登录 `next` 与已登录直接访问执行同一产品边界。
 
 ## 8. 版本记录
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| V2.0-r6 | 2026-09-15 | 收紧 §7.1：隐藏工具只接受原始 path+query 四条完全精确网址；编码、额外/重复参数、尾斜杠和缺少可信入口信息均转 V2，登录 next 与直接访问口径一致 |
 | V2.0 | 2026-07-17 | Gate 0 首次冻结：状态/司机/Assignment/字段/规则/日志动作映射与兼容窗口纪律 |
 | V2.0-r1 | 2026-07-17 | Gate 0 二轮返修：`REASSIGN → MANUAL_LOCKED` 定稿；`UNAVAILABLE` 拆为 `onShift=false + availability=UNAVAILABLE`；`COMPLETED` Assignment 归入历史链记录；§4.1 `channel → sourceSystem` 映射表定稿；§4.2 回填标记定为 `sourceVersion="v1-migration"`（不新增字段）；§7 冻结 V1 写接口停用不转译 |
 | V2.0-r2 | 2026-07-17 | Gate 0 三轮返修：新增 §1.3 `arrivedAt` 回填链（START 日志 → `acceptedAt` → `Order.updatedAt` + `migrationFallback` 标识，三级不可用转人工核对）；§7 冻结兼容窗口两个独立时点（切换开关 ≠ 窗口关闭，V1 读接口存续至窗口关闭） |

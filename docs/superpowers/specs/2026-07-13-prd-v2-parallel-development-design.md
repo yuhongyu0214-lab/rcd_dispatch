@@ -5,7 +5,7 @@
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
-> 最新任务：2026-09-13 联合账号/入口候选 `bf9aeef…` 工程、隔离 HTTP 与独立审计通过，真实浏览器矩阵阻塞、未部署；R68 同步见 §8.4.8。下一版邀请码注册仅计划，以上 `b2887d3…` 为最近已核验运行版本。
+> 最新任务：2026-09-15 联合账号/入口候选 `40b4a0f…` 的受邀注册、双端退出、原始 URI 入口返修、自动化、隔离 HTTP、Chrome/Edge 与独立审计均通过，未部署；R69 同步见 §8.4.9。`b2887d3…` 仍为最近已核验运行版本。
 
 ## 1. 目的
 
@@ -755,11 +755,11 @@ EXTERNAL_WRITE_AUTHORIZATION=NONE
 | 本地双端实现 | `LOCAL_CODE_COMMITTED / LOCAL_VALIDATION_PASS`；代码 `37d412c6510012a4ff01c773ab1cb21932e84aef`，分支 `feature/v2-dual-workspace-accounts` | 901 passed / 7 skipped、lint、tsc、32/32 build、匿名 HTTP 冒烟和独立审查 P0/P1=0；不冒充真实 DB/真机通过 |
 | 文档同步 | R67 获 A8，并沿用此前独立 Git 本地提交授权；保留 R66 部署事实 | 状态、PRD/API、APP-008、部署前置、入口、公共上下文和 Canvas 一致；治理 SHA 与代码 SHA 分开 |
 | 预生产发布 | 尚未构建新镜像、运行 ACL 脚本或部署；最近已核验仍为 `b2887d3…` | 按部署指南 §7.7 核验受控 DBA、最小权限及首次回退证据、真实事务/并发、不可变制品扫描，然后执行获批切换与同账号真机验收 |
-| 邀请码注册下一版 | `APPROVED_PLAN / NOT_IMPLEMENTED` | 一号双端完成并经授权部署后再实施登录页注册按钮、邀请码与原子 DB 开户；具体接口/数据设计另行冻结，正式生产保持关闭 |
+| 受邀注册后继候选 | `LOCAL_CODE_COMMITTED / VALIDATION_PASS / NOT_DEPLOYED`；已并入 `40b4a0f…` | 登录页注册按钮、HMAC 手机号/有效期邀请和原子 DB 开户已实现；真实密钥、最小 ACL、制品与预生产切换仍须另行授权，正式生产公开注册保持关闭 |
 
-本轮只执行本地 Git 与文档工作，不从发布方向授权推定数据库脚本已执行；运行账号不获得 DBA、role/password UPDATE 或通用 User 写权限，worker 仍不访问数据库。用户回传的 401、Driver-only/关联缺失和 42501 证据保留；新候选上线前不得宣称 iOS 问题闭环。详细证据与限制见[状态总览](../../status/README.md#2026-09-13-一号双端本地交付与邀请码注册计划)。
+本轮只执行本地 Git 与文档工作，不从发布方向授权推定数据库脚本已执行；准备脚本虽增加受邀开户所需的最小 User INSERT，运行账号仍不获得 DBA、role/password UPDATE、DELETE 或超出脚本范围的通用 User 写权限，worker 仍不访问数据库。用户回传的 401、Driver-only/关联缺失和 42501 证据保留；新候选上线前不得宣称真实设备或预生产账号问题闭环。详细证据与限制见[状态总览](../../status/README.md#2026-09-15-联合候选最终闭环)。
 
-#### 8.4.8 一号双端 × V2 默认入口联合候选
+#### 8.4.8 一号双端 × V2 默认入口联合候选（R68 历史快照）
 
 用户授权将 §8.4.7 的一号双端来源与 13 文件“调度员默认进入 V2、V1 正常入口退场”交付合为一条可追溯本地候选。统一基线为 `974d6d2a786a9237b0b4b41d3290ffa050f40c32`；`2d0bbdde93a390c8b1a2ecf8a8e7e09d99fb0ebf` 以双亲 merge 保留 `463c9ee44352a66ec43b25a1ccb66453ae9826ed` 来源历史，随后 `bf9aeefcd3be02fdd08be0f42a4d165ef2d39765` 仅提交 13 个入口集成文件。联合范围为 53 文件，无 Schema/migration。
 
@@ -773,6 +773,23 @@ EXTERNAL_WRITE_AUTHORIZATION=NONE
 | 发布与外部系统 | `NOT_AUTHORIZED / NOT_EXECUTED` | 未推送、未合入 develop/main、未构建/推送/扫描镜像，未执行 DB ACL/事务/migration、Redis/Tair、高德、预生产或正式生产写入 |
 
 当前联合状态为 `ENGINEERING_PASS / HTTP_PASS / CODE_AUDIT_PASS / BROWSER_BLOCKED / NOT_DEPLOYED`。只有浏览器控制恢复并完成真实 Chrome/Edge 矩阵后，主控才能重新判定是否进入发布前置；后续每项 DB、制品、扫描、预生产或正式生产操作仍须单独授权。详细记录见[状态总览](../../status/README.md#2026-09-13-一号双端与-v2-默认入口联合候选)。
+
+#### 8.4.9 受邀注册、双端退出与入口治理最终闭环
+
+用户将受邀注册与两端退出定为同一账号专项，并批准在联合候选上串行实施。最终本地候选为 `feature/v2-account-entry-integration @ 40b4a0fca3c9f9b4cfd392341f89663fdbbcb418`，统一起点仍为 `974d6d2a786a9237b0b4b41d3290ffa050f40c32`，账号来源仍为 `463c9ee44352a66ec43b25a1ccb66453ae9826ed`。提交序列保留真实 merge，不修改两个来源 worktree。
+
+| 闸门 | 结论 | 证据与限制 |
+|---|---|---|
+| 产品与冲突裁决 | `PASS` | 保留 R67 一号双端、本人 H5、Serializable User/Driver 事务与门店规则；增加密钥闸门 HMAC 邀请、V2/H5 退出和 V2 默认入口，不接受客户端 role/userId/driverId |
+| 入口安全返修 | `PASS` | 登录 next 拒绝站外、反斜杠、控制字符、编码目录穿越与自循环；Nginx 覆盖原始 URI 头且是唯一公网入口，middleware 双重精确四值，编码/extra/repeat/尾斜杠/缺头均失败关闭 |
+| 自动化与构建 | `PASS` | 最终独立专项 217/217、全量 994 passed / 7 expected skipped、lint、tsc、32/32 build、diff check；Schema/migration 零变化 |
+| 隔离 HTTP | `PASS` | 角色分流、邀请、退出、安全 next、V1 410/trace 与原始 URI 矩阵通过；本地服务停止，不连接真实依赖 |
+| Chrome/Edge | `PASS` | 用户确认 Chrome 100%、Edge 100%、Edge 125% 全部通过且控制台无 error/warn；最终 4 文件入口返修另做静态制品与独立 HTTP 复验，未运行真实 Nginx 浏览器组合 |
+| 最终独立审计 | `APPROVE` | P0=0、P1=0；P2=2：隐藏兼容页内部旧模式切换、退出失败缺少显式反馈。fragment 不进入 HTTP 请求，为信息性边界 |
+| 文件边界 | `PASS` | 相对起点 59 路径＝原联合 53 + 明确批准 5 + 既有 R68 兼容矩阵 1；额外代码 0，`next.config.mjs` 与基线一致 |
+| 发布与外部系统 | `NOT_AUTHORIZED / NOT_EXECUTED` | 未推送或合入 develop/main，未构建/扫描镜像，未运行真实 Nginx、邀请密钥、DB ACL/事务/migration、Redis/Tair、高德、预生产或正式生产写入 |
+
+当前联合状态为 `ENGINEERING_PASS / HTTP_PASS / MANUAL_BROWSER_PASS / CODE_AUDIT_APPROVE / NOT_DEPLOYED`。R69 只同步稳定结论并形成独立治理提交；代码候选、治理提交、运行 SHA 和镜像 digest 分开。下一步必须返回主控另行裁决是否合入 develop；任何发布前置继续逐项授权。详细记录见[状态总览](../../status/README.md#2026-09-15-联合候选最终闭环)。
 
 ## 9. 并行开发纪律
 
@@ -917,5 +934,5 @@ EXTERNAL_WRITE_AUTHORIZATION=NONE
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
 - 当前工作阶段：Gate 4 `PASS`。G4-1～G4-4 已通过；G4-5 已部署 `4d370d6…@sha256:508dea…453d`，完成 9→10 migration、真实依赖/业务/观测与 T6 审计，并以一次性维护窗口例外裁决 `FINAL_PASS_WITH_CONTROLLER_EXCEPTION`。三个旧 RC 继续拒绝。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
-- 当前执行限制：R65 `974d6d2…` 的正式生产 T0 仍只读；R68 已授权本地代码/文档提交。联合候选 `bf9aeef…` 未推送、未部署，浏览器矩阵仍阻塞；不能把本地 HTTP 替换成真机或运行结果，main 提升和任何外部写入仍须另行批准。
-- 下一动作：先按 §8.4.8 在浏览器控制恢复后补 Chrome/Edge 桌面与 125%/952×800 等效布局矩阵；通过后再另行申请 §8.4.7 的数据库/制品/扫描/部署与真机前置。邀请码注册继续排在已授权部署之后，正式生产 T0 不继承任何预生产权限。
+- 当前执行限制：R65 `974d6d2…` 的正式生产 T0 仍只读；R69 已授权本地代码/文档提交。联合候选 `40b4a0f…` 未推送、未合入 develop/main、未部署；浏览器与独立审计已闭环，但真实 Nginx、DB ACL、邀请密钥、镜像和运行状态没有新证据。main 提升和任何外部写入仍须另行批准。
+- 下一动作：把 `40b4a0f…` 与 R69 治理提交返回主控，另行裁决是否按 `feature → develop → main` 进入 develop；发布任务必须重新冻结代码/文档/镜像身份并逐项批准 ACL、密钥、制品、扫描、部署和真实预生产验收。正式生产 T0 不继承任何预生产权限。

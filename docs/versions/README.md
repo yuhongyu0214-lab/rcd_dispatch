@@ -1,9 +1,9 @@
 # 人车单项目文档版本总入口
 
-> 版本戳：`RCD-DOC-REGISTRY-20260913-R68`
+> 版本戳：`RCD-DOC-REGISTRY-20260915-R69`
 > 建立日期：2026-07-13
-> 治理更新时间：2026-09-13
-> 提交整理：2026-09-14；R68 记录截至 2026-09-13 的联合候选、验证、浏览器阻塞与授权边界
+> 治理更新时间：2026-09-15
+> 提交整理：R69 记录联合候选最终自动化、浏览器、独立审计、受邀注册/退出与未部署边界
 > 归档方式：现行权威集中到 `v2.0/`；已融合或冲突的旧方案从工作树清场，历史由 Git 追溯
 > 可视化导航：[Obsidian 项目全景白板](../rcd-v2-project-map.canvas)（仅作导航，不替代下方权威文档）
 
@@ -20,19 +20,19 @@
 
 | 范围 | 当前版本 | 状态 | 入口 |
 |---|---|---|---|
-| 产品需求 | V2.0-r7 | §7.4 一号双端与 §9.1.1 V2 默认入口获批；§7.5 邀请码预生产注册仍为未开放计划 | [PRD V2](v2.0/prd-v2.md) |
+| 产品需求 | V2.0-r8 | 一号双端、V2 默认入口、受邀注册和双端退出已冻结并在本地候选实现；尚未部署 | [PRD V2](v2.0/prd-v2.md) |
 | 数据架构 | V2.0-r16 | 当前候选 Schema/migration tree 与冻结基线完全相同 | [数据架构 V2](v2.0/data-architecture-v2.md) |
-| 代码与设计约束 | V2.0-r21 | 联合候选登记集中安全路由、V2 默认入口、精确隐藏模式与已接受 P2；技术栈、Schema、设计变量不变 | [项目规则 V2](v2.0/project-rules-v2.md) |
-| API 契约 | V2.0-r19（本地双端候选；未部署） | 三种人类角色共享工作台能力，新增本人司机档案 POST；H5 本人任务与既有 DTO 不变 | [API 契约 V2](v2.0/api-contract-v2.md) |
+| 代码与设计约束 | V2.0-r22 | 联合候选登记受邀注册、双端退出、可信原始 URI 精确入口与两项 P2；技术栈、Schema、设计变量不变 | [项目规则 V2](v2.0/project-rules-v2.md) |
+| API 契约 | V2.0-r20（本地联合候选；未部署） | 三种人类角色共享工作台能力，本人司机档案 POST 与受邀注册 HMAC 契约已冻结；H5 本人任务与既有 DTO 不变 | [API 契约 V2](v2.0/api-contract-v2.md) |
 | 领域词汇 | V2.0-r13 | 当前候选领域术语与枚举零变化已登记 | [领域词汇 V2](v2.0/domain-glossary-v2.md) |
-| 应用框架与依赖决策 | V2.0-r8 | APP-008 双端应用集成本地通过；邀请码注册为下一版计划，预生产仍为 APP-007 | [应用决策日志](v2.0/application-decision-log.md) |
-| V1→V2 兼容映射 | V2.0-r5 | 数据迁移映射保持冻结；普通旧页面入口转 V2，四类精确隐藏工具保留，不等于兼容窗口整体关闭 | [兼容矩阵](v2.0/v1-v2-compatibility-matrix.md) |
+| 应用框架与依赖决策 | V2.0-r9 | APP-008 后继联合候选已加入受邀注册、退出与入口治理；预生产仍为 APP-007 | [应用决策日志](v2.0/application-decision-log.md) |
+| V1→V2 兼容映射 | V2.0-r6 | 数据迁移映射保持冻结；普通旧页面入口转 V2，隐藏工具只按四条原始 path+query 精确放行 | [兼容矩阵](v2.0/v1-v2-compatibility-matrix.md) |
 | 生产基础设施架构 | V2.0-r7 | 既有预生产架构承载 `b2887d3…@sha256:c491f6a…d1ed`；Nginx/TLS/端口与数据库结构不变 | [基础设施架构 V2](v2.0/infrastructure-v2.md) |
-| 构建、部署与回退 | V2.0-r16 | 保留已部署 patch 证据；新增双端最小 ACL、首次权限回退、精确镜像与真机前置，尚未执行 | [部署指南 V2](v2.0/deployment-guide-v2.md) |
+| 构建、部署与回退 | V2.0-r17 | 保留已部署 patch 证据；联合候选最小 User INSERT、邀请密钥与 Nginx 原始 URI 前置尚未执行 | [部署指南 V2](v2.0/deployment-guide-v2.md) |
 | 生产运行与恢复 | V2.0-r7 | app/单 worker/Nginx 新 revision 运行，真机测试 READY；正式可信 HTTPS 与灾备仍为独立验收 | [运维指南 V2](v2.0/operations-guide-v2.md) |
 | 基础设施决策与替代历史 | V2.0-r3 | INFRA-001～023 已登记；公网 IP 预生产演示获准，正式上线条件不变 | [基础设施决策日志](v2.0/infrastructure-decision-log.md) |
-| 项目当前状态 | 2026-09-13 / R68 | 联合候选 `bf9aeef…` 工程/HTTP/审计通过、真实浏览器阻塞、未部署；预生产仍为 `b2887d3…` | [状态总览](../status/README.md) |
-| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260913-R68 | Layer 0；区分联合代码候选、治理提交、浏览器缺口与最近已核验预生产/main | [Agent 公共上下文](../context/agent-common-context.md) |
+| 项目当前状态 | 2026-09-15 / R69 | 联合候选 `40b4a0f…` 自动化/HTTP/浏览器/审计通过、未部署；预生产仍为 `b2887d3…` | [状态总览](../status/README.md) |
+| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260915-R69 | Layer 0；区分联合代码、治理提交、运行身份和未授权外部操作 | [Agent 公共上下文](../context/agent-common-context.md) |
 | V1 产品与开发主线 | V1.x | 历史只读 | [V1 历史索引](v1/README.md) |
 
 ## 文档权威顺序（按领域拆分，唯一权威口径）
@@ -126,7 +126,7 @@ HTTP 契约               → v2.0/api-contract-v2.md
 
 ### 当前联合账号与入口任务
 
-本地代码 `feature/v2-account-entry-integration @ bf9aeefcd3be02fdd08be0f42a4d165ef2d39765` 已通过 155 项专项、955/7 全量、lint/tsc、33/33 build、113 项隔离 HTTP 与独立审计，联合范围 53 文件；真实 Chrome/Edge 控制连接失败，浏览器矩阵仍 `BLOCKED`。新任务必须读取 PRD §7.4～7.5、§9.1.1、API r19、兼容矩阵 §7.1、APP-008 与项目规则 r21，再以承载 R68 的实际治理提交 SHA 锁定文档。具体进度见[联合候选](../status/README.md#2026-09-13-一号双端与-v2-默认入口联合候选)。候选未推送、未部署；邀请码注册和所有外部发布前置仍须另行授权。
+本地代码 `feature/v2-account-entry-integration @ 40b4a0fca3c9f9b4cfd392341f89663fdbbcb418` 已通过独立专项 217/217、全量 994/7、lint/tsc、32/32 build、隔离 HTTP、Chrome 100%、Edge 100%/125% 与最终独立审计 `APPROVE`；相对统一起点 59 路径，无额外代码、Schema/migration。新任务必须读取 PRD §7.4～7.6、§9.1.1、API r20、兼容矩阵 §7.1、APP-008 后继记录、部署指南 §7.7 与项目规则 r22，再以承载 R69 的实际治理提交 SHA 锁定文档。具体进度见[联合候选最终闭环](../status/README.md#2026-09-15-联合候选最终闭环)。候选未推送、未部署；DB ACL、邀请密钥、镜像、Nginx 和所有外部发布前置仍须另行授权。
 
 ### Gate 4 历史入口与 post-Gate-4 已部署候选
 
@@ -141,7 +141,7 @@ HTTP 契约               → v2.0/api-contract-v2.md
 
 3A/3B、已结束的返修/扫描和已消费的 G4-5 授权均不继承。三个旧 RC `4102ee1… / a0c8bbd… / 857705e…` 继续 `REJECTED_DO_NOT_DEPLOY`，不得覆盖、删除或部署。代码/运行锚点仍为 `4d370d6…`；R63 治理提交 `95a1c06…` 已推送至 `origin/develop`，R64 治理提交为 `964bd1c42f1d94b9b8f3d0bff4fd7a3f1521b235`。`main == origin/main == d9cdf2bd36165ab3c3e012835c761458b455f61e`，独立 main 全量验证通过且 refs 未改变。证据包 `gate4-evidence-package-20260907.zip` 的 SHA-256 为 `988b1342…bcf0`；独立审计没有 P0/P1，保留一个外部原始证据完整性 P2。维护窗口超时和 migration 时间缺失的例外只绑定本次预生产部署，不得用于正式生产任务；G4-5 证据与裁决见[主计划 §8.4.3](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md#843-g4-5-预生产继续联调方案t6-pass_with_controller_exceptiongate-4-pass)。正式生产 T0 只读盘点是独立新阶段，不继承任何部署或外部写授权。
 
-共同停止条件：代码/文档 SHA 不明、工作区不干净、缺少精确文件/资源白名单或阶段外部授权、制品/SQL/扫描对象不一致、权威口径冲突时立即停止。运维发布角色按正式生产 T0 只读任务追加基建/部署/运维权威，不把业务全文塞入公共层。APP-007 定义已部署 patch 的历史技术边界，APP-008/API r19/部署指南 §7.7 定义本地双端候选及其发布前置；最新放行状态以状态总览为准。
+共同停止条件：代码/文档 SHA 不明、工作区不干净、缺少精确文件/资源白名单或阶段外部授权、制品/SQL/扫描对象不一致、权威口径冲突时立即停止。运维发布角色按正式生产 T0 只读任务追加基建/部署/运维权威，不把业务全文塞入公共层。APP-007 定义已部署 patch 的历史技术边界，APP-008/API r20/部署指南 §7.7 定义本地联合候选及其发布前置；最新放行状态以状态总览为准。
 
 ### 未分配到默认角色上下文的文档
 
@@ -167,7 +167,7 @@ HTTP 契约               → v2.0/api-contract-v2.md
 |---|---|---|
 | 正式生产云 | 中国大陆正式生产主线使用阿里云；Railway 仅保留历史 Demo 证据，CloudBase 仅限隔离预览/验证 | 架构已批准，阿里云生产尚未验收 |
 | 运行与入口 | 单 ECS 试运行；Docker + Nginx；同一不可变镜像分别运行 Next.js app、HTTP-only 单副本 worker、一次性 migration | app、worker、Nginx、自签名 HTTPS 与外部健康/登录路由已验收；正式可信 HTTPS 延后 |
-| 镜像与日志 | ACR 保存按 commit SHA 追溯的镜像；SLS 集中采集结构化日志 | 最近已核验预生产为 `b2887d3…@sha256:c491f6a…d1ed`；联合候选 `bf9aeef…` 尚无新镜像或部署结果；Gate 4 SLS 验收保留为历史证据 |
+| 镜像与日志 | ACR 保存按 commit SHA 追溯的镜像；SLS 集中采集结构化日志 | 最近已核验预生产为 `b2887d3…@sha256:c491f6a…d1ed`；联合候选 `40b4a0f…` 尚无新镜像或部署结果；Gate 4 SLS 验收保留为历史证据 |
 | 事实数据库 | 阿里云 RDS PostgreSQL 是唯一业务事实库；Prisma 负责 ORM 与 migration | 预生产为 10 条 migration、outbox CHECK 17 种；app 最小权限、worker 零 DB 权限、owner `NOLOGIN`；恢复点 `3149081194` 与配置备份/回退路径有效 |
 | 实时数据 | 阿里云 Tair/Redis 保存最新位置、在线状态、ETA 短缓存和短锁，不得成为业务事实源 | 上海预生产 Tair 白名单、内网登录、固定前缀、隔离短锁竞争与恢复均已通过；自动化不可用降级已验收，PostgreSQL 继续作为唯一业务事实库 |
 | 地图与路径 | 高德 JS API 负责前端地图；高德服务端 API 负责地理编码、路径与真实 ETA | Key 分离，服务端 Key 不得进入浏览器 |
@@ -200,7 +200,8 @@ remote commit: 958afca537b412fb972b6e180561a9b37022834d
 4. 最终一致性审查确认本地/远程代码、ACR digest、ECS 运行身份、真实依赖、10 单结果和故障/回退证据一致；文档口径已返修，并以 `feature/v2-gate3-review-remediation @ 57ef86c43bf220f48774e130575c40b8c94a83d5` 形成可追溯基线，本地、upstream 与 GitHub 远程核验一致。
 5. Gate 4 已 `PASS` 并完成主线交接；R65 `974d6d2…` 开放正式生产 T0 只读盘点。post-Gate-4 候选 `b2887d3…@sha256:c491f6a…d1ed` 已部署预生产并可进入真机测试，但尚未进入 main。T0 只读盘点可继续；任何正式生产构建/部署、main 提升或外部写操作仍须分别授权。
 6. 9/13 用户真机反馈后批准一号双端，来源代码 `37d412c…` / `463c9ee…` 已进入联合候选；R67 证据继续保留，不把治理提交 SHA 当成代码 RC。
-7. 联合候选 `bf9aeef…` 已完成工程、113 项隔离 HTTP 和独立审计，普通旧入口转 V2、四类精确隐藏工具及已接受 P2 已登记；真实 Chrome/Edge 浏览器矩阵受控制连接故障阻塞。R68 不授权推送、部署、数据库、Redis/Tair、高德或云写入。
+7. R68 联合候选 `bf9aeef…` 完成工程、113 项隔离 HTTP 和当时的独立审计，但真实 Chrome/Edge 浏览器矩阵受控制连接故障阻塞；该历史状态已由 R69 后继候选取代。
+8. 联合候选 `40b4a0f…` 已完成受邀注册、双端退出与原始 URI 入口 P1 返修，独立专项 217/217、全量 994/7、lint/tsc/build、隔离 HTTP、Chrome/Edge 与最终独立审计通过；P0/P1=0、P2=2，未推送、未部署或执行外部写入。
 
 状态事实和阻断项统一在[状态总览](../status/README.md)维护；状态文档不得修改领域契约。
 
