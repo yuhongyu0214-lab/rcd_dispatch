@@ -5,7 +5,7 @@
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
-> 最新任务：2026-09-15 联合账号/入口候选 `40b4a0f…` 的受邀注册、双端退出、原始 URI 入口返修、自动化、隔离 HTTP、Chrome/Edge 与独立审计均通过，未部署；R69 同步见 §8.4.9。`b2887d3…` 仍为最近已核验运行版本。
+> 最新任务：2026-09-15 联合账号/入口候选 `40b4a0f…` 与 R69 治理 `d04b68b…` 已通过 `--no-ff` 合入本地 `develop @ 7b4c56e…`，合入后全量回归通过；未推送、未合入 main 或部署。R70 同步见 §8.4.9；`b2887d3…` 仍为最近已核验运行版本。
 
 ## 1. 目的
 
@@ -787,9 +787,10 @@ EXTERNAL_WRITE_AUTHORIZATION=NONE
 | Chrome/Edge | `PASS` | 用户确认 Chrome 100%、Edge 100%、Edge 125% 全部通过且控制台无 error/warn；最终 4 文件入口返修另做静态制品与独立 HTTP 复验，未运行真实 Nginx 浏览器组合 |
 | 最终独立审计 | `APPROVE` | P0=0、P1=0；P2=2：隐藏兼容页内部旧模式切换、退出失败缺少显式反馈。fragment 不进入 HTTP 请求，为信息性边界 |
 | 文件边界 | `PASS` | 相对起点 59 路径＝原联合 53 + 明确批准 5 + 既有 R68 兼容矩阵 1；额外代码 0，`next.config.mjs` 与基线一致 |
-| 发布与外部系统 | `NOT_AUTHORIZED / NOT_EXECUTED` | 未推送或合入 develop/main，未构建/扫描镜像，未运行真实 Nginx、邀请密钥、DB ACL/事务/migration、Redis/Tair、高德、预生产或正式生产写入 |
+| develop 合入与回归 | `PASS` | `40b4a0f…` 与 R69 `d04b68b…` 以 `--no-ff` 合入本地 `develop @ 7b4c56ec9d020b62f364869cd942e62a8e9f4b70`；合入后 994 passed / 7 expected skipped、lint、tsc、32/32 build 与 diff check 通过，工作区干净 |
+| 发布与外部系统 | `NOT_AUTHORIZED / NOT_EXECUTED` | 未推送、未合入 main，未构建/扫描镜像，未运行真实 Nginx、邀请密钥、DB ACL/事务/migration、Redis/Tair、高德、预生产或正式生产写入 |
 
-当前联合状态为 `ENGINEERING_PASS / HTTP_PASS / MANUAL_BROWSER_PASS / CODE_AUDIT_APPROVE / NOT_DEPLOYED`。R69 只同步稳定结论并形成独立治理提交；代码候选、治理提交、运行 SHA 和镜像 digest 分开。下一步必须返回主控另行裁决是否合入 develop；任何发布前置继续逐项授权。详细记录见[状态总览](../../status/README.md#2026-09-15-联合候选最终闭环)。
+当前联合状态为 `MERGED_LOCAL_DEVELOP / POST_MERGE_PASS / NOT_PUSHED / NOT_DEPLOYED`。代码候选、R69 治理、develop 合并点、R70 治理、运行 SHA 和镜像 digest 分开。下一步如需推送 develop、合入 main 或进入发布前置，继续逐项授权。详细记录见[状态总览](../../status/README.md#2026-09-15-联合候选最终闭环)。
 
 ## 9. 并行开发纪律
 
@@ -934,5 +935,5 @@ EXTERNAL_WRITE_AUTHORIZATION=NONE
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
 - 当前工作阶段：Gate 4 `PASS`。G4-1～G4-4 已通过；G4-5 已部署 `4d370d6…@sha256:508dea…453d`，完成 9→10 migration、真实依赖/业务/观测与 T6 审计，并以一次性维护窗口例外裁决 `FINAL_PASS_WITH_CONTROLLER_EXCEPTION`。三个旧 RC 继续拒绝。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
-- 当前执行限制：R65 `974d6d2…` 的正式生产 T0 仍只读；R69 已授权本地代码/文档提交。联合候选 `40b4a0f…` 未推送、未合入 develop/main、未部署；浏览器与独立审计已闭环，但真实 Nginx、DB ACL、邀请密钥、镜像和运行状态没有新证据。main 提升和任何外部写入仍须另行批准。
-- 下一动作：把 `40b4a0f…` 与 R69 治理提交返回主控，另行裁决是否按 `feature → develop → main` 进入 develop；发布任务必须重新冻结代码/文档/镜像身份并逐项批准 ACL、密钥、制品、扫描、部署和真实预生产验收。正式生产 T0 不继承任何预生产权限。
+- 当前执行限制：R65 `974d6d2…` 的正式生产 T0 仍只读；联合候选 `40b4a0f…` 与 R69 治理已合入本地 `develop @ 7b4c56e…` 并完成合入后回归，但未推送、未合入 main 或部署；真实 Nginx、DB ACL、邀请密钥、镜像和运行状态没有新证据。main 提升和任何外部写入仍须另行批准。
+- 下一动作：如需继续，主控应分别裁决推送 develop、合入 main 或建立新的发布任务；发布任务必须重新冻结代码/文档/镜像身份并逐项批准 ACL、密钥、制品、扫描、部署和真实预生产验收。正式生产 T0 不继承任何预生产权限。

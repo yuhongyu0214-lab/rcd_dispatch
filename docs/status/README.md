@@ -1,19 +1,19 @@
 # 人车单项目状态总览
 
-> 状态快照：2026-09-15 / R69
+> 状态快照：2026-09-15 / R70
 > 用途：说明项目做到哪一步、还差什么
 > 非权威范围：产品行为、状态机、Schema、枚举、HTTP 契约、技术栈和生产架构
 
 ## 一句话结论
 
-Gate 4 与主线交接已完成，最近已核验正式主线仍为 `d9cdf2bd36165ab3c3e012835c761458b455f61e`，预生产仍为 `b2887d3718f34bf3cc068d07b505d33065e77c7c@sha256:c491f6a48007b86b22af2c6a4f514ba94167e33f046270b52102d1ed`。一号双端来源 `463c9ee44352a66ec43b25a1ccb66453ae9826ed` 已按真实 merge 拓扑与 V2 入口、受邀注册、双端退出及原始 URI 精确治理合成联合候选 `feature/v2-account-entry-integration @ 40b4a0fca3c9f9b4cfd392341f89663fdbbcb418`。最终专项 217/217、全量 994 passed / 7 expected skipped、lint、类型检查、32/32 build、隔离 HTTP、Chrome 100%、Edge 100%/125% 与独立审计 `APPROVE`；P0/P1=0，保留两项非阻断 P2。候选未推送、未部署，真实 Nginx、数据库 ACL、邀请密钥、镜像和外部系统均未实施；正式生产 T0 仍只读。
+Gate 4 与既有 main 交接保持完成；`main == origin/main == d9cdf2bd36165ab3c3e012835c761458b455f61e`，预生产仍为 `b2887d3718f34bf3cc068d07b505d33065e77c7c@sha256:c491f6a48007b86b22af2c6a4f514ba94167e33f046270b52102d1ed`。一号双端、V2 默认入口、受邀注册、双端退出及原始 URI 精确治理代码候选 `40b4a0fca3c9f9b4cfd392341f89663fdbbcb418` 与 R69 治理提交 `d04b68bd88c1a45e6075d8fcd418ea998e1aedf4` 已通过 `--no-ff` 合入本地 `develop @ 7b4c56ec9d020b62f364869cd942e62a8e9f4b70`。合入前专项 217/217、隔离 HTTP、Chrome/Edge 与独立审计 `APPROVE`；合入后全量 994 passed / 7 expected skipped、lint、类型检查、32/32 build 与 diff check 通过。P0/P1=0，保留两项非阻断 P2。develop 未推送、代码未合入 main 或部署，真实 Nginx、数据库 ACL、邀请密钥、镜像和外部系统均未实施；正式生产 T0 仍只读。
 
 ## 当前工作流状态
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
-| 文档治理 | `R69_A8_SYNC / LOCAL_COMMIT_AUTHORIZED` | PRD r8、兼容矩阵 r6、项目规则 r22 与联合状态同步；承载本节的治理提交与代码候选分开，完整治理 SHA 由提交完成后的 Git 记录和交付报告登记 | 只做本地文档提交；不得推送、合并或执行外部写入 |
-| 联合账号与入口候选 | `ENGINEERING_PASS / HTTP_PASS / BROWSER_PASS / CODE_AUDIT_APPROVE / NOT_DEPLOYED` | `feature/v2-account-entry-integration @ 40b4a0fca3c9f9b4cfd392341f89663fdbbcb418`；59 路径边界、217/994 测试、lint/tsc/build、隔离 HTTP、Chrome/Edge、独立审计 P0/P1=0 | 返回主控另行裁决是否合入 develop；发布前置须重新授权 |
+| 文档治理 | `R70_A8_SYNC / LOCAL_COMMIT_AUTHORIZED` | 登记本地 develop 合并点、合入后工程回归和证据包身份；承载本节的治理提交与代码候选、合并提交分开，完整治理 SHA 由提交完成后的 Git 记录和交付报告登记 | 只做本地文档提交；不得推送或执行外部写入 |
+| 联合账号与入口候选 | `MERGED_LOCAL_DEVELOP / POST_MERGE_PASS / NOT_PUSHED / NOT_DEPLOYED` | 候选 `40b4a0f…` 与 R69 `d04b68b…` 已合入 `develop @ 7b4c56ec9d020b62f364869cd942e62a8e9f4b70`；59 路径边界、合入前专项/HTTP/浏览器/审计与合入后 994/7、lint/tsc/build 均通过 | 推送 develop、合入 main 和全部发布前置须重新授权 |
 | 一号双端来源 | `INTEGRATED_INTO_40B4A0F / NOT_DEPLOYED` | 来源提交 `463c9ee44352a66ec43b25a1ccb66453ae9826ed`，功能锚点 `37d412c6510012a4ff01c773ab1cb21932e84aef`；真实合并父提交 `2d0bbdde93a390c8b1a2ecf8a8e7e09d99fb0ebf` | 不单独部署来源分支；运行候选仍须以联合代码 SHA 重新构建、扫描和授权 |
 | 邀请码注册与双端退出 | `LOCAL_CANDIDATE_PASS / NOT_DEPLOYED` | 密钥闸门、手机号/有效期 HMAC 邀请、原子开户、V2/H5 退出及最小 ACL 制品已实现并审计；真实密钥和 ACL 未执行 | 与联合候选一同进入主控合入裁决；任何真实环境实施须另行授权 |
 | post-Gate-4 预生产返修 | `PREPROD_DEPLOYED / SMOKE_PASS / REAL_DEVICE_TEST_READY` | `b2887d3…` → index `sha256:c491f6a…d1ed`；app/worker healthy，Nginx revision 对齐；health/login 200、HTTP 308 | 开展受控真机测试；自签名证书提示必须如实记录，不得写成正式可信 HTTPS |
@@ -71,11 +71,11 @@ Gate 4 与主线交接已完成，最近已核验正式主线仍为 `d9cdf2bd361
 
 ### 当前结论与未执行事项
 
-联合候选状态为 `ENGINEERING_PASS / HTTP_PASS / MANUAL_BROWSER_PASS / CODE_AUDIT_APPROVE / NOT_DEPLOYED`。代码候选与治理提交严格分开；Git 提交对象不能稳定自引用自身 SHA，因此本节以“承载本节的 R69 治理提交”标识，完整治理 SHA 由提交完成后的 Git 记录与最终交付报告给出。
+联合候选状态为 `MERGED_LOCAL_DEVELOP / POST_MERGE_PASS / NOT_PUSHED / NOT_DEPLOYED`。代码候选 `40b4a0f…`、R69 治理提交 `d04b68b…`、develop 合并点 `7b4c56e…` 与承载本节的 R70 治理提交严格分开；Git 提交对象不能稳定自引用自身 SHA，因此完整 R70 SHA 由提交完成后的 Git 记录与最终交付报告给出。
 
-未执行且未授权：推送、合入 develop/main、镜像构建/推送/扫描、真实 Nginx、邀请密钥配置、数据库 ACL/事务或 migration、Redis/Tair、高德、预生产/生产部署及正式生产写操作。下一步必须返回主控另行裁决是否合入 develop；发布动作不继承本轮权限。
+未执行且未授权：推送、合入 main、镜像构建/推送/扫描、真实 Nginx、邀请密钥配置、数据库 ACL/事务或 migration、Redis/Tair、高德、预生产/生产部署及正式生产写操作。下一步如需远端同步、main 提升或发布，必须由主控重新裁决；发布动作不继承本轮权限。
 
-大白话：登录、注册、退出和新版入口已经合成一份本地代码，电脑检查、人工浏览器和独立审计都通过了。服务器现在还没有换成这版，邀请码密钥和数据库权限也没有真的执行；下一步只能由主控决定是否合入开发主线或另开发布任务。
+大白话：登录、注册、退出和新版入口已经合入本地开发主线，合起来再跑一遍也全部通过。服务器还没有换成这版，远端仓库、正式主线、邀请码密钥和数据库权限都没有动；下一步需要另行批准推送、提升 main 或发布。
 
 ## 2026-09-13 一号双端与 V2 默认入口联合候选（R68 历史快照）
 
