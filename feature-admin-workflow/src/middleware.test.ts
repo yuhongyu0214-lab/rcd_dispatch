@@ -1,7 +1,9 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { middleware } from "./middleware";
+import { config, middleware } from "./middleware";
+
+const ORIGINAL_REQUEST_URI_HEADER = "X-Rcd-Original-Request-Uri";
 
 const BLOCKED_V1_WRITES = [
   "/api/assignments",
@@ -33,6 +35,83 @@ function expectPassedThrough(response: Response) {
   expect(response.status).not.toBe(410);
   expect(response.headers.get("x-middleware-next")).toBe("1");
 }
+
+function expectRedirectedToV2Orders(response: Response) {
+  expect(response.status).toBe(307);
+  expect(response.headers.get("location")).toBe(
+    "http://localhost/admin/orders/v2"
+  );
+}
+
+describe("admin orders hidden-tool middleware", () => {
+  it("matches only the API and admin orders middleware surfaces", () => {
+    expect(config.matcher).toEqual([
+      "/api/:path*",
+      "/admin/orders",
+      "/admin/orders/"
+    ]);
+  });
+
+  it.each(["drivers", "vehicles", "alerts", "logs"])(
+    "preserves the exact hidden %s tool URL",
+    (mode) => {
+      expectPassedThrough(
+        middleware(
+          buildRequest(`/admin/orders?mode=${mode}`, "GET", {
+            [ORIGINAL_REQUEST_URI_HEADER]: `/admin/orders?mode=${mode}`
+          })
+        )
+      );
+    }
+  );
+
+  it.each([
+    "/admin/orders?mode=logs&extra=1",
+    "/admin/orders?mode=logs&mode=logs",
+    "/admin/orders?mode=%6cogs",
+    "/admin/orders?%6dode=logs",
+    "/admin/orders/?mode=logs"
+  ])("redirects the non-exact hidden-tool URL %s", (pathname) => {
+    expectRedirectedToV2Orders(
+      middleware(
+        buildRequest(pathname, "GET", {
+          [ORIGINAL_REQUEST_URI_HEADER]: pathname
+        })
+      )
+    );
+  });
+
+  it("fails closed after a direct request is normalized without the trusted header", () => {
+    expectRedirectedToV2Orders(
+      middleware(buildRequest("/admin/orders?mode=logs", "GET"))
+    );
+  });
+
+  it("rejects a mismatched original URI header instead of trusting a forged exact value", () => {
+    expectRedirectedToV2Orders(
+      middleware(
+        buildRequest("/admin/orders?mode=logs&extra=1", "GET", {
+          [ORIGINAL_REQUEST_URI_HEADER]: "/admin/orders?mode=logs"
+        })
+      )
+    );
+  });
+
+  it.each([
+    "/admin/orders",
+    "/admin/orders?mode=orders",
+    "/admin/orders?mode=unknown",
+    "/admin/orders?extra=1"
+  ])("redirects the ordinary order URL %s to V2", (pathname) => {
+    expectRedirectedToV2Orders(
+      middleware(
+        buildRequest(pathname, "GET", {
+          [ORIGINAL_REQUEST_URI_HEADER]: pathname
+        })
+      )
+    );
+  });
+});
 
 describe("API middleware V1 write compatibility", () => {
   beforeEach(() => {

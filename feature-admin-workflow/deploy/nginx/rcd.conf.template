@@ -54,6 +54,10 @@ server {
     return 404;
   }
 
+  location = /admin/orders/ {
+    return 307 /admin/orders/v2;
+  }
+
   location = /api/v2/ingest/orders {
     client_max_body_size 1m;
     proxy_pass http://rcd_app;
@@ -63,6 +67,7 @@ server {
     proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto https;
     proxy_set_header X-Trace-Id $rcd_trace_id;
+    proxy_set_header X-Rcd-Original-Request-Uri $request_uri;
   }
 
   location / {
@@ -73,6 +78,7 @@ server {
     proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto https;
     proxy_set_header X-Trace-Id $rcd_trace_id;
+    proxy_set_header X-Rcd-Original-Request-Uri $request_uri;
     proxy_hide_header X-Powered-By;
   }
 }

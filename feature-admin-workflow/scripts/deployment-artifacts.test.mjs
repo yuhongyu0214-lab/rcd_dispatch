@@ -246,6 +246,43 @@ describe("deployment artifacts", () => {
     );
   });
 
+  it("overwrites the original request URI header at the only public ingress", async () => {
+    const [nginx, compose, nextConfig] = await Promise.all([
+      readProjectFile("deploy/nginx/rcd.conf.template"),
+      readProjectFile("deploy/compose.preprod.yml"),
+      readProjectFile("next.config.mjs")
+    ]);
+    const appBlock = compose.match(/\n  app:[\s\S]*?\n  worker:/)?.[0] ?? "";
+    const nginxBlock = compose.match(/\n  nginx:[\s\S]*?\nnetworks:/)?.[0] ?? "";
+    const proxyPassCount = nginx.match(/proxy_pass http:\/\/rcd_app;/g)?.length ?? 0;
+    const originalUriHeaderCount =
+      nginx.match(
+        /proxy_set_header X-Rcd-Original-Request-Uri \$request_uri;/g
+      )?.length ?? 0;
+
+    expect(proxyPassCount).toBe(2);
+    expect(originalUriHeaderCount).toBe(proxyPassCount);
+    expect(nginx).not.toContain(
+      "proxy_set_header X-Rcd-Original-Request-Uri $http_x_rcd_original_request_uri"
+    );
+    expect(appBlock).toContain("\n    expose:");
+    expect(appBlock).not.toContain("\n    ports:");
+    expect(nginxBlock).toContain("\n    ports:");
+    expect(nginxBlock).toContain('${RCD_HTTP_PORT:-80}:80');
+    expect(nginxBlock).toContain('${RCD_HTTPS_PORT:-443}:443');
+
+    const trailingOrdersGuard = nginx.indexOf(
+      "  location = /admin/orders/ {"
+    );
+    const generalProxy = nginx.indexOf("  location / {");
+    expect(trailingOrdersGuard).toBeGreaterThanOrEqual(0);
+    expect(trailingOrdersGuard).toBeLessThan(generalProxy);
+    expect(nginx).toMatch(
+      /location = \/admin\/orders\/ \{\s*return 307 \/admin\/orders\/v2;\s*\}/
+    );
+    expect(nextConfig).not.toContain("skipTrailingSlashRedirect");
+  });
+
   it("documents the required staged Compose startup order", async () => {
     const deploymentReadme = await readProjectFile("deploy/README.md");
 
