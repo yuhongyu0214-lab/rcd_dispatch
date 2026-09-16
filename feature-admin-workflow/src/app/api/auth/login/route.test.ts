@@ -9,6 +9,7 @@ vi.mock("@/lib/auth/password", () => ({
 }));
 
 vi.mock("@/lib/auth/session", () => ({
+  AUTH_SESSION_COOKIE_NAME: "dispatch_session",
   createSessionToken: vi.fn(() => "session-token"),
   getSessionCookieOptions: vi.fn(() => ({
     name: "dispatch_session",
@@ -27,6 +28,7 @@ vi.mock("@/app/api/driver/_utils", () => ({
 import { createDriverToken } from "@/app/api/driver/_utils";
 import { findUserForLogin } from "@/lib/auth/current-user";
 import { verifyPassword } from "@/lib/auth/password";
+import { POST as logout } from "@/app/api/auth/logout/route";
 
 import { POST } from "./route";
 
@@ -96,6 +98,32 @@ describe("POST /api/auth/login", () => {
     expect(createDriverToken).not.toHaveBeenCalled();
   });
 
+  it("returns driver credentials for a dispatcher linked to a driver", async () => {
+    vi.mocked(findUserForLogin).mockResolvedValue({
+      id: "dispatcher-driver-1",
+      email: "linked-dispatcher@invalid.example",
+      name: "兼任司机的调度员",
+      password: "hash",
+      role: "dispatcher",
+      driverId: "driver-1"
+    });
+
+    const response = await POST(loginRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.data).toEqual({
+      id: "dispatcher-driver-1",
+      email: "linked-dispatcher@invalid.example",
+      name: "兼任司机的调度员",
+      role: "dispatcher",
+      driverId: "driver-1",
+      driverToken: "driver-token"
+    });
+    expect(createDriverToken).toHaveBeenCalledWith("driver-1");
+    expect(response.headers.get("set-cookie")).toContain("dispatch_session=");
+  });
+
   it("rejects an invalid password without returning identity data", async () => {
     vi.mocked(findUserForLogin).mockResolvedValue({
       id: "driver-user-1",
@@ -113,5 +141,26 @@ describe("POST /api/auth/login", () => {
     expect(response.status).toBe(401);
     expect(body.success).toBe(false);
     expect(body.data).toBeNull();
+  });
+});
+
+describe("POST /api/auth/logout", () => {
+  it("expires the shared Web and H5 session cookie", async () => {
+    const response = await logout(
+      new Request("http://localhost/api/auth/logout", {
+        method: "POST",
+        headers: { "X-Trace-Id": "trace-logout" }
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      success: true,
+      data: { loggedOut: true },
+      traceId: "trace-logout"
+    });
+    expect(response.headers.get("set-cookie")).toContain("dispatch_session=");
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
   });
 });

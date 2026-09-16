@@ -174,6 +174,49 @@ describe("deployment artifacts", () => {
     expect(nginxBlock).toContain("condition: service_healthy");
   });
 
+  it("keeps invited registration secrets and database grants scoped to the app", async () => {
+    const [compose, workspaceAcl, workspaceReadme] = await Promise.all([
+      readProjectFile("deploy/compose.preprod.yml"),
+      readProjectFile("deploy/dual-workspace-accounts/prepare-preprod-acl.sql"),
+      readProjectFile("deploy/dual-workspace-accounts/README.md")
+    ]);
+    const appBlock = compose.match(/\n  app:[\s\S]*?\n  worker:/)?.[0] ?? "";
+    const workerBlock = compose.match(/\n  worker:[\s\S]*?\n  migration:/)?.[0] ?? "";
+    const migrationBlock = compose.match(/\n  migration:[\s\S]*?\n  nginx:/)?.[0] ?? "";
+    const nginxBlock = compose.match(/\n  nginx:[\s\S]*?\nnetworks:/)?.[0] ?? "";
+    const inviteSecretBinding =
+      "WORKSPACE_REGISTRATION_INVITE_SECRET: ${WORKSPACE_REGISTRATION_INVITE_SECRET:?WORKSPACE_REGISTRATION_INVITE_SECRET is required}";
+
+    expect(
+      compose.match(/^\s{6}WORKSPACE_REGISTRATION_INVITE_SECRET:/gm)
+    ).toHaveLength(1);
+    expect(appBlock).toContain(inviteSecretBinding);
+    expect(workerBlock).not.toContain("WORKSPACE_REGISTRATION_INVITE_SECRET");
+    expect(migrationBlock).not.toContain("WORKSPACE_REGISTRATION_INVITE_SECRET");
+    expect(nginxBlock).not.toContain("WORKSPACE_REGISTRATION_INVITE_SECRET");
+
+    expect(workspaceAcl).toContain(
+      "NOT has_table_privilege('rcd_v2_preprod_app', 'public.\"User\"', 'INSERT') AS add_user_insert"
+    );
+    expect(workspaceAcl).toContain(
+      ":'workspace_add_user_insert'::boolean AS adding_user_insert"
+    );
+    expect(workspaceAcl).toMatch(
+      /\\if :workspace_add_user_insert\s+GRANT INSERT ON TABLE public\."User" TO rcd_v2_preprod_app;\s+\\endif/
+    );
+    expect(workspaceAcl).toMatch(
+      /DO \$verify\$[\s\S]*?has_table_privilege\('rcd_v2_preprod_app', 'public\."User"', 'INSERT'\)[\s\S]*?COMMIT;/
+    );
+    expect(workspaceAcl).toContain(
+      "has_table_privilege('rcd_v2_preprod_app', 'public.\"User\"', 'INSERT') AS user_insert"
+    );
+    expect(workspaceAcl).toMatch(
+      /SELECT 'REVOKE INSERT ON TABLE public\."User" FROM rcd_v2_preprod_app;'\s+WHERE :'workspace_add_user_insert'::boolean/
+    );
+    expect(workspaceReadme).toContain("User INSERT");
+    expect(workspaceReadme).not.toContain("不会赋予应用 User INSERT");
+  });
+
   it("keeps the internal worker endpoint off the public Nginx surface", async () => {
     const nginx = await readProjectFile("deploy/nginx/rcd.conf.template");
 
@@ -201,6 +244,43 @@ describe("deployment artifacts", () => {
     expect(nginx).not.toContain(
       "proxy_set_header X-Trace-Id $http_x_trace_id"
     );
+  });
+
+  it("overwrites the original request URI header at the only public ingress", async () => {
+    const [nginx, compose, nextConfig] = await Promise.all([
+      readProjectFile("deploy/nginx/rcd.conf.template"),
+      readProjectFile("deploy/compose.preprod.yml"),
+      readProjectFile("next.config.mjs")
+    ]);
+    const appBlock = compose.match(/\n  app:[\s\S]*?\n  worker:/)?.[0] ?? "";
+    const nginxBlock = compose.match(/\n  nginx:[\s\S]*?\nnetworks:/)?.[0] ?? "";
+    const proxyPassCount = nginx.match(/proxy_pass http:\/\/rcd_app;/g)?.length ?? 0;
+    const originalUriHeaderCount =
+      nginx.match(
+        /proxy_set_header X-Rcd-Original-Request-Uri \$request_uri;/g
+      )?.length ?? 0;
+
+    expect(proxyPassCount).toBe(2);
+    expect(originalUriHeaderCount).toBe(proxyPassCount);
+    expect(nginx).not.toContain(
+      "proxy_set_header X-Rcd-Original-Request-Uri $http_x_rcd_original_request_uri"
+    );
+    expect(appBlock).toContain("\n    expose:");
+    expect(appBlock).not.toContain("\n    ports:");
+    expect(nginxBlock).toContain("\n    ports:");
+    expect(nginxBlock).toContain('${RCD_HTTP_PORT:-80}:80');
+    expect(nginxBlock).toContain('${RCD_HTTPS_PORT:-443}:443');
+
+    const trailingOrdersGuard = nginx.indexOf(
+      "  location = /admin/orders/ {"
+    );
+    const generalProxy = nginx.indexOf("  location / {");
+    expect(trailingOrdersGuard).toBeGreaterThanOrEqual(0);
+    expect(trailingOrdersGuard).toBeLessThan(generalProxy);
+    expect(nginx).toMatch(
+      /location = \/admin\/orders\/ \{\s*return 307 \/admin\/orders\/v2;\s*\}/
+    );
+    expect(nextConfig).not.toContain("skipTrailingSlashRedirect");
   });
 
   it("documents the required staged Compose startup order", async () => {

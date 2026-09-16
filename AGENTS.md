@@ -62,8 +62,10 @@ Gate -1 基线整理（已通过，develop @ 37ee8a3）
 ```
 
 - 每个 Gate 通过验收后才能创建下一阶段分支；不得提前建分支。
-- Gate 3 当前唯一代码/ACR/预生产运行候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d`，ACR index digest 为 `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`；app、worker 与 Nginx release revision 已对齐，Nginx 原镜像、配置、证书和端口未变。更早运行/回退候选继续保留，不得使用 `latest` 或混用候选。
-- Gate 3、第二轮、3A/3B 与 Gate 4 已退出。Gate 4 运行证据包 `gate4-evidence-package-20260907.zip` 的 SHA-256 为 `988b134205791d56e35dbfcdd4d4758004057643385763ddf43f59270cafbcf0`；独立只读交接审计未发现 P0/P1，保留“部分外部原始证据未完整入包”的非阻断 P2。`feature/v2-stabilization @ 089bc4da56022c1b077faac474c269d269d0930b` 已经用户单独批准，以 `--no-ff` 合入本地 `develop @ 6c42f0c6448fc712bca71d9ef7d82b22a105b3ec`，合并后 test、lint、TypeScript、31/31 build、Prisma validate、部署制品专项与 diff check 全部通过。预生产继续运行代码/OCI revision `4d370d664c3710a4a03cb1b665cfdeddc7d32778` 与 index digest `sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d`；代码 RC、证据包和治理文档 SHA 必须分开。`origin/develop` 仍为 `ae4714849fa965940b0df1c6766638cf398ac0ce`；推送、进入 `main`、正式生产发布或任何外部变更均未授权。
+- Gate 3 历史代码/ACR/预生产候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d` 与 index `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`；更早运行/回退候选继续保留，不得使用 `latest` 或混用候选。
+- Gate 3、第二轮、3A/3B 与 Gate 4 已退出。Gate 4 证据包、R63～R65 治理、develop/main 交接和 `main == origin/main == d9cdf2bd36165ab3c3e012835c761458b455f61e` 均保留。2026-09-11 的 post-Gate-4 返修候选为 `codex/preprod-login-mobile-remediation @ b2887d3718f34bf3cc068d07b505d33065e77c7c`，ACR index 为 `sha256:c491f6a48007b86b22af2c6a4f514ba94167e33b6dc0e33f046270b52102d1ed`；app、单 worker 和 Nginx release revision 已对齐，Nginx 镜像、TLS 与端口未变，未执行 migration，HTTPS 健康/登录与 HTTP 308 通过。该候选只完成预生产分阶段部署并可进入真机测试，不自动成为 main 或正式生产 RC。正式生产 T0 仍仅允许以 `d9cdf2b…` 做只读资源盘点；任何购买、备案、生产资源、镜像、迁移、部署或把 `b2887d3…` 提升到 main 的动作均须另行授权。代码 SHA、运行 digest、证据包、主线 SHA 与治理 SHA 必须分开。
+- 2026-09-13 一号双端来源为 `feature/v2-dual-workspace-accounts @ 463c9ee44352a66ec43b25a1ccb66453ae9826ed`，功能锚点 `37d412c6510012a4ff01c773ab1cb21932e84aef`；用户批准的工作台能力以 PRD §7.4 和 API r19 为准，H5 本人任务与服务账号隔离保持。该来源已按真实 merge 拓扑进入后续联合候选，来源 worktree 不得修改或单独部署。
+- 2026-09-15 联合代码候选 `40b4a0fca3c9f9b4cfd392341f89663fdbbcb418` 及 R69 治理提交 `d04b68bd88c1a45e6075d8fcd418ea998e1aedf4` 已通过 `--no-ff` 合入 `develop @ 7b4c56ec9d020b62f364869cd942e62a8e9f4b70`；R70 治理提交形成 `develop @ a1ac9f477b3628e400b36e89a4dfc5a7d07a0171`，并在确认远端仍为 `95a1c06daa1c373f76f7026dd4bfe71d31a11df0`、无远端独有提交或分叉后普通快进推送。当前 `develop == origin/develop == a1ac9f4…`，未使用强推。候选以 `974d6d2a786a9237b0b4b41d3290ffa050f40c32` 为统一起点，经 `2d0bbdde93a390c8b1a2ecf8a8e7e09d99fb0ebf` 保留账号来源历史，再串行加入 V2 默认入口、受邀注册、双端退出和原始 URI 精确入口治理；相对起点 59 路径，无额外代码、Schema 或 migration。合入前专项 217/217、浏览器矩阵和独立审计 `APPROVE`，合入后全量 994/7、lint、tsc、32/32 build 与 diff check 均通过；P0/P1=0，保留隐藏工具内部切换和退出失败反馈两项 P2。未合入 main、未部署，也未执行 DB ACL、镜像或外部写入；`main == origin/main == d9cdf2b…`，最近已核验预生产仍为 `b2887d3…`。
 - V2 分支命名 `feature/v2-*`；合并路径仍为 `feature/* → develop → main`。
 - 每个分支只能修改自己的独占文件范围；Schema、公共 DTO、共享样式、logger、调度事务各有唯一所有者线。
 
@@ -78,7 +80,7 @@ Gate -1 基线整理（已通过，develop @ 37ee8a3）
 
 ## 技术栈（锁定）【工程铁律：继续有效】
 
-- 全栈：Next.js `15.5.21`（App Router）+ React / React DOM `19.2.8` + TypeScript
+- 全栈：Next.js `15.5.24`（App Router）+ React / React DOM `19.2.8` + TypeScript
 - UI：Tailwind CSS + shadcn/ui
 - 数据库：PostgreSQL + Prisma ORM（迁移用 `prisma migrate dev`，查看用 `npx prisma studio`）
 - 地图：高德 API（服务端 Key：`AMAP_SERVER_KEY`；前端 Key：`NEXT_PUBLIC_AMAP_JS_KEY`）

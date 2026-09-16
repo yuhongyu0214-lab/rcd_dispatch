@@ -1,115 +1,165 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
+
 import { fail, ok } from "@/lib/api-response";
 import { hashPassword } from "@/lib/auth/password";
 import { isPublicAdminRegistrationEnabled } from "@/lib/auth/public-registration";
-import { isAdminRole } from "@/lib/auth/roles";
-import { prisma } from "@/lib/prisma";
+import {
+  createWorkspaceAccount,
+  isAccountWriteConflict,
+  WorkspaceAccountError
+} from "@/lib/auth/workspace-account";
+import { createLogger } from "@/lib/logger";
 
-function normalizePhoneAccount(account: string) {
-  return account.replace(/\s+/g, "");
+const logger = createLogger("workspace-registration");
+
+const INVITATION_VERSION = "v1";
+const INVITATION_SECRET_MIN_LENGTH = 32;
+
+type RegistrationInvitation = {
+  version: 1;
+  phone: string;
+  expiresAt: number;
+  nonce: string;
+};
+
+function invitationSecret() {
+  const secret = process.env.WORKSPACE_REGISTRATION_INVITE_SECRET?.trim();
+  return secret && secret.length >= INVITATION_SECRET_MIN_LENGTH
+    ? secret
+    : null;
+}
+
+function hasSameOrigin(request: Request) {
+  if (request.headers.get("sec-fetch-site") === "cross-site") return false;
+  const origin = request.headers.get("origin");
+  if (!origin) return true;
+  const originUrl = URL.parse(origin);
+  const host = request.headers.get("host") ?? new URL(request.url).host;
+  return Boolean(
+    originUrl &&
+      ["https:", "http:"].includes(originUrl.protocol) &&
+      originUrl.host === host
+  );
+}
+
+function isValidInvitation(
+  inviteCode: unknown,
+  phone: string,
+  nowMs = Date.now()
+) {
+  const secret = invitationSecret();
+  if (!secret || typeof inviteCode !== "string" || inviteCode.length > 1024) {
+    return false;
+  }
+  const parts = inviteCode.split(".");
+  if (parts.length !== 3 || parts[0] !== INVITATION_VERSION) return false;
+  const [version, payloadPart, signaturePart] = parts;
+  const signedValue = `${version}.${payloadPart}`;
+  const expectedSignature = createHmac("sha256", secret)
+    .update(signedValue)
+    .digest();
+  let providedSignature: Buffer;
+  try {
+    providedSignature = Buffer.from(signaturePart, "base64url");
+  } catch {
+    return false;
+  }
+  if (
+    providedSignature.length !== expectedSignature.length ||
+    providedSignature.toString("base64url") !== signaturePart ||
+    !timingSafeEqual(providedSignature, expectedSignature)
+  ) {
+    return false;
+  }
+
+  let invitation: RegistrationInvitation;
+  try {
+    const payloadBuffer = Buffer.from(payloadPart, "base64url");
+    if (payloadBuffer.toString("base64url") !== payloadPart) return false;
+    invitation = JSON.parse(
+      payloadBuffer.toString("utf8")
+    ) as RegistrationInvitation;
+  } catch {
+    return false;
+  }
+  if (
+    !invitation ||
+    invitation.version !== 1 ||
+    invitation.phone !== phone ||
+    !Number.isSafeInteger(invitation.expiresAt) ||
+    invitation.expiresAt <= Math.floor(nowMs / 1000) ||
+    typeof invitation.nonce !== "string" ||
+    invitation.nonce.length < 16 ||
+    invitation.nonce.length > 128
+  ) {
+    return false;
+  }
+  return true;
 }
 
 export async function POST(request: Request) {
   const traceId = request.headers.get("X-Trace-Id") ?? crypto.randomUUID();
-
-  if (!isPublicAdminRegistrationEnabled()) {
+  const inviteRegistrationEnabled = Boolean(invitationSecret());
+  if (!inviteRegistrationEnabled && !isPublicAdminRegistrationEnabled()) {
     return fail("公开注册已关闭", { status: 403, traceId });
+  }
+  if (!hasSameOrigin(request)) {
+    return fail("注册请求来源无效", { status: 403, traceId });
+  }
+  const body: unknown = await request.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return fail("注册参数格式错误", { status: 400, traceId });
+  }
+  const input = body as Record<string, unknown>;
+  const phone =
+    typeof input.account === "string" ? input.account.replace(/\s+/g, "") : "";
+  const password = typeof input.password === "string" ? input.password : "";
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  const storeId = typeof input.storeId === "string" ? input.storeId.trim() : "";
+  if (!/^1\d{10}$/.test(phone) || !password || !name || !storeId) {
+    return fail("请填写有效手机号、姓名、密码，并选择所属门店", {
+      status: 400,
+      traceId
+    });
+  }
+  if (
+    inviteRegistrationEnabled &&
+    !isValidInvitation(input.inviteCode, phone)
+  ) {
+    return fail("邀请码无效、已过期或与手机号不匹配", {
+      status: 403,
+      traceId
+    });
   }
 
   try {
-    const body = (await request.json()) as {
-      account?: string;
-      name?: string;
-      password?: string;
-      role?: string;
-      alsoDriver?: boolean;
-      storeId?: string;
-    };
-    const account = normalizePhoneAccount(body.account ?? "");
-    const password = body.password ?? "";
-    const name = body.name?.trim() || "运营管理员";
-    const role = body.role && isAdminRole(body.role) ? body.role : "admin";
-    const alsoDriver = body.alsoDriver === true && isAdminRole(role);
-    const storeId = body.storeId?.trim();
-
-    if (!account) {
-      return fail("请输入账号", { status: 400, traceId });
-    }
-
-    if (!password) {
-      return fail("请输入密码", { status: 400, traceId });
-    }
-
-    if (!/^1\d{10}$/.test(account)) {
-      return fail("请输入有效手机号账号", { status: 400, traceId });
-    }
-
-    if (alsoDriver && !storeId) {
-      return fail("注册为司机需要选择所属门店", { status: 400, traceId });
-    }
-
-    const existingUser = await prisma.user.findUnique({
-      where: { phone: account },
-      select: { id: true }
+    // 不接受客户端的 role / alsoDriver；每个新账号固定具备双端能力。
+    const user = await createWorkspaceAccount({
+      phone,
+      name,
+      storeId,
+      passwordHash: await hashPassword(password)
     });
-
-    if (existingUser) {
-      return fail("账号已存在", { status: 409, traceId });
-    }
-
-    const passwordHash = await hashPassword(password);
-
-    let driverId: string | null = null;
-
-    if (alsoDriver && storeId) {
-      // 验证门店存在
-      const store = await prisma.store.findUnique({
-        where: { id: storeId },
-        select: { id: true, isActive: true }
-      });
-
-      if (!store || !store.isActive) {
-        return fail("所选门店不存在或已停用", { status: 400, traceId });
-      }
-
-      // 先创建 Driver 记录
-      const driver = await prisma.driver.create({
-        data: {
-          storeId,
-          name,
-          phone: account,
-          status: "S1",
-          isActive: true
-        },
-        select: { id: true }
-      });
-
-      driverId = driver.id;
-    }
-
-    const user = await prisma.user.create({
-      data: {
-        email: `${account}@dispatch.local`,
-        phone: account,
-        name,
-        password: passwordHash,
-        role,
-        driverId
-      },
-      select: {
-        id: true,
-        email: true,
-        phone: true,
-        name: true,
-        role: true,
-        driverId: true
-      }
+    logger.info("workspace_account_created", {
+      traceId,
+      userId: user.id,
+      driverId: user.driverId
     });
-
     return ok(user, { status: 201, traceId });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "注册失败，请稍后重试";
-
-    return fail(message, { status: 500, traceId });
+    if (error instanceof WorkspaceAccountError) {
+      return fail(error.message, { status: error.status, traceId });
+    }
+    if (isAccountWriteConflict(error)) {
+      return fail("账号或司机档案已发生变化，请刷新后重试", {
+        status: 409,
+        traceId
+      });
+    }
+    logger.error("workspace_account_create_failed", { traceId });
+    return fail("注册失败，请联系管理员并提供 traceId", {
+      status: 500,
+      traceId
+    });
   }
 }

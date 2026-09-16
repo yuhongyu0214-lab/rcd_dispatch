@@ -1,28 +1,33 @@
 # 人车单项目状态总览
 
-> 状态快照：2026-09-07 / R63
+> 状态快照：2026-09-16 / R71
 > 用途：说明项目做到哪一步、还差什么
 > 非权威范围：产品行为、状态机、Schema、枚举、HTTP 契约、技术栈和生产架构
 
 ## 一句话结论
 
-Gate 3、第二轮、P2、3A/3B 与 Gate 4 均已退出。G4-5 已按 `migration → app → 单 worker → Nginx` 部署并完成 T5/T6：预生产运行 `4d370d6…@sha256:508dea…453d`，第 10 条 migration 已应用，真实 RDS/Tair/高德、HTTPS、SLS、单 worker 与 outbox 均通过，未决 P0/P1 为 0。实际 app/worker/Nginx 切换晚于 `2026-09-06 18:00–20:00 +08:00` 维护窗口，且 migration 绝对执行时间未保留；主控于 2026-09-07 批准仅限本次部署的一次性例外，裁决 `G4_5=FINAL_PASS_WITH_CONTROLLER_EXCEPTION / GATE_4=PASS`。运行证据包、独立只读交接审计、本地 `--no-ff` 合入 `develop @ 6c42f0c…` 与合入后工程回归均已完成；推送、进入 `main` 和正式生产发布仍未授权。
+Gate 4 与既有 main 交接保持完成；`main == origin/main == d9cdf2bd36165ab3c3e012835c761458b455f61e`，预生产仍为 `b2887d3718f34bf3cc068d07b505d33065e77c7c@sha256:c491f6a48007b86b22af2c6a4f514ba94167e33f046270b52102d1ed`。一号双端、V2 默认入口、受邀注册、双端退出及原始 URI 精确治理代码候选 `40b4a0fca3c9f9b4cfd392341f89663fdbbcb418` 与 R69 治理提交 `d04b68bd88c1a45e6075d8fcd418ea998e1aedf4` 已通过 `--no-ff` 合入 `develop @ 7b4c56ec9d020b62f364869cd942e62a8e9f4b70`；R70 治理提交形成 `a1ac9f477b3628e400b36e89a4dfc5a7d07a0171`。合入前专项 217/217、隔离 HTTP、Chrome/Edge 与独立审计 `APPROVE`；合入后全量 994 passed / 7 expected skipped、lint、类型检查、32/32 build 与 diff check 通过。P0/P1=0，保留两项非阻断 P2。主控确认远端仍为 `95a1c06…` 且无分叉后完成普通快进推送，当前 `develop == origin/develop == a1ac9f4…`，未使用强推。代码未合入 main 或部署，真实 Nginx、数据库 ACL、邀请密钥、镜像和外部系统均未实施；正式生产 T0 仍只读。
 
 ## 当前工作流状态
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
-| 文档治理 | `R63_A8_SYNC_IN_PROGRESS / UNCOMMITTED` | A8 输入为本地 `develop @ 6c42f0c…`；交接文档提交 `089bc4d…` 已合入；代码/OCI revision `4d370d6…` 不变 | 本轮只更新六份治理文件；Git 提交、推送和外部操作均未授权 |
-| 应用候选 | `958AFCA_GATE3_ACCEPTED_DEVELOP_HANDOFF_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变运行身份；代码历史交接点为 `develop @ 51ddb5f…`，最终状态激活 HEAD 为 `ae471484…` |
-| 依赖安全 | `REMOTE_DUAL_DB_CRITICAL_HIGH_0 / SECRET_0 / INDEPENDENT_AUDIT_PASS` | 同一远端 amd64 `sha256:577dc2…f414`，R55 与 2026-09-03 验收时点当前库两组扫描均通过 | 仅固定镜像/库/严重等级成立；若联调延后或出现新披露，先复核扫描有效性 |
+| 文档治理 | `R71_A8_SYNC / COMMIT_NOT_AUTHORIZED` | 登记 R70 `a1ac9f4…` 的远端普通快进推送结果；承载本节的治理提交与代码候选、合并提交、R70 推送基线分开，完整 R71 SHA 由后续获准提交后的 Git 记录和交付报告登记 | 等待单独的治理文档提交授权；不得再次推送或执行外部写入 |
+| 联合账号与入口候选 | `MERGED_LOCAL_DEVELOP / DEVELOP_PUSHED / POST_MERGE_PASS / NOT_DEPLOYED` | 候选 `40b4a0f…` 与 R69 `d04b68b…` 已合入 `develop @ 7b4c56e…`；R70 `a1ac9f4…` 已从远端 `95a1c06…` 普通快进推送，当前本地/远端 develop 一致；59 路径边界、合入前专项/HTTP/浏览器/审计与合入后 994/7、lint/tsc/build 均通过 | 合入 main 和全部发布前置须重新授权 |
+| 一号双端来源 | `INTEGRATED_INTO_40B4A0F / NOT_DEPLOYED` | 来源提交 `463c9ee44352a66ec43b25a1ccb66453ae9826ed`，功能锚点 `37d412c6510012a4ff01c773ab1cb21932e84aef`；真实合并父提交 `2d0bbdde93a390c8b1a2ecf8a8e7e09d99fb0ebf` | 不单独部署来源分支；运行候选仍须以联合代码 SHA 重新构建、扫描和授权 |
+| 邀请码注册与双端退出 | `LOCAL_CANDIDATE_PASS / NOT_DEPLOYED` | 密钥闸门、手机号/有效期 HMAC 邀请、原子开户、V2/H5 退出及最小 ACL 制品已实现并审计；真实密钥和 ACL 未执行 | 与联合候选一同进入主控合入裁决；任何真实环境实施须另行授权 |
+| post-Gate-4 预生产返修 | `PREPROD_DEPLOYED / SMOKE_PASS / REAL_DEVICE_TEST_READY` | `b2887d3…` → index `sha256:c491f6a…d1ed`；app/worker healthy，Nginx revision 对齐；health/login 200、HTTP 308 | 开展受控真机测试；自签名证书提示必须如实记录，不得写成正式可信 HTTPS |
+| 正式生产 T0 | `READONLY_INVENTORY_AUTHORIZED / NOT_STARTED` | 代码基线仍为 `main == origin/main == d9cdf2b…`；R65 文档基线 `974d6d2…`；修改白名单为空，外部写授权为无 | 可继续只读盘点；正式生产构建/部署前必须另行审查并批准是否提升 `b2887d3…` |
+| Gate 3 历史应用候选 | `958AFCA_GATE3_ACCEPTED_DEVELOP_HANDOFF_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 只作历史与追溯，不再表述为当前预生产运行身份 |
+| 依赖安全 | `B2887D3_CRITICAL_0_HIGH_0_SECRET_0` | 固定 amd64 `sha256:cde35c27…e886`；19/19 SQL raw 匹配且 CR=0 | 只对已扫描固定镜像与验收时点成立；新披露、重建或 digest 变化必须重扫 |
 | migration 指纹 | `PREPROD_10_APPLIED / OUTBOX_CHECK_17_PASS` | 第 10 条 `20260816120000_extend_dispatch_event_outbox_types` 已应用；outbox CHECK 精确允许 17 种事件 | migration 绝对执行时间未保留且已获一次性非阻断裁决；禁止重跑、改元数据或重开 owner 补证 |
 | 数据库迁移 | `OUTBOX_CHECK_REMEDIATION_PASS_LOCAL_DEVELOP` | 两个新事件 CHECK、受保护 rollback、零漂移和全量回归通过 | 数据分支退出；API 分支重放新基线后使用该约束，禁止重复迁移 |
 | 隔离业务基础资料 | `BASE_DATA_PASS_TEST_FACTS_RETAINED` | [真实 E2E 重验进度](2026-08-10-gate3r-real-e2e-retest-progress.md) | 不重复基础资料写入；所有通过与失败样本均保留 |
 | 基础设施文档 | `GATE3_FINAL_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | Gate 3-R 退出；正式可信 HTTPS 与整机/RDS 灾备仍为独立后续验收 |
-| ACR 镜像发布 | `REMOTE_RC_ACCEPTANCE_COMPLETE / G4_4_PASS / DEPLOYED_PREPROD` | `4d370d6…` → index `sha256:508dea…453d`；app/worker 运行身份与扫描对象一致 | 三个旧 RC 保持拒绝；不得覆盖 tag、使用 `latest` 或把预生产运行等同正式生产发布 |
-| 阿里云预生产联调 | `G4_5_FINAL_PASS_WITH_CONTROLLER_EXCEPTION` | migration、app、单 worker、Nginx、真实依赖、HTTPS、SLS、outbox 与 T6 独立审计通过 | 维护窗口超时与 migration 时间证据缺失仅本次接受；后续发布不得继承例外 |
+| ACR 镜像发布 | `B2887D3_DEPLOYED_PREPROD` | source/OCI `b2887d3…`；index `sha256:c491f6a…d1ed`；amd64 `sha256:cde35c27…e886` | 上一稳定 `4d370d6…@sha256:508dea…453d` 保留回退；禁止覆盖 tag、使用 `latest` 或等同正式生产发布 |
+| 阿里云预生产联调 | `POST_GATE4_PATCH_SMOKE_PASS / ACCOUNT_ISSUES_REPORTED` | app → worker → Nginx 历史切换通过；9/13 用户反馈健康可达、部分账号登录成功，另有 401 和 User/Driver 关联缺口 | 真机账号问题未闭环；新双端代码未部署，不能宣布 iOS 修复完成 |
 | 本地 Docker Desktop | `DATA_MOVED_TO_D_NTFS_BACKUP_RETAINED` | `D:\DockerDesktop\data\DockerDesktopWSL` | 镜像、版本、容器与卷核验通过；完整 VHDX 备份保留，不影响生产架构 |
-| 既有预生产成果审查 | `RUNTIME_FINAL_CONSISTENCY_PASS` | [RDS 迁移与权限证据](2026-08-05-gate3r-rds-preprod-migration-permissions.md) | 保持备份、9 个 migration、最小权限、单 worker 和运行身份不变 |
+| 既有预生产成果审查 | `RUNTIME_FINAL_CONSISTENCY_PASS` | [RDS 迁移与权限证据](2026-08-05-gate3r-rds-preprod-migration-permissions.md) | 0805 的 9 migration 与权限事实只作历史证据；当前预生产以本表 10 migration 状态为准 |
 | 真实 10 单 | `REAL10_PASS_9_COMPLETED_1_INFEASIBLE_ALERT` | [真实 E2E 重验进度](2026-08-10-gate3r-real-e2e-retest-progress.md) | 保留全部成功与失败现场，不清理 |
 | Gate 3 总闸门 | `PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 保持不可变候选与证据，进入受控阶段交接 |
 | 串行调度员 V2 API 接线 | `T1_PASS / MERGED_LOCAL / POST_MERGE_PASS` | 候选 `152f7c5…` 已合入 `develop @ 8cfed6ad…`；T1 与合并后全量回归通过 | 串行前置退出；保持本地合并且暂不推送 |
@@ -33,19 +38,153 @@ Gate 3、第二轮、P2、3A/3B 与 Gate 4 均已退出。G4-5 已按 `migration
 | Gate 4 G4-3 | `PASS` | 2026-08-30 全量快照恢复点可用；隔离恢复库完成 9→10 migration Forward 与 10→9 rollback | 源预生产库零写入；隔离恢复库保留，后续清理由单独授权处理 |
 | Gate 4 G4-4 | `PASS / REMOTE_RC_ACCEPTANCE_COMPLETE` | 新远端 `4d370d6…` 的身份、SQL、工程/运行探针、双库/秘密扫描及独立审计通过 | 主控裁决只针对本节完整 digest；不是部署或 Gate 4 总闸门 PASS |
 | Gate 4 G4-5 | `FINAL_PASS_WITH_CONTROLLER_EXCEPTION` | T1-A～T6 已完成；运行身份、migration、真实依赖、业务/观测和恢复路径通过，未决 P0/P1=0 | 保留维护窗口超时、migration 时间缺失、自签名证书和 Edge 等效布局边界 |
-| Gate 4 总闸门 | `PASS` | G4-1～G4-5 已通过；G4-5 含一次性主控例外 | Gate 4 退出不自动合并 develop、推送、进入 main 或宣布正式生产上线 |
-| Gate 4 证据与 develop 交接 | `EVIDENCE_FROZEN / AUDIT_WARN_ACCEPTED / MERGED_LOCAL / POST_MERGE_PASS` | ZIP SHA-256 `988b134205791d56e35dbfcdd4d4758004057643385763ddf43f59270cafbcf0`；审计 P0/P1=0、P2=1；合入点 `6c42f0c…` | 本轮 A8 后等待单独批准治理提交；`origin/develop`、main 与运行环境不变 |
+| Gate 4 总闸门 | `PASS` | G4-1～G4-5 已通过；G4-5 含一次性主控例外 | develop/main 主线交接、main 推送和独立全量验证均已完成；仍不等于正式生产上线 |
+| Gate 4 证据与主线交接 | `EVIDENCE_FROZEN / AUDIT_WARN_ACCEPTED / DEVELOP_PUSHED / MAIN_PUSHED / MAIN_FULL_VALIDATION_PASS` | ZIP SHA-256 `988b1342…bcf0`；审计 P0/P1=0、P2=1；`main == origin/main == d9cdf2b…`；main 验证 813/7、lint、tsc、31/31 build、Prisma、制品 5/5、diff/clean PASS | 主线交接退出；正式生产必须使用独立任务卡和逐项授权 |
 
-## Gate 4 退出后的证据治理与 develop 交接
+## 2026-09-15 联合候选最终闭环
+
+### 冻结身份、拓扑与范围
+
+| 项目 | 稳定事实 |
+|---|---|
+| 统一起点 | `974d6d2a786a9237b0b4b41d3290ffa050f40c32`；main 应用锚点 `d9cdf2bd36165ab3c3e012835c761458b455f61e` |
+| 账号来源 | `feature/v2-dual-workspace-accounts @ 463c9ee44352a66ec43b25a1ccb66453ae9826ed`；功能锚点 `37d412c6510012a4ff01c773ab1cb21932e84aef` |
+| 联合代码候选 | `feature/v2-account-entry-integration @ 40b4a0fca3c9f9b4cfd392341f89663fdbbcb418` |
+| 提交拓扑 | `2d0bbdde93a390c8b1a2ecf8a8e7e09d99fb0ebf` 保留账号来源双亲 merge；其后按序为入口 `bf9aeef…`、R68 治理 `299fa38…`、受邀注册/退出 `2979d93…`、预生产密钥/ACL `fa38569…`、登录 next 收紧 `acc759a…`、入口原始 URI 收紧 `40b4a0f…` |
+| 精确范围 | 相对统一起点 59 路径：原联合并集 53、明确批准的 `compose.preprod.yml`/部署测试/middleware及测试/Nginx 5、既有 R68 兼容矩阵 1；额外代码 0，Schema/migration 0，`next.config.mjs` 与基线一致 |
+
+### 冲突裁决与最终行为
+
+- 保留 R67 一号双端、H5 本人归属、服务端门店与 Serializable 原子账号/司机事务，并叠加 admin/dispatcher 默认 V2、纯司机默认 H5、兼任账号安全 `next`。
+- 配置至少 32 字符邀请密钥时登录页展示受邀注册；邀请码使用 HMAC-SHA256、手机号、有效期、nonce 和规范 Base64URL，同源请求及唯一约束继续生效。预生产 Compose 对 app 强制注入密钥，worker/migration/Nginx 不接收。
+- V2 地图、订单池、司机 H5 和档案完善页均可退出；退出只清会话，不结束司机班次。
+- `/admin`、`/admin/map` 和普通 `/admin/orders` 进入 V2；仅四条原始 path+query 完全精确的隐藏工具网址放行。Nginx 覆盖可信原始 URI 头，中间件再与规范化 URL 双重比对；编码、额外/重复参数、尾斜杠、缺头和伪造不匹配均失败关闭到 V2。
+- V1 组件、API、Adapter、兼容层与 `/admin/import` 仍保留；不物理删除 V1，不改变兼容窗口写接口纪律。
+
+### 验证、审计与证据
+
+- 最终独立专项：217/217；全量 994 passed / 7 expected skipped；lint、`tsc --noEmit --incremental false`、Next.js 15.5.24 build 32/32、`git diff --check` 均 PASS。
+- 隔离 HTTP 验证覆盖邀请、角色分流、安全 next、两端退出和原始 URI 边界；精确旧工具、缺头、编码、extra、repeat、伪造头、尾斜杠、API trace 与 V1 410 均符合规则，服务已停止、端口无监听。
+- 用户复验 Chrome 100%、Edge 100%、Edge 125% 均 PASS，控制台无 error/warn；邀请注册、默认/安全 next、V2 无 V1 返回、两端退出、刷新/后退和隐藏工具矩阵通过。最后 4 文件入口返修另以部署制品静态断言和独立 HTTP 复验，未启动真实 Nginx 或重新跑浏览器。
+- 最终独立只读审计 `APPROVE`：P0=0、P1=0。P2 两项：精确旧书签进入后 `OrdersWorkflow` 内部仍可切换旧模式；退出请求网络/非 2xx 失败没有显式反馈。URL fragment 不发送到服务端，代码无 hash 消费方，作为信息性边界记录。
+- 受控证据目录为 `C:\Users\yhy\.codex\visualizations\2026\09\13\01a09b9c-e1e2-7210-a5b7-04e24d0b38cf`；闭环材料为 `final-code-validation-report-40b4a0f.md` 与 `final-independent-audit-report-40b4a0f.md`，均位于工作区外，不属于 Git 文档树。
+
+### 当前结论与未执行事项
+
+联合候选状态为 `MERGED_LOCAL_DEVELOP / DEVELOP_PUSHED / POST_MERGE_PASS / NOT_DEPLOYED`。代码候选 `40b4a0f…`、R69 治理提交 `d04b68b…`、develop 合并点 `7b4c56e…`、已推送的 R70 基线 `a1ac9f477b3628e400b36e89a4dfc5a7d07a0171` 与承载本节的 R71 治理提交严格分开；Git 提交对象不能稳定自引用自身 SHA，因此完整 R71 SHA 只能由获准提交后的 Git 记录与最终交付报告给出。
+
+未执行且未授权：再次推送、合入 main、镜像构建/推送/扫描、真实 Nginx、邀请密钥配置、数据库 ACL/事务或 migration、Redis/Tair、高德、预生产/生产部署及正式生产写操作。下一步如需 main 提升或发布，必须由主控重新裁决；本次 develop 推送权限已经用尽，发布动作不继承该权限。
+
+大白话：登录、注册、退出和新版入口已经合入开发主线、通过回归，并安全同步到了远端 develop。服务器和 main 还没有换成这版，邀请码密钥、数据库权限、镜像和部署也没有动；下一步若要进入 main 或上线，仍需重新批准。
+
+## 2026-09-13 一号双端与 V2 默认入口联合候选（R68 历史快照）
+
+### 代码拓扑与冲突裁决
+
+| 项目 | 稳定事实 |
+|---|---|
+| 统一基线 | `974d6d2a786a9237b0b4b41d3290ffa050f40c32`；正式应用树锚点仍为 `main @ d9cdf2bd36165ab3c3e012835c761458b455f61e` |
+| 联合分支与代码候选 | `feature/v2-account-entry-integration @ bf9aeefcd3be02fdd08be0f42a4d165ef2d39765` |
+| 一号双端来源 | `feature/v2-dual-workspace-accounts @ 463c9ee44352a66ec43b25a1ccb66453ae9826ed`；功能锚点 `37d412c6510012a4ff01c773ab1cb21932e84aef` |
+| 合并拓扑 | `2d0bbdde93a390c8b1a2ecf8a8e7e09d99fb0ebf` 为双亲 merge，随后 `bf9aeef…` 仅提交 13 个入口集成文件；未 cherry-pick、rebase 或改写来源历史 |
+| 文件边界 | 双端 45 文件与入口 13 文件取并集后为 53 文件；实际 53、缺失 0、越界 0；无 Schema/migration |
+| 交叉文件 | 登录目标、登录页、注册表单与注册页共 5 个；保留 R67 原子账号/司机注册和服务端门店数据，叠加集中安全路由与 V2 默认入口，未采用与 PRD §7.4 冲突的可选司机注册旧实现 |
+
+### 行为、验证与审计
+
+- admin/dispatcher 默认登录与已有后台会话进入 V2，历史纯司机默认进入 H5；三种人类账号仍按 PRD §7.4 具备 Web/H5 能力，安全 `next` 可在授权范围内选择目标。
+- `/admin`、`/admin/map`、普通/未知/重复 `/admin/orders` 进入 V2；精确 `drivers/vehicles/alerts/logs` 旧书签保留隐藏工具，V2 正常导航无 V1 回程。
+- 已接受 P2：隐藏工具内部的既有 `OrdersWorkflow` 仍能切换旧模式；该组件零改动，入口未扩散，不改变 V1 API/Adapter 或兼容窗口纪律。
+- 自动验证：专项 155/155；全量 955 passed / 7 expected skipped；lint、`tsc --noEmit --incremental false`、Next 15.5.24 build 33/33、`git diff --check` 与 53 文件边界通过。
+- 隔离生产服务 HTTP：113/113，通过四类内存账号、默认目标、安全回跳、普通/隐藏旧入口、V2 导航、匿名/无效会话及注册闸门；一次性本地密钥，无真实数据库、Redis/Tair、高德或云连接，服务与 31385 端口已关闭。
+- HTTP 证据位于工作区外受控目录 `C:\Users\yhy\.codex\visualizations\2026\09\13\01a09b93-e91e-74b1-8885-d3627c84dc31`：`joint-verify-http.mjs` SHA-256 `cb562f0e07ef11b4350efc02b1ad1ae71bc95dca58daeb48f67ff48c7a586ed5`，`joint-http-results.json` SHA-256 `14c0908c295cbc6fdf5544d41101710ec81cf8adcceff4c9ba00583ca0da688b`。
+- 独立只读审计：P0=0、P1=0、新增 P2=0；确认已接受 P2 严格受限。审计没有修改文件或 Git refs。
+- 真实浏览器：Chrome 首次创建标签、浏览器库存读取、会话重置后重试均返回 `nodeRepl.fetch request failed`，浏览器列表为空；因此 Chrome 桌面、Edge 桌面与 Edge 125%/952×800 等效布局均为 `BLOCKED`，没有截图、点击、前进后退或控制台证据。
+
+### 当前结论与未授权事项
+
+联合候选可判定为 `ENGINEERING_PASS / HTTP_PASS / CODE_AUDIT_PASS / BROWSER_BLOCKED / NOT_DEPLOYED`，不能判整体验收 PASS。治理提交与代码候选必须分开；Git 提交对象不能稳定自引用自身 SHA，因此本节以“承载本节的治理提交”标识，完整治理 SHA 由提交完成后的 Git 记录与最终交付报告给出。
+
+未执行且未授权：推送、合入 develop/main、镜像构建/推送/扫描、数据库 ACL/事务或 migration、Redis/Tair、高德、预生产/生产部署、正式生产 T0 写操作。下一步仅在浏览器控制恢复后补真实矩阵；需要进入发布前置时必须另行逐项授权。
+
+大白话：账号和入口两套改动已经在一个本地候选里对齐，程序检查和服务器跳转都过了，独立审计也没发现新问题。现在唯一缺口是这台机器暂时无法遥控 Chrome/Edge，所以还不能说“浏览器里全部点过”；服务器线上版本没有变。
+
+## 2026-09-13 一号双端本地交付与邀请码注册计划
+
+### 已确认问题与用户裁决
+
+- 用户回传 iPhone 微信/Safari 健康响应成功；Nginx 日志存在登录 200 后访问 Web 的记录，也存在 `/api/auth/login` 401。失败 traceId `3d0f7b811e9dfe98b61d1c5ff0826dce` 对应 401，而不是网络未到达。
+- 用户确认参考调度账号在 Safari 和鸿蒙均能登录。其回传只读核验同时显示：部分 User 未关联 Driver、测试司机停用，以及目标手机号只有 Driver、没有 User；随后创建 User 遇到 PostgreSQL `42501 permission denied for table User`。这些是账号事实/运行身份权限证据，不能仅按设备或 SIM 手机号判断，也不能据此排除所有浏览器问题。
+- 用户已明确把需求从“修单个账号权限”改为所有注册人类账号具备 Web/H5 双端能力，并选择后续预生产注册必须有邀请码。产品与接口规则分别落在 PRD §7.4～7.5 和 API r19。
+
+### 本地交付与验证
+
+| 项目 | 事实与限制 |
+|---|---|
+| 代码提交 | `37d412c6510012a4ff01c773ab1cb21932e84aef`，父提交 `b2887d3718f34bf3cc068d07b505d33065e77c7c`；29 个应用/测试/交付文件；分支 `feature/v2-dual-workspace-accounts` |
+| 双端能力 | 历史 admin/dispatcher/driver 均可进入 Web 和 H5；保留历史 role/password/绑定；system/ingest/未知角色不获得交互能力；H5 本人任务归属不放宽 |
+| 档案与注册 | 缺档案先完善本人资料；同手机号安全复用或原子创建，新司机 OFFLINE/onShift=false；拒绝停用/占用/门店冲突。当前预生产注册仍关闭，Driver-only 记录不自动变成 User |
+| 工程验证 | 76 文件通过、3 文件跳过；901 tests passed / 7 skipped；lint、`tsc --noEmit --incremental false`、Next 15.5.24 build 32/32、diff check 通过。构建使用本机不可达 DB/Redis 占位，未连接预生产；缺高德服务端 Key 警告属隔离条件 |
+| 本地 HTTP | health 200；login?next=/driver/tasks 200；匿名 H5 和 Web 307 到相应登录目标；register 页面 404、注册 POST 403；匿名本人档案 POST 401。临时本地服务已停止 |
+| 独立审查 | `/root/review_dual_workspace` 只读审查 PASS，P0=0/P1=0；采纳 ACL COMMIT 前权限断言及 DB/操作者/服务身份输出建议 |
+| R67 文档复核 | 2026-09-14 完成：14 个纯文档文件，117 个 Markdown 相对路径、Canvas 72 节点/84 边与引用路径、版本戳及 diff check 通过，Layer 0 为 150 行。独立复核发现并修正交付 README 的父基线/待构建代码歧义，最终 P0=0/P1=0；业务实现保持 `37d412c…` 不变 |
+| 运行证据 | 本地受控记录 `.codex-tmp/dual-workspace-verification.log`（不入 Git）；SHA-256 `3ceab6fa2f9f4e9b6f03d3a773699a02324a938a6ff123b6e850b74c761ba75c`。其中“未提交/A8 待授权”为当时快照，本节记录其后的授权与代码提交，不改写原始证据 |
+| 尚未完成 | 7 个外部依赖测试跳过；真实 PostgreSQL 并发/事务回滚/最小 ACL、镜像构建推送与扫描、预生产切换、同账号 Safari/微信/鸿蒙双端真机验收均尚无新结果 |
+
+### 后续顺序与安全边界
+
+1. 本轮代码、治理文档分别本地提交；治理 SHA 由本轮 Git 记录单独追溯，代码来源固定为 `37d412c…`，不能用治理 HEAD 构建来冒充该代码 revision。
+2. 后续发布按部署指南 §7.7：核验受控 DBA 的目标身份、补齐 app 最小 Driver INSERT / User 两列 UPDATE，并保存首次权限基线和回退输出；不授予 app 通用 User INSERT 或改 role/password 权限，不重开 owner 登录，不改 worker 权限。脚本已准备、未执行。
+3. 固定制品构建/扫描和数据库前置通过后，才执行获批预生产切换与同账号双端真机验收；没有新 digest 或实时健康证据前，最近已核验运行身份仍记为 `b2887d3…`。
+4. 一号双端完成并经授权部署以后，另做邀请码注册版本：登录页增加注册按钮、表单及原子 DB 开户；邀请码约束和注册权限须专项设计/审查，当前并无可用邀请码接口或已开放注册入口。
+
+大白话：新账号规则已经做成本地代码存档，手机访问的服务器还没有换成这一版。先把双端和数据库权限验证、部署好，再做“凭邀请码注册”；不能把这两件事写成已经同时上线。
+
+## 2026-09-11 post-Gate-4 预生产返修部署
+
+| 项目 | 已确认事实 |
+|---|---|
+| 代码范围 | `bc3cb212844bf7bdc781a5dd25459a6759f931b1` 修复司机登录目标保持；`b2887d3718f34bf3cc068d07b505d33065e77c7c` 将 `next` / `eslint-config-next` 升至 `15.5.24`。未改 HTTP 契约、Schema、migration、枚举或设计变量 |
+| 构建与扫描 | 从干净 Git 归档构建；完整工程回归、31/31 build、Prisma 与制品检查通过；index `sha256:c491f6a…d1ed`、amd64 `sha256:cde35c27…e886`，Critical/High/Secrets=0，UID/GID `65532:65532`，19/19 SQL raw 匹配、CR=0 |
+| 分阶段部署 | app、单 worker、Nginx 依次切换；app/worker healthy，三服务 revision 均为 `b2887d3…`。Nginx 仍为 `nginx:1.27-alpine`，镜像、TLS 和端口不变 |
+| 入口冒烟 | HTTPS health=200、login=200，HTTP redirect=308；最终 health traceId `f21db5384affce93dc350fc057908f7d` |
+| 数据库边界 | `MIGRATION_EXECUTED=NO`；既有 10 条 migration 与 outbox CHECK 17 种保持。Compose 仅为解析未选 migration service 使用进程级不可达占位，未写入配置、未注入 app/worker |
+| 失败与回退 | 早期 app 尝试分别因 Compose 必填变量和脚本引号损坏停止；自动恢复配置与旧 app 运行成功，worker/Nginx 未改变。经传输哈希和 `bash -n` 校验的脚本重试后通过 |
+| 回退与证据 | 上一稳定 `4d370d6…@sha256:508dea…453d`；受控目录 `/srv/rcd-dispatch/backups/preprod-before-b2887d3718f34bf3cc068d07b505d33065e77c7c-07R8JDsK`。历史 exited migration orphan 保留，未使用 `--remove-orphans` |
+| 当前结论 | 预生产冒烟 `PASS`，允许开始受控真机测试；不等于真机验收已通过，也不授权 main、正式生产或可信证书结论 |
+
+## Gate 4 退出后的证据治理与主线交接
 
 Gate 4 不新增 G4-6～G4-10 编号，也不重新打开已退出的 G4-1～G4-5。后续按以下顺序完成阶段交接：
 
 1. **证据固化完成。** `gate4-evidence-package-20260907.zip` 已生成；ZIP SHA-256 为 `988b134205791d56e35dbfcdd4d4758004057643385763ddf43f59270cafbcf0`，内部 `SHA256SUMS` 文件 SHA-256 为 `00b0429c48796332f7fcee586f994cce0edce5b87c8d368ea1719fbcda43549e`。41/41 文件哈希、20/20 JSON 解析与 35/35 索引路径通过。
 2. **只读交接审计完成并经主控接受。** 审计核对起始 `develop @ 4102ee1f…`、交接 HEAD `089bc4d…`、部署 RC `4d370d6…`、应用 tree、提交边界、秘密和三个拒绝 RC；未发现 P0/P1。保留一个非阻断 P2：完整 T1-A～T6 shell 原始记录、部分 ECS/RDS/SLS 原始对象和 migration 绝对时间没有全部进入证据包；派生记录已明确标注，没有冒充原始证据。
-3. **本地合入完成。** 主控按单独授权将 `feature/v2-stabilization @ 089bc4da56022c1b077faac474c269d269d0930b` 以 `--no-ff` 合入本地 `develop @ 6c42f0c6448fc712bca71d9ef7d82b22a105b3ec`；父提交为 `4102ee1f85f89f363aeaa42f829a9c6d535f6d31` 与 `089bc4da56022c1b077faac474c269d269d0930b`，未推送。
-4. **合入后验证完成。** 新 develop 通过 `813 passed / 7 expected skipped`、lint、`tsc --noEmit`、31/31 build、Prisma validate、部署制品专项测试和 `git diff --check`；验证未连接真实数据库、Redis/Tair、高德或云资源。A8 开始前 `HEAD == develop == 6c42f0c…` 且工作区干净。
-5. **24 小时只读稳定观察仍为可选非阻断项。** 如另行执行，只追加容器健康/重启、单 worker、outbox、SLS、真实依赖、磁盘和到期风险证据，不产生新 Gate 或外部写权限。
-6. **本轮 A8 正在执行。** 只同步六份治理文件，代码 RC SHA、运行证据包 SHA 和后续治理提交 SHA 分开记录；本轮没有 Git 提交、推送、外部操作或重新验收授权。
+3. **develop 合入完成。** 主控按单独授权将 `feature/v2-stabilization @ 089bc4da56022c1b077faac474c269d269d0930b` 以 `--no-ff` 合入本地 `develop @ 6c42f0c6448fc712bca71d9ef7d82b22a105b3ec`；父提交为 `4102ee1f85f89f363aeaa42f829a9c6d535f6d31` 与 `089bc4da56022c1b077faac474c269d269d0930b`。
+4. **develop 合入后验证完成。** 新 develop 通过 `813 passed / 7 expected skipped`、lint、`tsc --noEmit`、31/31 build、Prisma validate、部署制品专项测试和 `git diff --check`；验证未连接真实数据库、Redis/Tair、高德或云资源。
+5. **R63 治理提交和 develop 推送完成。** 六份治理文档形成 `95a1c06daa1c373f76f7026dd4bfe71d31a11df0`；推送前确认远端独有提交为 0，随后普通快进推送并复核 `develop == origin/develop == 95a1c06…`，未使用强推。
+6. **main 合入与推送完成。** 已验收 develop 以 `--no-ff` 合入 `main @ d9cdf2bd36165ab3c3e012835c761458b455f61e`，并在确认远端无分叉后普通推送；当前 `main == origin/main == d9cdf2b…`，未使用强推。
+7. **独立 main 全量验证完成。** 在不改变 SHA/refs、不开外部连接的条件下通过 `813 passed / 7 expected skipped`、lint、`pnpm exec tsc --noEmit`、31/31 build、Prisma validate、部署制品 5/5、`git diff --check` 和干净工作区；42 个本地分支、13 个远端引用、0 个标签前后一致。
+8. **R64 治理提交完成。** 六份治理文件形成 `964bd1c42f1d94b9b8f3d0bff4fd7a3f1521b235`，位于本地 develop；未推送，不替代 main 代码基线。
+9. **R65 正式生产入口同步完成。** 六份治理文件已形成 `974d6d2a786a9237b0b4b41d3290ffa050f40c32`，登记 main 推送/验证和正式生产 T0 只读任务；未授权任何外部写操作。
+10. **24 小时只读稳定观察仍为可选非阻断项。** 如另行执行，只追加容器健康/重启、单 worker、outbox、SLS、真实依赖、磁盘和到期风险证据，不产生新 Gate 或外部写权限。
+
+## 正式生产发布准备：T0 只读盘点
+
+当前状态：`AUTHORIZED / NOT_STARTED`。这是 Gate 4 之后的独立生产准备阶段，不新增 Gate 4 子编号，也不继承预生产部署授权。
+
+```text
+ROLE=PRODUCTION_RELEASE_T0_READONLY_INVENTORY
+CODE_BASELINE_SHA=d9cdf2bd36165ab3c3e012835c761458b455f61e
+DOCUMENT_BASELINE_SHA=974d6d2a786a9237b0b4b41d3290ffa050f40c32
+PREPROD_REMEDIATION_SHA=b2887d3718f34bf3cc068d07b505d33065e77c7c
+PRODUCTION_BUILD_OR_DEPLOY_AUTHORIZATION=NONE
+MODIFICATION_WHITELIST=EMPTY
+EXTERNAL_WRITE_AUTHORIZATION=NONE
+```
+
+盘点目标是形成“必须购买 / 可以复用 / 可延期 / 禁止复用”清单以及低成本与稳妥方案，覆盖域名/备案、可信 HTTPS、ECS、独立生产 RDS/Tair、ACR/SLS/DNS、备份回退、维护窗口和责任人。优先安全复用现有 ECS/VPC/ACR/SLS/公网 IP；不得长期在 2 GiB ECS 上同时运行预生产与生产。生产 RDS、Tair、账号、秘密和数据必须独立，禁止复用预生产身份或数据面。
+
+T0 只允许官方控制台和文档的 Describe/List/Query、报价与购物车预览；不得购买、付款、提交备案、创建或修改云资源、DNS、证书、RAM、安全组、白名单，不得构建/推送镜像、migration、部署、重启或连接生产数据。任何下一步写操作均须主控按资源和阶段单独授权。
 
 ## 3A/3B 退出记录
 
@@ -177,7 +316,7 @@ ACL 复核原始文本位于 `C:/Users/yhy/.codex/attachments/07595ab1-14f4-4ca5
 
 维护窗口原定 `2026-09-06T18:00:00+08:00 .. 2026-09-06T20:00:00+08:00`。配置备份完成于 `18:36:43+08:00`；migration 切换绝对时间无法恢复；app、worker、Nginx 分别于 `21:13:32.103230625`、`21:29:52.146640942`、`21:47:20.931254792 +08:00` 切换。`21:59:40 .. 22:09:49 +08:00` 为部署后的只读观察，不作为额外写入越界。超时不掩盖为 PASS：原始 `MAINTENANCE_WINDOW_RESULT=FAIL` 保留，由 `CONTROLLER_EXCEPTION=APPROVED_ONE_TIME` 转为本次 G4-5 非阻断例外。
 
-本例外只绑定上述 source/index、ECS 预生产实例与本次 9→10 migration。以后发布必须由脚本保存每阶段 UTC 时间并在窗口结束前停止新的切换；不得继承本例外。Gate 4 退出不授权合并 `develop`、推送、进入 `main`、正式生产发布、数据库回退、故障演练或清理证据。
+本例外只绑定上述 source/index、ECS 预生产实例与本次 9→10 migration。以后发布必须由脚本保存每阶段 UTC 时间并在窗口结束前停止新的切换；不得继承本例外。Gate 4 退出本身未自动授权主线操作；后续 develop 合入/推送、main 合入/推送和 main 全量验证均由用户分别授权完成。正式生产当前只授权 T0 只读盘点；数据库回退、故障演练、清理证据或任何生产写操作仍未授权。
 
 ## 代码、文档与迁移基线（按阶段区分）
 
@@ -252,6 +391,13 @@ Gate 4 pre-merge develop: 4102ee1f85f89f363aeaa42f829a9c6d535f6d31
 Gate 4 handoff document commit: 089bc4da56022c1b077faac474c269d269d0930b
 Gate 4 local develop merge: 6c42f0c6448fc712bca71d9ef7d82b22a105b3ec
 Gate 4 local develop merge parents: 4102ee1f85f89f363aeaa42f829a9c6d535f6d31 | 089bc4da56022c1b077faac474c269d269d0930b
+Gate 4 R63 governance commit and origin/develop: 95a1c06daa1c373f76f7026dd4bfe71d31a11df0
+Gate 4 R64 governance commit: 964bd1c42f1d94b9b8f3d0bff4fd7a3f1521b235
+Gate 4 local main merge: d9cdf2bd36165ab3c3e012835c761458b455f61e
+Gate 4 local main merge parents: 1de7b6b89cfa2f55158208550865e8a9707a3b0c | 95a1c06daa1c373f76f7026dd4bfe71d31a11df0
+Gate 4 main/develop merged tree: 4f3e60bffced3a6047afac21ee712ecf8576d13a
+Gate 4 main/origin-main after push: d9cdf2bd36165ab3c3e012835c761458b455f61e
+Gate 4 independent main full validation: 813 passed / 7 expected skipped | lint PASS | TypeScript PASS | build 31/31 PASS | Prisma validate PASS | deployment artifacts 5/5 PASS | diff check PASS | worktree clean | refs unchanged
 Gate 4 evidence package: gate4-evidence-package-20260907.zip
 Gate 4 evidence package sha256: 988b134205791d56e35dbfcdd4d4758004057643385763ddf43f59270cafbcf0
 Gate 4 evidence SHA256SUMS file sha256: 00b0429c48796332f7fcee586f994cce0edce5b87c8d368ea1719fbcda43549e
@@ -274,7 +420,11 @@ data-model remediation develop commit: c6850df0a85aab601c3034e542a0f0b575c9053e
 data-model remediation branch: feature/v2-dispatch-event-constraint
 data-model remediation worktree: .worktrees/dispatch-event-constraint
 data-model remediation whitelist: prisma/migrations/20260816120000_extend_dispatch_event_outbox_types/{migration.sql,rollback.sql}
-remote tracking reference: origin/develop @ ae4714849fa965940b0df1c6766638cf398ac0ce (稍后处理)
+current local/remote develop reference: develop == origin/develop == a1ac9f477b3628e400b36e89a4dfc5a7d07a0171; R65 governance ancestor: 974d6d2a786a9237b0b4b41d3290ffa050f40c32
+formal main/origin-main baseline: d9cdf2bd36165ab3c3e012835c761458b455f61e
+post-Gate-4 preprod branch/commit: codex/preprod-login-mobile-remediation @ b2887d3718f34bf3cc068d07b505d33065e77c7c
+post-Gate-4 preprod index/amd64: sha256:c491f6a48007b86b22af2c6a4f514ba94167e33b6dc0e33f046270b52102d1ed | sha256:cde35c27c322090618bb71cd141b25c0ed9a59e5d278822868ba0d2db40de886
+post-Gate-4 rollback source/index: 4d370d664c3710a4a03cb1b665cfdeddc7d32778 | sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d
 parallel branch code tree anchor: f591aca69e9f6e4a20061c94ea564b053abe7be0
 parallel branch start and document baseline: 主控下发的当前本地 develop HEAD（同时包含上述代码树与本次治理文档）
 parallel worktrees: .worktrees/round2-admin-console | .worktrees/round2-driver-workflow | .worktrees/round2-observability
@@ -284,7 +434,7 @@ parallel worktrees: .worktrees/round2-admin-console | .worktrees/round2-driver-w
 2C merged: feature/v2-observability @ 04aba1798b9ea1d834da56f5e072f936543bafc1 (rebased from 99d6909 with identical patch; ff-only merged; post-merge PASS)
 ```
 
-Gate 3 历史运行证据与 Gate 4 新候选须分开：最近已核验的预生产 app/worker 为 `958afca…@sha256:13e0…5bff`，Nginx release revision 对齐；本轮未重新连接云端。主工作区存量未提交代码不属于本次 Gate 4 验收对象。所有旧运行/回退镜像、G3E2E 和失败样本保留；不重复 bootstrap，不以治理同步推定新的运行健康结论。
+Gate 3 与 Gate 4 运行证据继续作为历史保留；当前预生产 app/worker 已切换为 `b2887d3…@sha256:c491f6a…d1ed`，Nginx release revision 对齐且原镜像/TLS/端口未变。旧运行/回退镜像、G3E2E 和失败样本不得清理；本次未执行 migration 或基础资料写入。正式 main 仍为 `d9cdf2b…`，不得把预生产 patch SHA 冒充已进入主线。
 
 ## 真实 E2E 与 H5 新登记
 

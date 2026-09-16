@@ -1,5 +1,5 @@
-/** 可访问后台管理系统的角色 */
-export const ADMIN_ROLES = ["admin", "dispatcher"] as const;
+/** 注册用户统一拥有 Web 调度和司机 H5 入口；保留历史 role，无需批量改库。 */
+export const ADMIN_ROLES = ["admin", "dispatcher", "driver"] as const;
 
 /** 系统级角色（含内部服务账号） */
 export const SYSTEM_ROLES = ["admin", "dispatcher", "system"] as const;

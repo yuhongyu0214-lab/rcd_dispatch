@@ -206,7 +206,7 @@ describe("POST /api/v2/assignments/{assignmentId}/reassign", () => {
         id: "driver-user-1",
         email: "driver@example.test",
         name: "司机",
-        role: "driver",
+      role: "ingest",
         driverId: "driver-1"
       });
 
@@ -294,6 +294,14 @@ describe("POST /api/v2/assignments/{assignmentId}/reassign", () => {
 });
 
 describe("dispatcher assignment plan-edit routes", () => {
+  it.each(assignmentOperations)("allows a historical driver account to perform $name", async ({ invoke, service }) => {
+    vi.mocked(getCurrentUser).mockResolvedValue({
+      id: "legacy-driver-user", email: "test@invalid.example", name: "测试", role: "driver", driverId: "driver-own"
+    });
+    const response = await invoke();
+    expect(response.status).toBe(200);
+    expect(service).toHaveBeenCalledWith(expect.objectContaining({ operatorUserId: "legacy-driver-user" }));
+  });
   it("passes the manual assignment command and dispatcher identity", async () => {
     const response = await assign(
       commandRequest("http://localhost/api/v2/assignments", {
