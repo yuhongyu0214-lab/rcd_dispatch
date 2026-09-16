@@ -1,9 +1,9 @@
 # 人车单项目文档版本总入口
 
-> 版本戳：`RCD-DOC-REGISTRY-20260915-R70`
+> 版本戳：`RCD-DOC-REGISTRY-20260916-R71`
 > 建立日期：2026-07-13
-> 治理更新时间：2026-09-15
-> 提交整理：R70 记录联合候选合入本地 develop、合入后全量回归及未推送/未部署边界
+> 治理更新时间：2026-09-16
+> 提交整理：R71 记录 R70 `a1ac9f4…` 已普通快进推送至 `origin/develop`；main、预生产与发布边界不变
 > 归档方式：现行权威集中到 `v2.0/`；已融合或冲突的旧方案从工作树清场，历史由 Git 追溯
 > 可视化导航：[Obsidian 项目全景白板](../rcd-v2-project-map.canvas)（仅作导航，不替代下方权威文档）
 
@@ -20,7 +20,7 @@
 
 | 范围 | 当前版本 | 状态 | 入口 |
 |---|---|---|---|
-| 产品需求 | V2.0-r8 | 一号双端、V2 默认入口、受邀注册和双端退出已冻结并合入本地 develop；尚未部署 | [PRD V2](v2.0/prd-v2.md) |
+| 产品需求 | V2.0-r8 | 一号双端、V2 默认入口、受邀注册和双端退出已冻结、合入并推送 develop；尚未部署 | [PRD V2](v2.0/prd-v2.md) |
 | 数据架构 | V2.0-r16 | 当前候选 Schema/migration tree 与冻结基线完全相同 | [数据架构 V2](v2.0/data-architecture-v2.md) |
 | 代码与设计约束 | V2.0-r22 | 联合候选登记受邀注册、双端退出、可信原始 URI 精确入口与两项 P2；技术栈、Schema、设计变量不变 | [项目规则 V2](v2.0/project-rules-v2.md) |
 | API 契约 | V2.0-r20（本地联合候选；未部署） | 三种人类角色共享工作台能力，本人司机档案 POST 与受邀注册 HMAC 契约已冻结；H5 本人任务与既有 DTO 不变 | [API 契约 V2](v2.0/api-contract-v2.md) |
@@ -31,8 +31,8 @@
 | 构建、部署与回退 | V2.0-r17 | 保留已部署 patch 证据；联合候选最小 User INSERT、邀请密钥与 Nginx 原始 URI 前置尚未执行 | [部署指南 V2](v2.0/deployment-guide-v2.md) |
 | 生产运行与恢复 | V2.0-r7 | app/单 worker/Nginx 新 revision 运行，真机测试 READY；正式可信 HTTPS 与灾备仍为独立验收 | [运维指南 V2](v2.0/operations-guide-v2.md) |
 | 基础设施决策与替代历史 | V2.0-r3 | INFRA-001～023 已登记；公网 IP 预生产演示获准，正式上线条件不变 | [基础设施决策日志](v2.0/infrastructure-decision-log.md) |
-| 项目当前状态 | 2026-09-15 / R70 | 联合候选 `40b4a0f…` 已合入本地 develop `7b4c56e…` 且回归通过；未推送、未部署，预生产仍为 `b2887d3…` | [状态总览](../status/README.md) |
-| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260915-R70 | Layer 0；区分代码候选、develop 合并点、治理提交、运行身份和未授权外部操作 | [Agent 公共上下文](../context/agent-common-context.md) |
+| 项目当前状态 | 2026-09-16 / R71 | 联合候选 `40b4a0f…` 已合入 develop `7b4c56e…`，R70 `a1ac9f4…` 已普通快进推送并与 `origin/develop` 对齐；未合入 main、未部署，预生产仍为 `b2887d3…` | [状态总览](../status/README.md) |
+| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260916-R71 | Layer 0；区分代码候选、develop 合并点、R70 推送基线、R71 治理提交、运行身份和未授权外部操作 | [Agent 公共上下文](../context/agent-common-context.md) |
 | V1 产品与开发主线 | V1.x | 历史只读 | [V1 历史索引](v1/README.md) |
 
 ## 文档权威顺序（按领域拆分，唯一权威口径）
@@ -126,7 +126,7 @@ HTTP 契约               → v2.0/api-contract-v2.md
 
 ### 当前联合账号与入口任务
 
-代码候选 `40b4a0fca3c9f9b4cfd392341f89663fdbbcb418` 与 R69 治理提交 `d04b68bd88c1a45e6075d8fcd418ea998e1aedf4` 已通过 `--no-ff` 合入本地 `develop @ 7b4c56ec9d020b62f364869cd942e62a8e9f4b70`。合入前独立专项 217/217、隔离 HTTP、Chrome 100%、Edge 100%/125% 与最终独立审计 `APPROVE`；合入后全量 994/7、lint/tsc、32/32 build 与 diff check 通过。相对统一起点 59 路径，无额外代码、Schema/migration。新任务必须读取 PRD §7.4～7.6、§9.1.1、API r20、兼容矩阵 §7.1、APP-008 后继记录、部署指南 §7.7 与项目规则 r22，再以承载 R70 的实际治理提交 SHA 锁定文档。具体进度见[联合候选最终闭环](../status/README.md#2026-09-15-联合候选最终闭环)。develop 未推送、代码未合入 main 或部署；DB ACL、邀请密钥、镜像、Nginx 和所有外部发布前置仍须另行授权。
+代码候选 `40b4a0fca3c9f9b4cfd392341f89663fdbbcb418` 与 R69 治理提交 `d04b68bd88c1a45e6075d8fcd418ea998e1aedf4` 已通过 `--no-ff` 合入 `develop @ 7b4c56ec9d020b62f364869cd942e62a8e9f4b70`；R70 治理提交形成并普通快进推送 `develop == origin/develop == a1ac9f477b3628e400b36e89a4dfc5a7d07a0171`，推送前后均已核验远端无分叉，未使用强推。合入前独立专项 217/217、隔离 HTTP、Chrome 100%、Edge 100%/125% 与最终独立审计 `APPROVE`；合入后全量 994/7、lint/tsc、32/32 build 与 diff check 通过。相对统一起点 59 路径，无额外代码、Schema/migration。新任务必须读取 PRD §7.4～7.6、§9.1.1、API r20、兼容矩阵 §7.1、APP-008 后继记录、部署指南 §7.7 与项目规则 r22，再以承载 R71 的实际治理提交 SHA 锁定文档。具体进度见[联合候选最终闭环](../status/README.md#2026-09-15-联合候选最终闭环)。代码未合入 main 或部署；DB ACL、邀请密钥、镜像、Nginx 和所有外部发布前置仍须另行授权。
 
 ### Gate 4 历史入口与 post-Gate-4 已部署候选
 
@@ -201,7 +201,7 @@ remote commit: 958afca537b412fb972b6e180561a9b37022834d
 5. Gate 4 已 `PASS` 并完成主线交接；R65 `974d6d2…` 开放正式生产 T0 只读盘点。post-Gate-4 候选 `b2887d3…@sha256:c491f6a…d1ed` 已部署预生产并可进入真机测试，但尚未进入 main。T0 只读盘点可继续；任何正式生产构建/部署、main 提升或外部写操作仍须分别授权。
 6. 9/13 用户真机反馈后批准一号双端，来源代码 `37d412c…` / `463c9ee…` 已进入联合候选；R67 证据继续保留，不把治理提交 SHA 当成代码 RC。
 7. R68 联合候选 `bf9aeef…` 完成工程、113 项隔离 HTTP 和当时的独立审计，但真实 Chrome/Edge 浏览器矩阵受控制连接故障阻塞；该历史状态已由 R69 后继候选取代。
-8. 联合候选 `40b4a0f…` 已完成受邀注册、双端退出与原始 URI 入口 P1 返修，独立专项 217/217、全量 994/7、lint/tsc/build、隔离 HTTP、Chrome/Edge 与最终独立审计通过；P0/P1=0、P2=2，未推送、未部署或执行外部写入。
+8. 联合候选 `40b4a0f…` 已完成受邀注册、双端退出与原始 URI 入口 P1 返修，独立专项 217/217、全量 994/7、lint/tsc/build、隔离 HTTP、Chrome/Edge 与最终独立审计通过；P0/P1=0、P2=2。其 R70 develop 基线 `a1ac9f4…` 已普通快进推送且本地/远端一致；未合入 main、未部署或执行其他外部写入。
 
 状态事实和阻断项统一在[状态总览](../status/README.md)维护；状态文档不得修改领域契约。
 

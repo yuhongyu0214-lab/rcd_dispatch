@@ -1,19 +1,19 @@
 # 人车单项目状态总览
 
-> 状态快照：2026-09-15 / R70
+> 状态快照：2026-09-16 / R71
 > 用途：说明项目做到哪一步、还差什么
 > 非权威范围：产品行为、状态机、Schema、枚举、HTTP 契约、技术栈和生产架构
 
 ## 一句话结论
 
-Gate 4 与既有 main 交接保持完成；`main == origin/main == d9cdf2bd36165ab3c3e012835c761458b455f61e`，预生产仍为 `b2887d3718f34bf3cc068d07b505d33065e77c7c@sha256:c491f6a48007b86b22af2c6a4f514ba94167e33f046270b52102d1ed`。一号双端、V2 默认入口、受邀注册、双端退出及原始 URI 精确治理代码候选 `40b4a0fca3c9f9b4cfd392341f89663fdbbcb418` 与 R69 治理提交 `d04b68bd88c1a45e6075d8fcd418ea998e1aedf4` 已通过 `--no-ff` 合入本地 `develop @ 7b4c56ec9d020b62f364869cd942e62a8e9f4b70`。合入前专项 217/217、隔离 HTTP、Chrome/Edge 与独立审计 `APPROVE`；合入后全量 994 passed / 7 expected skipped、lint、类型检查、32/32 build 与 diff check 通过。P0/P1=0，保留两项非阻断 P2。develop 未推送、代码未合入 main 或部署，真实 Nginx、数据库 ACL、邀请密钥、镜像和外部系统均未实施；正式生产 T0 仍只读。
+Gate 4 与既有 main 交接保持完成；`main == origin/main == d9cdf2bd36165ab3c3e012835c761458b455f61e`，预生产仍为 `b2887d3718f34bf3cc068d07b505d33065e77c7c@sha256:c491f6a48007b86b22af2c6a4f514ba94167e33f046270b52102d1ed`。一号双端、V2 默认入口、受邀注册、双端退出及原始 URI 精确治理代码候选 `40b4a0fca3c9f9b4cfd392341f89663fdbbcb418` 与 R69 治理提交 `d04b68bd88c1a45e6075d8fcd418ea998e1aedf4` 已通过 `--no-ff` 合入 `develop @ 7b4c56ec9d020b62f364869cd942e62a8e9f4b70`；R70 治理提交形成 `a1ac9f477b3628e400b36e89a4dfc5a7d07a0171`。合入前专项 217/217、隔离 HTTP、Chrome/Edge 与独立审计 `APPROVE`；合入后全量 994 passed / 7 expected skipped、lint、类型检查、32/32 build 与 diff check 通过。P0/P1=0，保留两项非阻断 P2。主控确认远端仍为 `95a1c06…` 且无分叉后完成普通快进推送，当前 `develop == origin/develop == a1ac9f4…`，未使用强推。代码未合入 main 或部署，真实 Nginx、数据库 ACL、邀请密钥、镜像和外部系统均未实施；正式生产 T0 仍只读。
 
 ## 当前工作流状态
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
-| 文档治理 | `R70_A8_SYNC / LOCAL_COMMIT_AUTHORIZED` | 登记本地 develop 合并点、合入后工程回归和证据包身份；承载本节的治理提交与代码候选、合并提交分开，完整治理 SHA 由提交完成后的 Git 记录和交付报告登记 | 只做本地文档提交；不得推送或执行外部写入 |
-| 联合账号与入口候选 | `MERGED_LOCAL_DEVELOP / POST_MERGE_PASS / NOT_PUSHED / NOT_DEPLOYED` | 候选 `40b4a0f…` 与 R69 `d04b68b…` 已合入 `develop @ 7b4c56ec9d020b62f364869cd942e62a8e9f4b70`；59 路径边界、合入前专项/HTTP/浏览器/审计与合入后 994/7、lint/tsc/build 均通过 | 推送 develop、合入 main 和全部发布前置须重新授权 |
+| 文档治理 | `R71_A8_SYNC / COMMIT_NOT_AUTHORIZED` | 登记 R70 `a1ac9f4…` 的远端普通快进推送结果；承载本节的治理提交与代码候选、合并提交、R70 推送基线分开，完整 R71 SHA 由后续获准提交后的 Git 记录和交付报告登记 | 等待单独的治理文档提交授权；不得再次推送或执行外部写入 |
+| 联合账号与入口候选 | `MERGED_LOCAL_DEVELOP / DEVELOP_PUSHED / POST_MERGE_PASS / NOT_DEPLOYED` | 候选 `40b4a0f…` 与 R69 `d04b68b…` 已合入 `develop @ 7b4c56e…`；R70 `a1ac9f4…` 已从远端 `95a1c06…` 普通快进推送，当前本地/远端 develop 一致；59 路径边界、合入前专项/HTTP/浏览器/审计与合入后 994/7、lint/tsc/build 均通过 | 合入 main 和全部发布前置须重新授权 |
 | 一号双端来源 | `INTEGRATED_INTO_40B4A0F / NOT_DEPLOYED` | 来源提交 `463c9ee44352a66ec43b25a1ccb66453ae9826ed`，功能锚点 `37d412c6510012a4ff01c773ab1cb21932e84aef`；真实合并父提交 `2d0bbdde93a390c8b1a2ecf8a8e7e09d99fb0ebf` | 不单独部署来源分支；运行候选仍须以联合代码 SHA 重新构建、扫描和授权 |
 | 邀请码注册与双端退出 | `LOCAL_CANDIDATE_PASS / NOT_DEPLOYED` | 密钥闸门、手机号/有效期 HMAC 邀请、原子开户、V2/H5 退出及最小 ACL 制品已实现并审计；真实密钥和 ACL 未执行 | 与联合候选一同进入主控合入裁决；任何真实环境实施须另行授权 |
 | post-Gate-4 预生产返修 | `PREPROD_DEPLOYED / SMOKE_PASS / REAL_DEVICE_TEST_READY` | `b2887d3…` → index `sha256:c491f6a…d1ed`；app/worker healthy，Nginx revision 对齐；health/login 200、HTTP 308 | 开展受控真机测试；自签名证书提示必须如实记录，不得写成正式可信 HTTPS |
@@ -71,11 +71,11 @@ Gate 4 与既有 main 交接保持完成；`main == origin/main == d9cdf2bd36165
 
 ### 当前结论与未执行事项
 
-联合候选状态为 `MERGED_LOCAL_DEVELOP / POST_MERGE_PASS / NOT_PUSHED / NOT_DEPLOYED`。代码候选 `40b4a0f…`、R69 治理提交 `d04b68b…`、develop 合并点 `7b4c56e…` 与承载本节的 R70 治理提交严格分开；Git 提交对象不能稳定自引用自身 SHA，因此完整 R70 SHA 由提交完成后的 Git 记录与最终交付报告给出。
+联合候选状态为 `MERGED_LOCAL_DEVELOP / DEVELOP_PUSHED / POST_MERGE_PASS / NOT_DEPLOYED`。代码候选 `40b4a0f…`、R69 治理提交 `d04b68b…`、develop 合并点 `7b4c56e…`、已推送的 R70 基线 `a1ac9f477b3628e400b36e89a4dfc5a7d07a0171` 与承载本节的 R71 治理提交严格分开；Git 提交对象不能稳定自引用自身 SHA，因此完整 R71 SHA 只能由获准提交后的 Git 记录与最终交付报告给出。
 
-未执行且未授权：推送、合入 main、镜像构建/推送/扫描、真实 Nginx、邀请密钥配置、数据库 ACL/事务或 migration、Redis/Tair、高德、预生产/生产部署及正式生产写操作。下一步如需远端同步、main 提升或发布，必须由主控重新裁决；发布动作不继承本轮权限。
+未执行且未授权：再次推送、合入 main、镜像构建/推送/扫描、真实 Nginx、邀请密钥配置、数据库 ACL/事务或 migration、Redis/Tair、高德、预生产/生产部署及正式生产写操作。下一步如需 main 提升或发布，必须由主控重新裁决；本次 develop 推送权限已经用尽，发布动作不继承该权限。
 
-大白话：登录、注册、退出和新版入口已经合入本地开发主线，合起来再跑一遍也全部通过。服务器还没有换成这版，远端仓库、正式主线、邀请码密钥和数据库权限都没有动；下一步需要另行批准推送、提升 main 或发布。
+大白话：登录、注册、退出和新版入口已经合入开发主线、通过回归，并安全同步到了远端 develop。服务器和 main 还没有换成这版，邀请码密钥、数据库权限、镜像和部署也没有动；下一步若要进入 main 或上线，仍需重新批准。
 
 ## 2026-09-13 一号双端与 V2 默认入口联合候选（R68 历史快照）
 
@@ -420,7 +420,7 @@ data-model remediation develop commit: c6850df0a85aab601c3034e542a0f0b575c9053e
 data-model remediation branch: feature/v2-dispatch-event-constraint
 data-model remediation worktree: .worktrees/dispatch-event-constraint
 data-model remediation whitelist: prisma/migrations/20260816120000_extend_dispatch_event_outbox_types/{migration.sql,rollback.sql}
-current remote develop reference: origin/develop @ 95a1c06daa1c373f76f7026dd4bfe71d31a11df0; local develop R65 governance commit: 974d6d2a786a9237b0b4b41d3290ffa050f40c32
+current local/remote develop reference: develop == origin/develop == a1ac9f477b3628e400b36e89a4dfc5a7d07a0171; R65 governance ancestor: 974d6d2a786a9237b0b4b41d3290ffa050f40c32
 formal main/origin-main baseline: d9cdf2bd36165ab3c3e012835c761458b455f61e
 post-Gate-4 preprod branch/commit: codex/preprod-login-mobile-remediation @ b2887d3718f34bf3cc068d07b505d33065e77c7c
 post-Gate-4 preprod index/amd64: sha256:c491f6a48007b86b22af2c6a4f514ba94167e33b6dc0e33f046270b52102d1ed | sha256:cde35c27c322090618bb71cd141b25c0ed9a59e5d278822868ba0d2db40de886
