@@ -1,30 +1,30 @@
 # 人车单项目状态总览
 
-> 状态快照：2026-09-16 / R71
+> 状态快照：2026-09-17 / R72
 > 用途：说明项目做到哪一步、还差什么
 > 非权威范围：产品行为、状态机、Schema、枚举、HTTP 契约、技术栈和生产架构
 
 ## 一句话结论
 
-Gate 4 与既有 main 交接保持完成；`main == origin/main == d9cdf2bd36165ab3c3e012835c761458b455f61e`，预生产仍为 `b2887d3718f34bf3cc068d07b505d33065e77c7c@sha256:c491f6a48007b86b22af2c6a4f514ba94167e33f046270b52102d1ed`。一号双端、V2 默认入口、受邀注册、双端退出及原始 URI 精确治理代码候选 `40b4a0fca3c9f9b4cfd392341f89663fdbbcb418` 与 R69 治理提交 `d04b68bd88c1a45e6075d8fcd418ea998e1aedf4` 已通过 `--no-ff` 合入 `develop @ 7b4c56ec9d020b62f364869cd942e62a8e9f4b70`；R70 治理提交形成 `a1ac9f477b3628e400b36e89a4dfc5a7d07a0171`。合入前专项 217/217、隔离 HTTP、Chrome/Edge 与独立审计 `APPROVE`；合入后全量 994 passed / 7 expected skipped、lint、类型检查、32/32 build 与 diff check 通过。P0/P1=0，保留两项非阻断 P2。主控确认远端仍为 `95a1c06…` 且无分叉后完成普通快进推送，当前 `develop == origin/develop == a1ac9f4…`，未使用强推。代码未合入 main 或部署，真实 Nginx、数据库 ACL、邀请密钥、镜像和外部系统均未实施；正式生产 T0 仍只读。
+联合账号与入口版本已完成 R71 推送、main 提升、不可变镜像和阶段 4 配置/ACL：`develop == origin/develop == 14537ddaf92182b2f68308e66503d262490ce1e1`，`main == origin/main == 85bcfa534e5a3525f2bf84e0628bac4942559120`，main 应用 tree 与审计候选 `40b4a0fca3c9f9b4cfd392341f89663fdbbcb418` 一致并通过全量工程验证。新镜像 index 为 `sha256:0dc8315fb56361fa5afa04cab43d9c890f9c78e882c88070afa3a764dd450e09`，固定摘要漏洞/秘密扫描均为 0。阶段 4 仅写入 app 专用 64 字符邀请密钥并增加四项冻结最小 ACL，独立核验通过；运行容器未重启、未加载新密钥且未执行 migration。预生产仍运行 `b2887d3718f34bf3cc068d07b505d33065e77c7c@sha256:c491f6a48007b86b22af2c6a4f514ba94167e33f046270b52102d1ed`。阶段 5 Nginx、阶段 6 分阶段部署和双端验收均未授权、未执行；两项既有 P2 继续非阻断登记。
 
 ## 当前工作流状态
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
-| 文档治理 | `R71_A8_SYNC / COMMIT_NOT_AUTHORIZED` | 登记 R70 `a1ac9f4…` 的远端普通快进推送结果；承载本节的治理提交与代码候选、合并提交、R70 推送基线分开，完整 R71 SHA 由后续获准提交后的 Git 记录和交付报告登记 | 等待单独的治理文档提交授权；不得再次推送或执行外部写入 |
-| 联合账号与入口候选 | `MERGED_LOCAL_DEVELOP / DEVELOP_PUSHED / POST_MERGE_PASS / NOT_DEPLOYED` | 候选 `40b4a0f…` 与 R69 `d04b68b…` 已合入 `develop @ 7b4c56e…`；R70 `a1ac9f4…` 已从远端 `95a1c06…` 普通快进推送，当前本地/远端 develop 一致；59 路径边界、合入前专项/HTTP/浏览器/审计与合入后 994/7、lint/tsc/build 均通过 | 合入 main 和全部发布前置须重新授权 |
+| 文档治理 | `R72_A8_SYNC / LOCAL_COMMIT / NOT_PUSHED` | 仅同步 R71 推送、main 提升/验证、不可变镜像和阶段 4 配置/ACL 稳定事实；代码、运行配置和外部资源零变化 | 本轮治理提交不自动推送；阶段 5 仍需单独授权 |
+| 联合账号与入口候选 | `MAIN_PROMOTED / MAIN_VALIDATION_PASS / NOT_DEPLOYED` | 候选 `40b4a0f…` 已进入 `develop/origin/develop @ 14537dd…` 与 `main/origin/main @ 85bcfa5…`；main 应用 tree `d4b38e4…` 与候选一致；全量测试、lint、tsc、32/32 build、diff check PASS | 不得把 main 提升写成预生产部署；下一运行闸门仍是阶段 5 |
 | 一号双端来源 | `INTEGRATED_INTO_40B4A0F / NOT_DEPLOYED` | 来源提交 `463c9ee44352a66ec43b25a1ccb66453ae9826ed`，功能锚点 `37d412c6510012a4ff01c773ab1cb21932e84aef`；真实合并父提交 `2d0bbdde93a390c8b1a2ecf8a8e7e09d99fb0ebf` | 不单独部署来源分支；运行候选仍须以联合代码 SHA 重新构建、扫描和授权 |
-| 邀请码注册与双端退出 | `LOCAL_CANDIDATE_PASS / NOT_DEPLOYED` | 密钥闸门、手机号/有效期 HMAC 邀请、原子开户、V2/H5 退出及最小 ACL 制品已实现并审计；真实密钥和 ACL 未执行 | 与联合候选一同进入主控合入裁决；任何真实环境实施须另行授权 |
+| 邀请码注册与双端退出 | `PASS_CONFIG_AND_ACL_ONLY / STAGE4_CLOSED / NOT_DEPLOYED` | 64 字符密钥仅落 app 配置且未泄漏/未加载；四项最小 ACL 均为 true，越权、转授、owner 登录和 worker DB 权限保持关闭；4 条回退 SQL 已保存 | 注册事务、邀请码实际使用和应用加载密钥留到阶段 6 验收；阶段 5 先独立授权 |
 | post-Gate-4 预生产返修 | `PREPROD_DEPLOYED / SMOKE_PASS / REAL_DEVICE_TEST_READY` | `b2887d3…` → index `sha256:c491f6a…d1ed`；app/worker healthy，Nginx revision 对齐；health/login 200、HTTP 308 | 开展受控真机测试；自签名证书提示必须如实记录，不得写成正式可信 HTTPS |
-| 正式生产 T0 | `READONLY_INVENTORY_AUTHORIZED / NOT_STARTED` | 代码基线仍为 `main == origin/main == d9cdf2b…`；R65 文档基线 `974d6d2…`；修改白名单为空，外部写授权为无 | 可继续只读盘点；正式生产构建/部署前必须另行审查并批准是否提升 `b2887d3…` |
+| 正式生产 T0 | `READONLY_INVENTORY_ONLY / BASELINE_REFREEZE_REQUIRED` | 正式主线已更新为 `main == origin/main == 85bcfa5…`；R65 的旧 `d9cdf2b…` 只作历史盘点基线 | 正式生产任务须在阶段 6 完成后重新冻结代码、文档、镜像和资源授权，不继承预生产权限 |
 | Gate 3 历史应用候选 | `958AFCA_GATE3_ACCEPTED_DEVELOP_HANDOFF_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 只作历史与追溯，不再表述为当前预生产运行身份 |
 | 依赖安全 | `B2887D3_CRITICAL_0_HIGH_0_SECRET_0` | 固定 amd64 `sha256:cde35c27…e886`；19/19 SQL raw 匹配且 CR=0 | 只对已扫描固定镜像与验收时点成立；新披露、重建或 digest 变化必须重扫 |
 | migration 指纹 | `PREPROD_10_APPLIED / OUTBOX_CHECK_17_PASS` | 第 10 条 `20260816120000_extend_dispatch_event_outbox_types` 已应用；outbox CHECK 精确允许 17 种事件 | migration 绝对执行时间未保留且已获一次性非阻断裁决；禁止重跑、改元数据或重开 owner 补证 |
 | 数据库迁移 | `OUTBOX_CHECK_REMEDIATION_PASS_LOCAL_DEVELOP` | 两个新事件 CHECK、受保护 rollback、零漂移和全量回归通过 | 数据分支退出；API 分支重放新基线后使用该约束，禁止重复迁移 |
 | 隔离业务基础资料 | `BASE_DATA_PASS_TEST_FACTS_RETAINED` | [真实 E2E 重验进度](2026-08-10-gate3r-real-e2e-retest-progress.md) | 不重复基础资料写入；所有通过与失败样本均保留 |
 | 基础设施文档 | `GATE3_FINAL_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | Gate 3-R 退出；正式可信 HTTPS 与整机/RDS 灾备仍为独立后续验收 |
-| ACR 镜像发布 | `B2887D3_DEPLOYED_PREPROD` | source/OCI `b2887d3…`；index `sha256:c491f6a…d1ed`；amd64 `sha256:cde35c27…e886` | 上一稳定 `4d370d6…@sha256:508dea…453d` 保留回退；禁止覆盖 tag、使用 `latest` 或等同正式生产发布 |
+| ACR 镜像发布 | `40B4A0F_IMMUTABLE_IMAGE_PASS / NOT_DEPLOYED` | source/tag/OCI `40b4a0f…`；index `sha256:0dc8315f…e09`、amd64 `sha256:0db7e694…c8e4`、config `sha256:5283c65c…c8c5`；远端 Critical/High/Secrets=0 | 旧 `b2887d3…@sha256:c491f6a…d1ed` 仍是当前预生产；禁止覆盖 tag、使用 `latest` 或提前部署 |
 | 阿里云预生产联调 | `POST_GATE4_PATCH_SMOKE_PASS / ACCOUNT_ISSUES_REPORTED` | app → worker → Nginx 历史切换通过；9/13 用户反馈健康可达、部分账号登录成功，另有 401 和 User/Driver 关联缺口 | 真机账号问题未闭环；新双端代码未部署，不能宣布 iOS 修复完成 |
 | 本地 Docker Desktop | `DATA_MOVED_TO_D_NTFS_BACKUP_RETAINED` | `D:\DockerDesktop\data\DockerDesktopWSL` | 镜像、版本、容器与卷核验通过；完整 VHDX 备份保留，不影响生产架构 |
 | 既有预生产成果审查 | `RUNTIME_FINAL_CONSISTENCY_PASS` | [RDS 迁移与权限证据](2026-08-05-gate3r-rds-preprod-migration-permissions.md) | 0805 的 9 migration 与权限事实只作历史证据；当前预生产以本表 10 migration 状态为准 |
@@ -40,6 +40,48 @@ Gate 4 与既有 main 交接保持完成；`main == origin/main == d9cdf2bd36165
 | Gate 4 G4-5 | `FINAL_PASS_WITH_CONTROLLER_EXCEPTION` | T1-A～T6 已完成；运行身份、migration、真实依赖、业务/观测和恢复路径通过，未决 P0/P1=0 | 保留维护窗口超时、migration 时间缺失、自签名证书和 Edge 等效布局边界 |
 | Gate 4 总闸门 | `PASS` | G4-1～G4-5 已通过；G4-5 含一次性主控例外 | develop/main 主线交接、main 推送和独立全量验证均已完成；仍不等于正式生产上线 |
 | Gate 4 证据与主线交接 | `EVIDENCE_FROZEN / AUDIT_WARN_ACCEPTED / DEVELOP_PUSHED / MAIN_PUSHED / MAIN_FULL_VALIDATION_PASS` | ZIP SHA-256 `988b1342…bcf0`；审计 P0/P1=0、P2=1；`main == origin/main == d9cdf2b…`；main 验证 813/7、lint、tsc、31/31 build、Prisma、制品 5/5、diff/clean PASS | 主线交接退出；正式生产必须使用独立任务卡和逐项授权 |
+
+## 2026-09-17 main 提升、不可变镜像与阶段 4 配置/ACL
+
+### 冻结身份与工程验证
+
+| 项目 | 稳定事实 |
+|---|---|
+| develop | `develop == origin/develop == 14537ddaf92182b2f68308e66503d262490ce1e1` |
+| main | `main == origin/main == 85bcfa534e5a3525f2bf84e0628bac4942559120`；双亲为 `d9cdf2bd…` 与 `14537dda…` |
+| 应用代码 | main 的 `feature-admin-workflow` tree 为 `d4b38e4ea4136e18170137580f872180eea90a52`，与审计候选 `40b4a0fca3c9f9b4cfd392341f89663fdbbcb418` 一致 |
+| main 验证 | 全量测试、lint、TypeScript、生产构建 32/32、`git diff --check` 全部 PASS；无 Schema/migration 变化 |
+| 当前预生产 | 仍为 `b2887d3718f34bf3cc068d07b505d33065e77c7c@sha256:c491f6a48007b86b22af2c6a4f514ba94167e33f046270b52102d1ed`，未因 main 提升自动变化 |
+
+### 不可变镜像
+
+```ini
+SOURCE_SHA=RC_TAG=OCI_REVISION=40b4a0fca3c9f9b4cfd392341f89663fdbbcb418
+INDEX_DIGEST=sha256:0dc8315fb56361fa5afa04cab43d9c890f9c78e882c88070afa3a764dd450e09
+AMD64_DIGEST=sha256:0db7e6940aa554052a773b32966ddf8080399f5538c7ebcd1bc5486ab469c8e4
+CONFIG_DIGEST=sha256:5283c65c98aa6c687ad9de2314b0c1538a69e1d632ac49a89294fb127b6ac8c5
+VULNERABILITY_SCAN_CRITICAL_HIGH=0
+SECRET_SCAN=0
+```
+
+- 漏洞报告 SHA-256：`4f6c90b4eb6f2b2fff0dbc4595b7e10371dedcbc982ec1e6c0b7b95d73a545a8`。
+- 秘密扫描报告 SHA-256：`6e5d521e5ee0f878f94d2bc466629549cdc6745249f4b7648744e9668c719d90`。
+- 上述结论仅绑定精确 digest；禁止覆盖 tag、使用 `latest` 或把治理提交当作 OCI revision。
+
+### 阶段 4：邀请密钥与最小 ACL
+
+- 独立核验结论：`PASS_CONFIG_AND_ACL_ONLY / STAGE4_CAN_CLOSE`。
+- 64 字符邀请密钥仅写入 app 预生产配置，文件保持 `rcdops:rcdops 600`；证据不包含明文，运行中的 app/worker 均未加载。
+- 数据库仅新增冻结的四项权限：`Driver INSERT`、`User INSERT`、`User UPDATE(driverId)`、`User UPDATE(updatedAt)`，四项均验证为 `true`。
+- 越权权限、授权转授、owner 登录能力和 worker 数据库权限继续关闭；4 条条件回退 SQL 已保存。
+- 证据目录：`/srv/rcd-dispatch/backups/stage4-account-entry-20260916T152403Z`。PostgreSQL 客户端仅作为获准工具安装，服务保持 `inactive`，没有服务端进程。
+- 容器未变化、未重启，未执行 migration。注册业务事务、邀请码实际使用和应用加载密钥只能在阶段 6 部署后验证，不能计入阶段 4 PASS。
+
+### 下一闸门与保留风险
+
+阶段 5 Nginx 配置须独立授权；阶段 5 通过后，阶段 6 分阶段部署和双端验收仍须再次独立授权。两项既有非阻断 P2 继续保留：隐藏兼容工具内部仍可切换旧模式；注销请求失败时缺少明确反馈。本次 A8 只同步稳定证据并提交治理文档，不推送、不部署、不重启、不迁移。
+
+大白话：新版代码已经进入 main，新安装包也通过安全检查，邀请码和数据库的最小权限已经安全放好；但正在运行的预生产服务还没换包，也没有读取新密钥。下一步只能先单独批准 Nginx 配置，再另行批准部署和真实注册、登录、退出验收。
 
 ## 2026-09-15 联合候选最终闭环
 
@@ -71,7 +113,7 @@ Gate 4 与既有 main 交接保持完成；`main == origin/main == d9cdf2bd36165
 
 ### 当前结论与未执行事项
 
-联合候选状态为 `MERGED_LOCAL_DEVELOP / DEVELOP_PUSHED / POST_MERGE_PASS / NOT_DEPLOYED`。代码候选 `40b4a0f…`、R69 治理提交 `d04b68b…`、develop 合并点 `7b4c56e…`、已推送的 R70 基线 `a1ac9f477b3628e400b36e89a4dfc5a7d07a0171` 与承载本节的 R71 治理提交严格分开；Git 提交对象不能稳定自引用自身 SHA，因此完整 R71 SHA 只能由获准提交后的 Git 记录与最终交付报告给出。
+截至 R71 的联合候选状态为 `MERGED_LOCAL_DEVELOP / DEVELOP_PUSHED / POST_MERGE_PASS / NOT_DEPLOYED`。代码候选 `40b4a0f…`、R69 治理提交 `d04b68b…`、develop 合并点 `7b4c56e…`、已推送的 R70 基线 `a1ac9f477b3628e400b36e89a4dfc5a7d07a0171` 与承载本节的 R71 治理提交严格分开；后继 main、镜像与阶段 4 状态见本页 2026-09-17 R72 章节。
 
 未执行且未授权：再次推送、合入 main、镜像构建/推送/扫描、真实 Nginx、邀请密钥配置、数据库 ACL/事务或 migration、Redis/Tair、高德、预生产/生产部署及正式生产写操作。下一步如需 main 提升或发布，必须由主控重新裁决；本次 develop 推送权限已经用尽，发布动作不继承该权限。
 
@@ -168,14 +210,14 @@ Gate 4 不新增 G4-6～G4-10 编号，也不重新打开已退出的 G4-1～G4-
 9. **R65 正式生产入口同步完成。** 六份治理文件已形成 `974d6d2a786a9237b0b4b41d3290ffa050f40c32`，登记 main 推送/验证和正式生产 T0 只读任务；未授权任何外部写操作。
 10. **24 小时只读稳定观察仍为可选非阻断项。** 如另行执行，只追加容器健康/重启、单 worker、outbox、SLS、真实依赖、磁盘和到期风险证据，不产生新 Gate 或外部写权限。
 
-## 正式生产发布准备：T0 只读盘点
+## 正式生产发布准备：T0 只读盘点（R65 历史快照）
 
-当前状态：`AUTHORIZED / NOT_STARTED`。这是 Gate 4 之后的独立生产准备阶段，不新增 Gate 4 子编号，也不继承预生产部署授权。
+当前状态：`SUPERSEDED_BY_R72 / BASELINE_REFREEZE_REQUIRED`。以下仅保留 R65 当时的只读任务卡，不得继续作为新任务基线；正式生产任务须按当前 main、R72 文档和精确镜像重新冻结，且不继承任何预生产授权。
 
 ```text
 ROLE=PRODUCTION_RELEASE_T0_READONLY_INVENTORY
-CODE_BASELINE_SHA=d9cdf2bd36165ab3c3e012835c761458b455f61e
-DOCUMENT_BASELINE_SHA=974d6d2a786a9237b0b4b41d3290ffa050f40c32
+HISTORICAL_CODE_BASELINE_SHA=d9cdf2bd36165ab3c3e012835c761458b455f61e
+HISTORICAL_DOCUMENT_BASELINE_SHA=974d6d2a786a9237b0b4b41d3290ffa050f40c32
 PREPROD_REMEDIATION_SHA=b2887d3718f34bf3cc068d07b505d33065e77c7c
 PRODUCTION_BUILD_OR_DEPLOY_AUTHORIZATION=NONE
 MODIFICATION_WHITELIST=EMPTY
@@ -420,8 +462,8 @@ data-model remediation develop commit: c6850df0a85aab601c3034e542a0f0b575c9053e
 data-model remediation branch: feature/v2-dispatch-event-constraint
 data-model remediation worktree: .worktrees/dispatch-event-constraint
 data-model remediation whitelist: prisma/migrations/20260816120000_extend_dispatch_event_outbox_types/{migration.sql,rollback.sql}
-current local/remote develop reference: develop == origin/develop == a1ac9f477b3628e400b36e89a4dfc5a7d07a0171; R65 governance ancestor: 974d6d2a786a9237b0b4b41d3290ffa050f40c32
-formal main/origin-main baseline: d9cdf2bd36165ab3c3e012835c761458b455f61e
+current local/remote develop reference: develop == origin/develop == 14537ddaf92182b2f68308e66503d262490ce1e1; R65 governance ancestor: 974d6d2a786a9237b0b4b41d3290ffa050f40c32
+formal main/origin-main baseline: 85bcfa534e5a3525f2bf84e0628bac4942559120
 post-Gate-4 preprod branch/commit: codex/preprod-login-mobile-remediation @ b2887d3718f34bf3cc068d07b505d33065e77c7c
 post-Gate-4 preprod index/amd64: sha256:c491f6a48007b86b22af2c6a4f514ba94167e33b6dc0e33f046270b52102d1ed | sha256:cde35c27c322090618bb71cd141b25c0ed9a59e5d278822868ba0d2db40de886
 post-Gate-4 rollback source/index: 4d370d664c3710a4a03cb1b665cfdeddc7d32778 | sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d
@@ -434,7 +476,7 @@ parallel worktrees: .worktrees/round2-admin-console | .worktrees/round2-driver-w
 2C merged: feature/v2-observability @ 04aba1798b9ea1d834da56f5e072f936543bafc1 (rebased from 99d6909 with identical patch; ff-only merged; post-merge PASS)
 ```
 
-Gate 3 与 Gate 4 运行证据继续作为历史保留；当前预生产 app/worker 已切换为 `b2887d3…@sha256:c491f6a…d1ed`，Nginx release revision 对齐且原镜像/TLS/端口未变。旧运行/回退镜像、G3E2E 和失败样本不得清理；本次未执行 migration 或基础资料写入。正式 main 仍为 `d9cdf2b…`，不得把预生产 patch SHA 冒充已进入主线。
+Gate 3 与 Gate 4 运行证据继续作为历史保留；当前预生产 app/worker 仍为 `b2887d3…@sha256:c491f6a…d1ed`，Nginx release revision 对齐且原镜像/TLS/端口未变。旧运行/回退镜像、G3E2E 和失败样本不得清理；本次未执行 migration 或基础资料写入。正式 main 已更新为 `85bcfa5…`，但尚未部署；不得把主线提升或新镜像验收冒充运行切换。
 
 ## 真实 E2E 与 H5 新登记
 
