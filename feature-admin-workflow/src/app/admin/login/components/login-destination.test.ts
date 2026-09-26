@@ -42,9 +42,22 @@ describe("resolveLoginDestination", () => {
     );
   });
 
-  it.each(["admin", "dispatcher"])("sends %s to V2 by default", (role) => {
-    expect(resolveLoginDestination({ role })).toBe("/admin/map/v2");
+  it.each(["admin", "dispatcher"])("lets %s choose a workspace by default", (role) => {
+    for (const driverId of [undefined, null, "driver-g3e2e-01"]) {
+      expect(resolveLoginDestination({ role, driverId })).toBe("/");
+    }
   });
+
+  it.each([undefined, null, "driver-g3e2e-01"])(
+    "keeps a driver with binding %j going directly to H5",
+    (driverId) => {
+      for (const next of [undefined, "/", "/admin/map/v2", "//evil.example"]) {
+        expect(resolveLoginDestination({ role: "driver", driverId }, next)).toBe(
+          "/driver/tasks"
+        );
+      }
+    }
+  );
 
   it("preserves a hidden compatibility tool for a dispatcher bookmark", () => {
     expect(
@@ -61,7 +74,7 @@ describe("resolveLoginDestination", () => {
         { role: "dispatcher", driverId: "driver-g3e2e-01" },
         "//evil.example/admin/map"
       )
-    ).toBe("/admin/map/v2");
+    ).toBe("/");
   });
 
   it.each(["system", "ingest", "unknown"])("does not grant interactive access to %s", (role) => {
