@@ -7,7 +7,10 @@ import {
   shouldShowDemoCredentials
 } from "@/lib/auth/public-registration";
 import { isAdminRole } from "@/lib/auth/roles";
-import { resolveSafeLoginPath } from "@/lib/navigation/admin-route-policy";
+import {
+  WORKSPACE_SELECTION_PATH,
+  resolveSafeLoginPath
+} from "@/lib/navigation/admin-route-policy";
 
 import { resolveLoginDestination } from "./components/login-destination";
 import { LoginForm } from "./components/login-form";
@@ -29,7 +32,10 @@ export default async function AdminLoginPage({
   const demoCredentials = shouldShowDemoCredentials()
     ? { account: "admin@dispatch.dev", password: "admin123" }
     : null;
-  const nextPath = resolveSafeLoginPath(resolvedSearchParams.next);
+  const nextPath = resolveSafeLoginPath(
+    resolvedSearchParams.next,
+    WORKSPACE_SELECTION_PATH
+  );
 
   if (currentUser && isAdminRole(currentUser.role)) {
     redirect(resolveLoginDestination(currentUser, nextPath));

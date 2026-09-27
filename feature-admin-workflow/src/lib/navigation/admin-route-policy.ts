@@ -1,6 +1,7 @@
 export const ADMIN_MAP_V2_PATH = "/admin/map/v2";
 export const ADMIN_ORDERS_V2_PATH = "/admin/orders/v2";
 export const DRIVER_TASKS_PATH = "/driver/tasks";
+export const WORKSPACE_SELECTION_PATH = "/";
 
 const LEGACY_TOOL_MODES = ["drivers", "vehicles", "alerts", "logs"];
 
@@ -29,18 +30,21 @@ export function resolveAdminOrdersDestination(mode?: string | string[] | null) {
     : ADMIN_ORDERS_V2_PATH;
 }
 
-export function resolveSafeLoginPath(requestedPath?: string | string[] | null) {
+export function resolveSafeLoginPath(
+  requestedPath?: string | string[] | null,
+  fallback: typeof ADMIN_MAP_V2_PATH | typeof WORKSPACE_SELECTION_PATH = ADMIN_MAP_V2_PATH
+) {
   if (
     typeof requestedPath !== "string" ||
     !requestedPath.startsWith("/") ||
     requestedPath.startsWith("//") ||
     /[\\\u0000-\u0020]/.test(requestedPath)
   ) {
-    return ADMIN_MAP_V2_PATH;
+    return fallback;
   }
 
   if (containsParentDirectorySegment(requestedPath)) {
-    return ADMIN_MAP_V2_PATH;
+    return fallback;
   }
 
   const url = new URL(requestedPath, "https://navigation.invalid");
@@ -70,5 +74,5 @@ export function resolveSafeLoginPath(requestedPath?: string | string[] | null) {
 
   return requestedPath === DRIVER_TASKS_PATH
     ? DRIVER_TASKS_PATH
-    : ADMIN_MAP_V2_PATH;
+    : fallback;
 }

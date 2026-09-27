@@ -29,6 +29,7 @@ vi.mock("@/lib/prisma", () => ({
   }
 }));
 
+import HomePage from "@/app/page";
 import AdminPage from "@/app/admin/page";
 import AdminLoginPage from "@/app/admin/login/page";
 import AdminMapPage from "@/app/admin/map/page";
@@ -44,6 +45,12 @@ import {
 } from "./admin-route-policy";
 
 describe("admin route policy", () => {
+  it("keeps the workspace selection stable when the login page sanitizes it twice", () => {
+    const next = resolveSafeLoginPath(undefined, "/");
+    expect(next).toBe("/");
+    expect(resolveSafeLoginPath(next, "/")).toBe("/");
+  });
+
   it.each([undefined, null, "orders", "unknown", "", ["logs", "orders"]])(
     "retires the default or unsupported order mode %j",
     (mode) => {
@@ -57,6 +64,7 @@ describe("admin route policy", () => {
       expect(resolveAdminOrdersDestination(mode)).toBeNull();
       const path = `/admin/orders?mode=${mode}`;
       expect(resolveSafeLoginPath(path)).toBe(path);
+      expect(resolveSafeLoginPath(path, "/")).toBe(path);
     }
   );
 
@@ -85,6 +93,8 @@ describe("admin route policy", () => {
   ])("maps %s to %s without a redirect loop", (requested, expected) => {
     expect(resolveSafeLoginPath(requested)).toBe(expected);
     expect(resolveSafeLoginPath(expected)).toBe(expected);
+    expect(resolveSafeLoginPath(requested, "/")).toBe(expected);
+    expect(resolveSafeLoginPath(expected, "/")).toBe(expected);
   });
 
   it.each([
@@ -108,6 +118,7 @@ describe("admin route policy", () => {
     "javascript:alert(1)"
   ])("falls back safely for %j", (requested) => {
     expect(resolveSafeLoginPath(requested)).toBe("/admin/map/v2");
+    expect(resolveSafeLoginPath(requested, "/")).toBe("/");
   });
 
   it.each([
@@ -120,6 +131,7 @@ describe("admin route policy", () => {
     "/admin/map/%252e%252e/orders?mode=logs"
   ])("rejects the pre-normalization traversal path %s", (requested) => {
     expect(resolveSafeLoginPath(requested)).toBe("/admin/map/v2");
+    expect(resolveSafeLoginPath(requested, "/")).toBe("/");
   });
 });
 
@@ -175,9 +187,12 @@ describe("admin page routing and navigation", () => {
   });
 
   it.each([
-    ["admin", null, undefined, "/admin/map/v2"],
+    ["admin", null, undefined, "/"],
+    ["dispatcher", null, undefined, "/"],
+    ["dispatcher", "driver-1", undefined, "/"],
+    ["driver", null, undefined, "/driver/tasks"],
     ["dispatcher", null, "/admin/map", "/admin/map/v2"],
-    ["admin", null, "/admin/login", "/admin/map/v2"],
+    ["admin", null, "/admin/login", "/"],
     ["dispatcher", null, "/admin/orders?mode=logs", "/admin/orders?mode=logs"],
     ["driver", "driver-1", undefined, "/driver/tasks"],
     ["driver", "driver-1", "/admin/map", "/driver/tasks"],
@@ -199,6 +214,18 @@ describe("admin page routing and navigation", () => {
       ).rejects.toThrow(`REDIRECT:${target}`);
     }
   );
+
+  it("offers two direct workspace destinations without production demo credentials", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const html = renderToStaticMarkup(React.createElement(HomePage));
+    expect(html).toContain('href="/admin/map/v2"');
+    expect(html).toContain("调度员工作台");
+    expect(html).toContain('href="/driver/tasks"');
+    expect(html).toContain("司机工作台");
+    expect(html).not.toContain('href="/admin/login"');
+    expect(html).not.toContain("admin@dispatch.dev");
+    expect(html).not.toContain("admin123");
+  });
 
   it("renders the login form for an anonymous visitor", async () => {
     const page = await AdminLoginPage({ searchParams: Promise.resolve({}) });
