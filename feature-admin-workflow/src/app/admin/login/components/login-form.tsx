@@ -77,7 +77,7 @@ export function LoginForm({
       <div>
         <h2 className="text-2xl font-semibold text-slate-900">账号登录</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          一个账号通用调度工作台和司机 H5，登录后进入所选页面。
+          司机账号直接进入司机工作台；调度员和管理员可选择工作台。
         </p>
       </div>
 

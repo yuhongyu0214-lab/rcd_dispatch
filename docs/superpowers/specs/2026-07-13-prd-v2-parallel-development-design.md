@@ -1,11 +1,11 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3、第二轮、P2、3A/3B 与 Gate 4 已完成。`main == origin/main == d9cdf2b…`，R65 治理基线为 `974d6d2…`。post-Gate-4 返修 `b2887d3…@sha256:c491f6a…d1ed` 已分阶段部署预生产并通过入口冒烟，未执行 migration，可进入真机测试；它尚未提升到 main 或正式生产。正式生产 T0 仍只授权基于 R65 的只读资源盘点，不授权任何外部写操作。
+> 状态：Gate -1～Gate 4 等历史闸门已退出；Stage 6 现有预生产为 `STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS`，运行 `781a797…@sha256:82ff43b1…530b1d`，没有剩余补测项；正式生产另行冻结范围与授权
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
-> 最新任务：2026-09-16 联合账号/入口候选 `40b4a0f…` 与 R69 治理 `d04b68b…` 已通过 `--no-ff` 合入 `develop @ 7b4c56e…`，合入后全量回归通过；R70 `a1ac9f4…` 已普通快进推送，当前 `develop == origin/develop`。未合入 main 或部署；R71 同步见 §8.4.9，`b2887d3…` 仍为最近已核验运行版本。
+> 最新任务：2026-09-27 R73 按 A8 同步最终验收、登录默认目标和用户例外；代码/镜像/证据与文档基线分开，R73 完整文档 SHA 以承载本计划的治理提交为准；见 §8.4.11
 
 ## 1. 目的
 
@@ -722,14 +722,14 @@ Gate 4 只定义 G4-1～G4-5；退出后不新增 G4-6～G4-10，也不为持续
 
 若中途出现 P0/P1，先保存缺陷与现场证据、返修并重验，不提交未稳定的治理状态。若验收必须先修改跟踪文档才能继续，应暂停并申请新的 A8。
 
-#### 8.4.5 正式生产发布准备（独立阶段；T0 只读盘点已授权）
+#### 8.4.5 正式生产发布准备（R65 历史快照；须按 R72 重新冻结）
 
-本阶段不属于 Gate 4，也不继承 G4-5 的预生产迁移、部署、维护窗口或云资源权限。正式生产 T0 的唯一目标是先形成可核验的资源、价格、备案、可信 HTTPS、隔离、恢复和责任方案；不会购买或创建资源。
+本节只保留 R65 当时的只读任务卡，不属于 Gate 4，也不继承 G4-5 的预生产迁移、部署、维护窗口或云资源权限。其基线已被 R72 主线事实取代；正式生产 T0 若重新启动，必须以当前 main、R72 文档和精确镜像重新冻结，不得直接复用下列历史变量。
 
 ```text
-ROLE=PRODUCTION_RELEASE_T0_READONLY_INVENTORY
-CODE_BASELINE_SHA=d9cdf2bd36165ab3c3e012835c761458b455f61e
-DOCUMENT_BASELINE_SHA=974d6d2a786a9237b0b4b41d3290ffa050f40c32
+HISTORICAL_ROLE=PRODUCTION_RELEASE_T0_READONLY_INVENTORY
+HISTORICAL_CODE_BASELINE_SHA=d9cdf2bd36165ab3c3e012835c761458b455f61e
+HISTORICAL_DOCUMENT_BASELINE_SHA=974d6d2a786a9237b0b4b41d3290ffa050f40c32
 MODIFICATION_WHITELIST=EMPTY
 EXTERNAL_WRITE_AUTHORIZATION=NONE
 ```
@@ -791,7 +791,36 @@ EXTERNAL_WRITE_AUTHORIZATION=NONE
 | develop 远端同步 | `PASS` | R70 `a1ac9f477b3628e400b36e89a4dfc5a7d07a0171` 在确认 `origin/develop == 95a1c06…` 且远端独有提交为 0 后普通快进推送；复核 `develop == origin/develop == a1ac9f4…`，未使用强推 |
 | 发布与外部系统 | `NOT_AUTHORIZED / NOT_EXECUTED` | 未合入 main，未构建/扫描镜像，未运行真实 Nginx、邀请密钥、DB ACL/事务/migration、Redis/Tair、高德、预生产或正式生产写入 |
 
-当前联合状态为 `MERGED_LOCAL_DEVELOP / DEVELOP_PUSHED / POST_MERGE_PASS / NOT_DEPLOYED`。代码候选、R69 治理、develop 合并点、R70 推送基线、R71 治理、运行 SHA 和镜像 digest 分开。下一步如需合入 main 或进入发布前置，继续逐项授权。详细记录见[状态总览](../../status/README.md#2026-09-15-联合候选最终闭环)。
+截至 R71 的联合状态为 `MERGED_LOCAL_DEVELOP / DEVELOP_PUSHED / POST_MERGE_PASS / NOT_DEPLOYED`。代码候选、R69 治理、develop 合并点、R70 推送基线、R71 治理、运行 SHA 和镜像 digest 分开；后继 main、镜像和阶段 4 状态见 §8.4.10。详细记录见[状态总览](../../status/README.md#2026-09-15-联合候选最终闭环)。
+
+#### 8.4.10 main 提升与预生产发布前置（R72）
+
+> 本节为 2026-09-17 历史快照；当时未授权阶段的后继事实见 §8.4.11，不把旧限制误作当前未完成项。
+
+| 闸门 | 结论 | 证据与限制 |
+|---|---|---|
+| R71 远端同步 | `PASS` | `develop == origin/develop == 14537ddaf92182b2f68308e66503d262490ce1e1`；只包含已验收代码历史与治理记录，未强推 |
+| main 提升与回归 | `PASS` | `main == origin/main == 85bcfa534e5a3525f2bf84e0628bac4942559120`；应用 tree `d4b38e4…` 与 `40b4a0f…` 一致；全量测试、lint、TypeScript、32/32 build、diff check 通过 |
+| 不可变镜像 | `PASS / NOT_DEPLOYED` | source/tag/revision `40b4a0f…`；index `sha256:0dc8315f…e09`、amd64 `sha256:0db7e694…c8e4`、config `sha256:5283c65c…c8c5`；远端 Critical/High/Secrets=0 |
+| 阶段 4 邀请密钥 | `PASS_CONFIG_ONLY` | 64 字符密钥仅写 app 配置，文件 `rcdops:rcdops 600`；证据无明文，运行 app/worker 未加载 |
+| 阶段 4 最小 ACL | `PASS_ACL_ONLY` | 仅增加 `Driver INSERT`、`User INSERT`、`User UPDATE(driverId)`、`User UPDATE(updatedAt)`；越权、转授、owner 登录和 worker DB 权限继续关闭；4 条回退 SQL 已保存 |
+| 运行身份 | `UNCHANGED` | 预生产仍为 `b2887d3…@sha256:c491f6a…d1ed`；无容器变化、重启或 migration |
+| 阶段 5～6 | `NOT_AUTHORIZED / NOT_EXECUTED` | 阶段 5 先单独授权 Nginx 配置；通过后才能另行授权分阶段部署与双端验收 |
+
+阶段 4 证据目录为 `/srv/rcd-dispatch/backups/stage4-account-entry-20260916T152403Z`。PostgreSQL 客户端仅作为获准工具安装，服务保持 `inactive`，无服务端进程。阶段 4 PASS 不证明注册事务、邀请码实际使用或应用已加载密钥，这三项必须留到阶段 6 真实部署后验证。两项既有 P2 继续非阻断登记：隐藏工具内部可切换旧模式、注销请求失败缺少明确反馈。
+
+#### 8.4.11 Stage 6 最终验收与 A8 同步（R73）
+
+| 项目 | 结论与边界 |
+|---|---|
+| 固定运行对象 | `781a797c3286c0a5b134a010660a0e85633216fe` / `sha256:82ff43b17a7392b0187e281820a71c2d3557a1506fbd98dad1200ef31f530b1d`；Nginx 原镜像不变，release revision 同步 |
+| 发布 | R1 失败及受控恢复、R2 回退均保留；R3 完成分阶段部署与 15 分钟观察，本阶段没有 migration |
+| 最终最小只读运行 | 北京时间 2026-09-27 15:46:16—15:46:17，17/17 与独立复核通过，单 worker、近 15 分钟 15 成功周期、outbox 全 0 |
+| 用户验收范围 | 四浏览器新版入口 / 当前版本 SLS 已接受；人工派单与布局沿用用户认可结果，注册及纯司机入口按明确例外接受，不新增实测声明 |
+| 阶段裁决 | `STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS`；本轮剩余补测项 0；原采集器 false 保留，最终裁决独立记录 true |
+| 本轮 A8 | 基于 `4868fe53daf37b3c0e9aa6a80a60820355831063` 同步 R73；治理提交、推送和合并须分别授权，本轮未操作线上或数据库 |
+
+完整版本、证据哈希和限制见 [最终验收记录](../../status/2026-09-27-stage6-final-acceptance.md)。此前独立授权已用于预生产实施，不自动继承到新的发布、回退、业务写入或正式生产。历史两项 P2 与外部原始证据边界继续保留。下一任务若涉及主线交接/正式生产，须重新冻结角色、代码、已提交文档、文件/资源范围及授权；只有承载 R73 的已核验完整 Git 提交 SHA 可以充当不可变文档基线。
 
 ## 9. 并行开发纪律
 
@@ -934,7 +963,7 @@ EXTERNAL_WRITE_AUTHORIZATION=NONE
 - 后续追加发现 ETA Top-8 仍会裁掉本轮 A 槽新生成的 delivery cursor，导致可连续进入 B 的订单误报 `ETA_UNAVAILABLE`；已恢复计划池全部 delivery→pickup 必要组合，并补 `buildEtaMatrix()` → `runDispatchV2()` A/B 串联回归。
 - G3-3 本地开发已闭环：司机类事件按受影响门店加载全部活动司机参与比较；相同逻辑计划重试不回收/重建 Assignment 或递增 `planVersion`；outbox 只有持有当前租约的 worker 才计为处理成功；锁忙、Redis 不可用降级、过期快照重算均有独立编排测试。
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
-- 当前工作阶段：Gate 4 `PASS`。G4-1～G4-4 已通过；G4-5 已部署 `4d370d6…@sha256:508dea…453d`，完成 9→10 migration、真实依赖/业务/观测与 T6 审计，并以一次性维护窗口例外裁决 `FINAL_PASS_WITH_CONTROLLER_EXCEPTION`。三个旧 RC 继续拒绝。
+- 当前工作阶段：Stage 6 现有预生产 `STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS`，完整结论见 §8.4.11；Gate 4 等旧阶段保留历史，不重复验收。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
-- 当前执行限制：R65 `974d6d2…` 的正式生产 T0 仍只读；联合候选 `40b4a0f…` 与 R69 治理已合入 `develop @ 7b4c56e…` 并完成合入后回归，R70 `a1ac9f4…` 已普通快进推送且本地/远端 develop 一致，但未合入 main 或部署；真实 Nginx、DB ACL、邀请密钥、镜像和运行状态没有新证据。main 提升和任何外部写入仍须另行批准。
-- 下一动作：如需继续，主控应分别裁决合入 main 或建立新的发布任务；发布任务必须重新冻结代码/文档/镜像身份并逐项批准 ACL、密钥、制品、扫描、部署和真实预生产验收。正式生产 T0 不继承任何预生产权限。
+- 当前执行限制：运行代码 `781a797…`、起始文档 `4868fe5…`、R73 治理提交与证据包分开；本轮 A8 不产生新的推送、代码合并或外部操作授权。
+- 下一动作：本轮无剩余补测。主线交接或正式生产准备另立任务、另定不可变基线与授权；不可重跑已消费的部署/业务脚本。

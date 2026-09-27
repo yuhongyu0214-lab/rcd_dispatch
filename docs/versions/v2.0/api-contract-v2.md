@@ -1,10 +1,10 @@
 # 人车单 V2 API 契约
 
 > 契约版本：`RCD-API-V2.0-R20-20260915`
-> 状态：一号双端、本人司机档案与受邀注册接口已登记；当前只在本地联合候选实现，预生产尚未部署；既有司机任务 DTO 不变
+> 状态：HTTP 契约版本与内容不变；后继 `781a797…` 已部署预生产，Stage 6 注册/纯司机项按用户例外接受，详见 [最终验收记录](../../status/2026-09-27-stage6-final-acceptance.md)；状态更新于 2026-09-27
 > 实施约束：本文件只冻结契约，不含任何代码；TypeScript DTO、错误类型和契约测试在 Gate 2 落地
 > 上游依据：[PRD V2](prd-v2.md) · [数据架构 V2](data-architecture-v2.md) · [项目规则 V2](project-rules-v2.md)
-> 代码事实：本地联合候选 `40b4a0fca3c9f9b4cfd392341f89663fdbbcb418`；最近已核验预生产仍为 `b2887d3718f34bf3cc068d07b505d33065e77c7c`
+> 代码事实：来源联合候选 `40b4a0f…`，当前已验收运行 `781a797c3286c0a5b134a010660a0e85633216fe`；治理/镜像身份单独登记
 
 ## 1. 通用约定
 
@@ -230,7 +230,7 @@ IngestRecord（规范化接入 DTO：字段为 Canonical 命名，由来源侧�
 - `/api/auth/register` 保留 V1 响应，不迁移或删除路径。请求必填 `account`（手机号）、`password`、`name`、`storeId`；受邀模式另必填 `inviteCode`。忽略 `role` / `alsoDriver` 覆盖，固定创建 dispatcher User 并关联 Driver，成功 201 返回 `id/email/phone/name/role/driverId`，不返回密码或邀请码内容。
 - 邀请码为 `v1.<base64url-payload>.<base64url-hmac>`；payload 冻结为 `{ version: 1, phone: string, expiresAt: integer, nonce: string }`。签名密钥只来自服务端 `WORKSPACE_REGISTRATION_INVITE_SECRET`，至少 32 字符；手机号必须与 `account` 一致、`expiresAt` 晚于当前 Unix 秒、nonce 长度 16～128，编码与签名必须规范。邀请码缺失/无效/过期/手机号不匹配或注册跨站返回 403。
 - 参数失败 400、档案/账号冲突 409、未分类错误 500，错误仍为 V1 字符串并带 traceId；没有有效门店或可安全关联档案时不留半注册数据。User/Driver 使用 Serializable 事务原子创建或关联，同手机号唯一约束拒绝重复和并发开户。
-- 未配置合格邀请密钥且未处于显式允许公开注册的开发环境时，页面 `/admin/register` 为 404、POST 注册为 403。预生产 Compose 要求邀请密钥但尚未部署；正式生产公开注册继续关闭，正式生产受邀模式也未配置或授权。产品边界见 [PRD §7.5](prd-v2.md#75-受邀注册2026-09-15-本地候选)。
+- 未配置合格邀请密钥且未处于显式允许公开注册的开发环境时，页面 `/admin/register` 为 404、POST 注册为 403。预生产 Compose 已随获准部署注入 app 专用邀请密钥；正式生产公开注册继续关闭，正式生产受邀模式也未配置或授权。产品边界见 [PRD §7.5](prd-v2.md#75-受邀注册2026-09-15-本地候选)。
 
 ## 3. 核心 DTO（字段级冻结）
 

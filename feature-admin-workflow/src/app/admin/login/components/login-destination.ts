@@ -1,6 +1,7 @@
 import { isAdminRole } from "@/lib/auth/roles";
 import {
   DRIVER_TASKS_PATH,
+  WORKSPACE_SELECTION_PATH,
   resolveSafeLoginPath
 } from "@/lib/navigation/admin-route-policy";
 
@@ -22,5 +23,5 @@ export function resolveLoginDestination(
     return DRIVER_TASKS_PATH;
   }
 
-  return resolveSafeLoginPath(requestedPath);
+  return resolveSafeLoginPath(requestedPath, WORKSPACE_SELECTION_PATH);
 }

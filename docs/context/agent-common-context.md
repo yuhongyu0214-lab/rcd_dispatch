@@ -1,7 +1,7 @@
 # 人车单 V2 Agent 公共上下文（Layer 0）
 
 > 文档类型：`DERIVED / LAYER_0`
-> 上下文版本：`RCD-AGENT-CONTEXT-20260916-R71`
+> 上下文版本：`RCD-AGENT-CONTEXT-20260927-R73`
 > 适用范围：所有新建或重新启动的 Agent；权威范围：仅提供项目目标、当前阶段、公共纪律、模块边界和命令入口
 > 非权威范围：产品行为、Schema、HTTP DTO、枚举、基础设施细节和任务验收标准
 > 冲突处理：以 [文档版本总入口](../versions/README.md) 登记的领域权威为准；无法裁决时立即停止
@@ -11,19 +11,19 @@
 
 人车单调度系统 V2 面向汽车租赁调度，主线是订单接入、实时位置、司机班次、A/B/C 工单时间轴、真实 ETA、调度事务和执行闭环。
 
-Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出；正式主线仍为 `main == origin/main == d9cdf2bd36165ab3c3e012835c761458b455f61e`，R65 治理基线为 `974d6d2a786a9237b0b4b41d3290ffa050f40c32`。post-Gate-4 返修 `b2887d3…@sha256:c491f6a…d1ed` 已分阶段部署预生产：app/单 worker healthy、Nginx revision 对齐且镜像/TLS/端口不变，health/login 200、HTTP 308，未执行 migration，可进入受控真机测试。该 SHA 尚未进入 main。正式生产 T0 仍只授权以 R65 做只读资源盘点；购买、备案、生产资源、镜像、migration、部署及提升 `b2887d3…` 均未授权。
+Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。Stage 6 现有预生产最终结论为 `STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS`：运行 `781a797…@sha256:82ff43b1…530b1d`，最小只读检查 17/17、独立复核通过。Safari/华为/Chrome/Edge 登录入口反馈通过；人工派单与布局沿用用户认可的历史/真机结果，注册和纯司机入口按明确用户例外接受。本轮没有剩余补测项，也没有新增成功注册或纯司机实测声明。
 
-2026-09-13 一号双端来源为 `feature/v2-dual-workspace-accounts @ 463c9ee44352a66ec43b25a1ccb66453ae9826ed`，功能锚点 `37d412c6510012a4ff01c773ab1cb21932e84aef`；其真实 merge 历史已保留在联合候选。来源 worktree 保持只读，不能单独部署或作为新基线。
+当前完整事实见 [Stage 6 最终验收记录](../status/2026-09-27-stage6-final-acceptance.md)。R72 的 main `85bcfa5…` / develop `14537dd…` 是历史主线核验，不能推断登录返修 `781a797…` 已合入主线；本轮未查询远端或合并。旧 `b2887d3…`、`40b4a0f…` 及发布失败/回退现场保留。
 
-2026-09-15 联合账号/入口代码候选 `40b4a0fca3c9f9b4cfd392341f89663fdbbcb418` 与 R69 治理提交 `d04b68bd88c1a45e6075d8fcd418ea998e1aedf4` 已通过 `--no-ff` 合入 `develop @ 7b4c56ec9d020b62f364869cd942e62a8e9f4b70`；R70 治理提交形成 `develop @ a1ac9f477b3628e400b36e89a4dfc5a7d07a0171`。主控随后在确认远端仍为 `95a1c06daa1c373f76f7026dd4bfe71d31a11df0`、无远端独有提交或分叉后执行普通快进推送，当前 `develop == origin/develop == a1ac9f4…`，未使用强推。统一起点为 `974d6d2a786a9237b0b4b41d3290ffa050f40c32`；候选保留账号来源 `463c9ee…` 的真实 merge 历史，并串行加入 V2 默认入口、受邀注册、双端退出和可信原始 URI 精确治理。相对起点 59 路径，无额外代码、Schema/migration。合入前专项 217/217、隔离 HTTP、Chrome 100%、Edge 100%/125% 与独立审计 `APPROVE`；合入后全量 994 passed / 7 expected skipped、lint、tsc、32/32 build 与 diff check 通过。P0/P1=0；隐藏工具内部旧模式切换、退出失败缺少明确反馈为两项 P2。未合入 main、未部署、未执行真实 ACL/数据库、镜像或外部写入；`main == origin/main == d9cdf2b…`，最近运行身份仍为 `b2887d3…`。
+本轮 A8 只授权文档同步，起始文档基线为 `4868fe53daf37b3c0e9aa6a80a60820355831063`；R73 由承载本上下文的治理提交冻结，具体完整 SHA 以 Git 提交身份为准。A8 不自动授权推送或写外部系统。新执行任务仍需明确角色、代码基线、已提交文档基线和白名单。
 
 ## 2. 当前版本与闸门
 
 | 项目 | 当前事实 |
 |---|---|
-| 联合账号与入口代码 | 候选 `40b4a0fca3c9f9b4cfd392341f89663fdbbcb418` 已合入 `develop @ 7b4c56ec9d020b62f364869cd942e62a8e9f4b70`，R70 形成并推送 `develop == origin/develop == a1ac9f477b3628e400b36e89a4dfc5a7d07a0171`；`MERGED_LOCAL / DEVELOP_PUSHED / POST_MERGE_PASS / NOT_DEPLOYED`；59 路径，无额外代码、Schema/migration |
-| 一号双端本地代码 | `feature/v2-dual-workspace-accounts @ 37d412c6510012a4ff01c773ab1cb21932e84aef`；`LOCAL_VALIDATION_PASS / NOT_DEPLOYED`；代码 SHA 不等于后继治理 SHA |
-| 本轮治理与后续 | R71 登记 R70 `a1ac9f4…` 已普通快进推送至 `origin/develop`；代码候选、合并提交、R70 推送基线与承载本节的 R71 治理提交分开。main 合入、DB ACL、密钥、制品、部署和真实预生产验收均须另行授权 |
+| 联合账号与入口代码 | 已部署验收 `781a797c3286c0a5b134a010660a0e85633216fe`；来源 `feature/v2-login-workspace-selection`，与治理 SHA 分开；当前文档工作树的基底不是运行代码 SHA |
+| 一号双端本地代码 | 历史来源 `37d412c… / 463c9ee…` 已融入 `40b4a0f…`，后继登录返修为 `781a797…`；来源分支不单独部署 |
+| 本轮治理与后续 | R73 / A8 文档同步，起点 `4868fe5…`；Stage 6 已收口，R73 文档 SHA 以承载本表的治理提交为准；下一任务不继承已消费的部署或业务写权限 |
 | Gate 3 历史代码候选 | `codex/v2-gate3-app-candidate` |
 | Gate 3 历史本地 SHA | `958afca537b412fb972b6e180561a9b37022834d` |
 | Gate 3 历史远程 SHA | `958afca537b412fb972b6e180561a9b37022834d`，已完成普通快进推送与远端核验 |
@@ -34,30 +34,21 @@ Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出；正式主线仍为 `main 
 | 数据库实施 | 预生产已由 9 条增至 10 条 migration，outbox CHECK 精确允许 17 种事件；app ACL 含 `OrderServicePlan INSERT/SELECT/UPDATE`，worker 零 DB 权限。`rcd_v2_preprod_owner.rolcanlogin=false` 保持；migration 绝对时间缺失已获一次性非阻断裁决，禁止重跑、改元数据或重开 owner 补证 |
 | Gate 3 历史验收状态 | `DEPLOYED / REAL_E2E_PASS / FAULT_ROLLBACK_PASS / FINAL_CONSISTENCY_RUNTIME_PASS`：代码、镜像、运行资源、真实 10 单和故障/回退证据一致，不适用于 Gate 4 新候选 |
 | Gate 3 运行镜像（最近记录） | app/worker 为 `958afca…` → `sha256:13e0…5bff`；Nginx release revision 对齐；更早运行/回退候选继续保留，不得混用；当前健康须在下一轮重新核验 |
-| 基础设施 | 阿里云主线；ECS 上 app/worker/Nginx、自签名 HTTPS、结构化日志、`json-file` 轮转与 LoongCollector `3.2.6` 已验收；SLS 运行/安全日志、查询、脱敏、30/180 天留存、告警、通知和预算通过；正式域名/备案/可信证书延后 |
+| 基础设施 | 阿里云预生产现有 ECS/RDS/Tair/ACR/SLS 架构继续使用；可信 IP HTTPS health/login、当前版本 SLS 采集查询已核验；正式生产域名、备案和发布仍独立 |
 | Gate 3 | `PASS`（2026-08-11 最终裁决） |
 | Gate 4 子闸门 | `G4_1_TO_G4_4_PASS / G4_5_FINAL_PASS_WITH_CONTROLLER_EXCEPTION`；Gate 4 总闸门 `PASS` |
 | Gate 4 镜像 | 已验收远端 index `sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d`；完整 amd64/config 与扫描证据见状态总览；三个旧 RC `4102ee1… / a0c8bbd… / 857705e…` 继续 `REJECTED_DO_NOT_DEPLOY` |
-| post-Gate-4 预生产返修 | `codex/preprod-login-mobile-remediation @ b2887d3718f34bf3cc068d07b505d33065e77c7c`；index `sha256:c491f6a48007b86b22af2c6a4f514ba94167e33b6dc0e33f046270b52102d1ed`、amd64 `sha256:cde35c27c322090618bb71cd141b25c0ed9a59e5d278822868ba0d2db40de886`；Critical/High/Secrets=0，19/19 SQL raw/CR=0，预生产冒烟 PASS、真机测试 READY、migration NO |
-| 主线与下一步 | develop 代码合并点 `7b4c56ec9d020b62f364869cd942e62a8e9f4b70`；`develop == origin/develop == a1ac9f477b3628e400b36e89a4dfc5a7d07a0171`，`main == origin/main == d9cdf2bd36165ab3c3e012835c761458b455f61e`。联合代码已完成合入、回归和 develop 普通推送，但未合入 main 或部署；正式生产 T0 仍只读，文件白名单为空、外部写授权为无 |
+| post-Gate-4 预生产返修 | `b2887d3…` 为历史部署；当前 `781a797…@sha256:82ff43b1…530b1d`，app/worker healthy、单 worker、Nginx running，Stage 6 未执行 migration |
+| 主线与下一步 | 历史 main `85bcfa5…`、R72 文档提交 `4868fe5…`、运行代码 `781a797…` 分开；本轮无补测项，未来主线交接/正式生产另立任务冻结基线与授权 |
 | Railway | 仅历史 Demo 证据，不是生产基线 |
 
-状态变化只认 [项目状态总览](../status/README.md)，文档入口只认 [文档版本总入口](../versions/README.md)。Gate 3/Gate 4 运行证据和失败现场保留；最近已核验 ECS app/worker 为 `b2887d3…@sha256:c491f6a…d1ed`，Nginx revision 对齐，第 10 条 migration 结论不因无迁移部署改写。联合候选已准备双端开户所需的最小 ACL 差异脚本和预生产邀请密钥注入，但脚本、密钥、镜像和部署均未在真实环境执行。上一稳定 `4d370d6…@sha256:508dea…453d` 保留为历史回退；新的联合发布须重新保存部署前 `b2887d3…` 配置。正式生产仍只读，本轮没有执行任何预生产外部变更。
+状态变化只认 [项目状态总览](../status/README.md)，领域与角色入口只认 [文档版本总入口](../versions/README.md)。上述 Gate 3/Gate 4 表项均为历史记录，不能当成当前运行身份；最新运行/例外详见 [Stage 6 最终验收记录](../status/2026-09-27-stage6-final-acceptance.md)。
 
-- G4-2/3：RDS/Tair 无公网入口，ECS 仅开放 80/443 且 SSH 受限；自签名只限预生产。SLS 留存/告警和 2026-08-30 隔离恢复库 9→10→9 演练通过，源预生产库零写入。
-- G4-4/5：固定 RC 扫描与一次性预生产部署 `PASS_WITH_CONTROLLER_EXCEPTION`；恢复点 `3149081194`、配置备份和兼容回退有效。时间例外、扫描时点和正式生产边界见[主计划 §8.4.3](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md#843-g4-5-预生产继续联调方案t6-pass_with_controller_exceptiongate-4-pass)。
+最终只读报告 SHA-256 `4ff3105af777e687612cca6e036b24105fd325c975b4a4da1c9117d6a75c827e`；收口证据 ZIP SHA-256 `6268930bf969ef589aa12afa7b670710d411195dad171109d1e526a4f6c0a502`。采集器的原始 false 由独立最终裁决解释，不覆盖原始结果。已接受的 P2 与证据边界继续保留。
 
-正式生产 T0 使用以下固定 Layer 2：
+正式生产 T0 的旧 R72 任务卡已经是历史输入，不能直接启动新执行。未来任务须重新冻结代码、文档、镜像与范围；购买、备案提交、云资源/配置、migration、部署和生产数据访问需另行授权。生产 RDS、Tair、账号、秘密与数据不复用预生产。
 
-```text
-ROLE=PRODUCTION_RELEASE_T0_READONLY_INVENTORY
-CODE_BASELINE_SHA=d9cdf2bd36165ab3c3e012835c761458b455f61e
-DOCUMENT_BASELINE_SHA=974d6d2a786a9237b0b4b41d3290ffa050f40c32
-MODIFICATION_WHITELIST=EMPTY
-EXTERNAL_WRITE_AUTHORIZATION=NONE
-```
-
-T0 只盘点域名/备案、可信证书、ECS 复用、独立生产 RDS/Tair、ACR/SLS/DNS、成本、恢复与责任。优先低成本安全复用现有计算与公共基建，但生产 RDS、Tair、账号、秘密和数据不得复用预生产。任何购买、备案提交、云资源或配置变更、镜像、migration、部署和生产数据访问均须单独授权。
+大白话：预生产这轮已验收完，旧测试不用重复；这次只更新资料，没有自动上线正式生产或提交代码。
 
 ## 3. 公共模块边界
 
@@ -144,10 +135,5 @@ Agent 只提交本轮交付和验证证据，不自行宣布 Gate 通过。
 
 只有阶段组完成、结论稳定，且用户明确回复“提交并更新文档”取得 A8 文档同步授权后，Agent 才能统一更新相关治理文档。该口令不授权 Git 提交、推送或任何外部环境操作；Git 提交仍须另行批准。若验收中途必须修改跟踪文档才能继续，应暂停并重新申请 A8。
 
-主控在阶段开始和结束时必须复核任务、进度、状态和决策。状态、决策、代码基线或任一角色必读文档发生变化时，应同步更新：
-
-1. 对应领域权威或决策日志；
-2. `docs/status/README.md`；
-3. `docs/versions/README.md` 的版本与角色映射；
-4. 本公共上下文中的当前事实；
-5. `docs/rcd-v2-project-map.canvas`；同步完成前，旧上下文不得继续用于新任务。
+主控在阶段开始和结束时必须复核任务、进度、状态和决策。状态、决策、代码基线或任一角色必读文档发生变化时，应同步更新：对应领域权威或决策日志、`docs/status/README.md`、`docs/versions/README.md` 的版本与角色映射、本公共上下文中的当前事实、`docs/rcd-v2-project-map.canvas`。
+同步完成前，旧上下文不得继续用于新任务。
