@@ -1,7 +1,7 @@
 # 人车单 V2 Agent 公共上下文（Layer 0）
 
 > 文档类型：`DERIVED / LAYER_0`
-> 上下文版本：`RCD-AGENT-CONTEXT-20260927-R73`
+> 上下文版本：`RCD-AGENT-CONTEXT-20260927-R74`（独立获批提交；文档 SHA 以承载本版本的治理提交为准）
 > 适用范围：所有新建或重新启动的 Agent；权威范围：仅提供项目目标、当前阶段、公共纪律、模块边界和命令入口
 > 非权威范围：产品行为、Schema、HTTP DTO、枚举、基础设施细节和任务验收标准
 > 冲突处理：以 [文档版本总入口](../versions/README.md) 登记的领域权威为准；无法裁决时立即停止
@@ -13,9 +13,9 @@
 
 Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。Stage 6 现有预生产最终结论为 `STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS`：运行 `781a797…@sha256:82ff43b1…530b1d`，最小只读检查 17/17、独立复核通过。Safari/华为/Chrome/Edge 登录入口反馈通过；人工派单与布局沿用用户认可的历史/真机结果，注册和纯司机入口按明确用户例外接受。本轮没有剩余补测项，也没有新增成功注册或纯司机实测声明。
 
-当前完整事实见 [Stage 6 最终验收记录](../status/2026-09-27-stage6-final-acceptance.md)。R72 的 main `85bcfa5…` / develop `14537dd…` 是历史主线核验，不能推断登录返修 `781a797…` 已合入主线；本轮未查询远端或合并。旧 `b2887d3…`、`40b4a0f…` 及发布失败/回退现场保留。
+本轮是仓库第一批清理收口：`feature/v2-repository-cleanup-batch1 @ c523fccd7febb06ac15ea379e57e06110aa1ec69`，已提交文档基线 R73 `d14a1d0f3057963c0804e592c89613ee0260e85d`。208 个批准旧文件仅在隔离工作树删除，另补根 README 与忽略规则；正式应用、80 个测试、10 个正向 migration 和 9 个 rollback 均保留。工程 1002/7、32/32 build、HTTP 21/21 通过；用户确认登录、注册、双端切换、退出、布局通过，iOS Safari 退出复测关闭观察项。地图/真实 ETA/GPS 不在本轮范围。
 
-本轮 A8 只授权文档同步，起始文档基线为 `4868fe53daf37b3c0e9aa6a80a60820355831063`；R73 由承载本上下文的治理提交冻结，具体完整 SHA 以 Git 提交身份为准。A8 不自动授权推送或写外部系统。新执行任务仍需明确角色、代码基线、已提交文档基线和白名单。
+用户另行批准 Git 提交后，清理候选已形成为 `0a0b9cd53bf106e3179130e7945da077fbfa3950`；R74 六份治理入口单独提交，文档 SHA 以承载本版本的治理提交为准。状态 `CLEANUP_SCOPED_ACCEPTANCE_PASS / LOCAL_COMMIT_COMPLETE`；未合并、推送或操作服务器，未重新查询远端/云端。本地 main 仍为 `c523fcc…`、develop 为 `8b66ca2…`；清理只在 feature 分支，未进入主线。完整边界见 [状态总览](../status/README.md#repository-cleanup-r74)，Stage 6 运行结论沿用原记录。
 
 ## 2. 当前版本与闸门
 
@@ -23,14 +23,14 @@ Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。Stage 6 现有预生产�
 |---|---|
 | 联合账号与入口代码 | 已部署验收 `781a797c3286c0a5b134a010660a0e85633216fe`；来源 `feature/v2-login-workspace-selection`，与治理 SHA 分开；当前文档工作树的基底不是运行代码 SHA |
 | 一号双端本地代码 | 历史来源 `37d412c… / 463c9ee…` 已融入 `40b4a0f…`，后继登录返修为 `781a797…`；来源分支不单独部署 |
-| 本轮治理与后续 | R73 / A8 文档同步，起点 `4868fe5…`；Stage 6 已收口，R73 文档 SHA 以承载本表的治理提交为准；下一任务不继承已消费的部署或业务写权限 |
+| 本轮治理与后续 | 清理候选 `0a0b9cd53bf106e3179130e7945da077fbfa3950`；R74 的文档 SHA / feature HEAD 以承载本版本的独立治理提交为准；输入文档 R73 `d14a1d0…`。合并和推送另行授权 |
 | Gate 3 历史代码候选 | `codex/v2-gate3-app-candidate` |
 | Gate 3 历史本地 SHA | `958afca537b412fb972b6e180561a9b37022834d` |
 | Gate 3 历史远程 SHA | `958afca537b412fb972b6e180561a9b37022834d`，已完成普通快进推送与远端核验 |
 | Gate 3 历史文档基线 | `PASS` 内容基线 `feature/v2-gate3-review-remediation @ 464ee5d6ffdb435d76b65f9814d82e4666fd84a9`，本地/upstream/GitHub 远程一致 |
 | Gate 3→develop | 交接分支 `b853a7af245942758de1cd46c9a25c384c08ec62`；代码交接合并点 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`，本地/upstream/GitHub 远程一致 |
 | 第二轮与 P2 退出基线 | 2A/2B/2C 代码树锚点 `46813c3ecf4a0df1eaf99bfb3d8d72f7d450193b`；P2 候选 `0e354696…` 已合入 `develop @ 5c2760cea40b975b24d5d2201333ab5048ce1cf0`，合并父提交为 `78a708f…` 与 `0e354696…` |
-| Gate 4 当前代码 | `feature/v2-stabilization @ 4d370d664c3710a4a03cb1b665cfdeddc7d32778`；应用 tree `5188c0efcb96d646a9609b7c47dd624d578841ee`；远端 RC 验收文档/源码可追溯后继为 `7b6a2f472fe089b0a3dddf136b6f71f3b4a7e4f6`，不作为 OCI revision |
+| Gate 4 历史代码 | `feature/v2-stabilization @ 4d370d664c3710a4a03cb1b665cfdeddc7d32778`；应用 tree `5188c0efcb96d646a9609b7c47dd624d578841ee`；远端 RC 验收文档/源码可追溯后继为 `7b6a2f472fe089b0a3dddf136b6f71f3b4a7e4f6`，不作为 OCI revision |
 | 数据库实施 | 预生产已由 9 条增至 10 条 migration，outbox CHECK 精确允许 17 种事件；app ACL 含 `OrderServicePlan INSERT/SELECT/UPDATE`，worker 零 DB 权限。`rcd_v2_preprod_owner.rolcanlogin=false` 保持；migration 绝对时间缺失已获一次性非阻断裁决，禁止重跑、改元数据或重开 owner 补证 |
 | Gate 3 历史验收状态 | `DEPLOYED / REAL_E2E_PASS / FAULT_ROLLBACK_PASS / FINAL_CONSISTENCY_RUNTIME_PASS`：代码、镜像、运行资源、真实 10 单和故障/回退证据一致，不适用于 Gate 4 新候选 |
 | Gate 3 运行镜像（最近记录） | app/worker 为 `958afca…` → `sha256:13e0…5bff`；Nginx release revision 对齐；更早运行/回退候选继续保留，不得混用；当前健康须在下一轮重新核验 |
@@ -39,7 +39,7 @@ Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。Stage 6 现有预生产�
 | Gate 4 子闸门 | `G4_1_TO_G4_4_PASS / G4_5_FINAL_PASS_WITH_CONTROLLER_EXCEPTION`；Gate 4 总闸门 `PASS` |
 | Gate 4 镜像 | 已验收远端 index `sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d`；完整 amd64/config 与扫描证据见状态总览；三个旧 RC `4102ee1… / a0c8bbd… / 857705e…` 继续 `REJECTED_DO_NOT_DEPLOY` |
 | post-Gate-4 预生产返修 | `b2887d3…` 为历史部署；当前 `781a797…@sha256:82ff43b1…530b1d`，app/worker healthy、单 worker、Nginx running，Stage 6 未执行 migration |
-| 主线与下一步 | 历史 main `85bcfa5…`、R72 文档提交 `4868fe5…`、运行代码 `781a797…` 分开；本轮无补测项，未来主线交接/正式生产另立任务冻结基线与授权 |
+| 主线与下一步 | 本地 main `c523fccd7febb06ac15ea379e57e06110aa1ec69`、develop `8b66ca2433fa9a78873bc7fd1b4a4dae680eaa50`；正式应用 tree 相同。清理已在 feature 提交，晋级待授权，按 feature → develop → main，不删分支、不重写历史、不改服务器 |
 | Railway | 仅历史 Demo 证据，不是生产基线 |
 
 状态变化只认 [项目状态总览](../status/README.md)，领域与角色入口只认 [文档版本总入口](../versions/README.md)。上述 Gate 3/Gate 4 表项均为历史记录，不能当成当前运行身份；最新运行/例外详见 [Stage 6 最终验收记录](../status/2026-09-27-stage6-final-acceptance.md)。
@@ -48,7 +48,7 @@ Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。Stage 6 现有预生产�
 
 正式生产 T0 的旧 R72 任务卡已经是历史输入，不能直接启动新执行。未来任务须重新冻结代码、文档、镜像与范围；购买、备案提交、云资源/配置、migration、部署和生产数据访问需另行授权。生产 RDS、Tair、账号、秘密与数据不复用预生产。
 
-大白话：预生产这轮已验收完，旧测试不用重复；这次只更新资料，没有自动上线正式生产或提交代码。
+大白话：本地试用通过的清理和交接资料已分别存档；还没并入主线或上传远端，线上版本没有变化。
 
 ## 3. 公共模块边界
 

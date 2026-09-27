@@ -1,9 +1,9 @@
 # 人车单项目文档版本总入口
 
-> 版本戳：`RCD-DOC-REGISTRY-20260927-R73`
+> 版本戳：`RCD-DOC-REGISTRY-20260927-R74`（独立获批提交；文档 SHA 以承载本版本的治理提交为准）
 > 建立日期：2026-07-13
 > 治理更新时间：2026-09-27
-> 提交整理：R73 按 A8 同步 Stage 6 最终通过及用户范围例外；基于 `4868fe5…`，R73 完整文档 SHA 以承载本入口的治理提交为准，代码 RC `781a797…` 不变
+> 提交整理：R74 按 A8 同步后获独立 Git 提交授权；清理候选 `0a0b9cd53bf106e3179130e7945da077fbfa3950`，六份治理入口另作本提交；输入文档 R73 `d14a1d0…`，不改变运行 RC `781a797…` 或领域契约
 > 归档方式：现行权威集中到 `v2.0/`；已融合或冲突的旧方案从工作树清场，历史由 Git 追溯
 > 可视化导航：[Obsidian 项目全景白板](../rcd-v2-project-map.canvas)（仅作导航，不替代下方权威文档）
 
@@ -31,8 +31,8 @@
 | 构建、部署与回退 | V2.0-r18 | §7.8 登记 R3 发布、R1/R2 恢复回退、固定镜像及最终验收；未执行 migration | [部署指南 V2](v2.0/deployment-guide-v2.md) |
 | 生产运行与恢复 | V2.0-r7（运行规则未变） | 单 worker / 依赖 / HTTPS 最终只读检查通过；不代替正式生产验收 | [运维指南 V2](v2.0/operations-guide-v2.md) |
 | 基础设施决策与替代历史 | V2.0-r3 | INFRA-001～023 已登记；公网 IP 预生产演示获准，正式上线条件不变 | [基础设施决策日志](v2.0/infrastructure-decision-log.md) |
-| 项目当前状态 | 2026-09-27 / R73 | STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS；17/17、四浏览器及用户免复测范围已收口 | [状态总览](../status/README.md) · [最终记录](../status/2026-09-27-stage6-final-acceptance.md) |
-| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260927-R73 | 区分运行代码、证据、R72 起点与 R73 治理提交；本轮无剩余补测 | [Agent 公共上下文](../context/agent-common-context.md) |
+| 项目当前状态 | 2026-09-27 / R74 | CLEANUP_SCOPED_ACCEPTANCE_PASS / LOCAL_COMMIT_COMPLETE；清理候选 0a0b9cd，208 个旧文件、本地工程及用户真机范围通过，未合入/推送 | [清理收口](../status/README.md#repository-cleanup-r74) · [既有预生产记录](../status/2026-09-27-stage6-final-acceptance.md) |
+| Agent 公共上下文 | RCD-AGENT-CONTEXT-20260927-R74 | 区分清理起点 c523fcc、清理提交 0a0b9cd、R73 d14a1d0、本地主线和预生产；R74 文档 SHA 为承载本版本的治理提交 | [Agent 公共上下文](../context/agent-common-context.md) |
 | V1 产品与开发主线 | V1.x | 历史只读 | [V1 历史索引](v1/README.md) |
 
 ## 文档权威顺序（按领域拆分，唯一权威口径）
@@ -78,7 +78,7 @@ HTTP 契约               → v2.0/api-contract-v2.md
 ### 主控 Agent
 
 - 默认必读：[状态总览](../status/README.md)、[应用决策日志](v2.0/application-decision-log.md)、[基础设施决策日志](v2.0/infrastructure-decision-log.md)、[并行开发主计划](../superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md)、[Gate 3-R 计划](../superpowers/specs/2026-07-29-gate3r-infrastructure-baseline-execution-plan.md)。
-- 本轮追加：任务拆分、优先级、分支/SHA、验收报告和 Canvas。
+- 本轮追加：[第一批清理收口](../status/README.md#repository-cleanup-r74)、批准的 208 路径 manifest、仓库外工程/HTTP/用户真机证据、分支/SHA 和 Canvas；六份治理入口以外只读。
 - 不进入上下文：PRD、DTO、Schema 和业务代码细节。
 
 ### 前端 Agent
@@ -124,11 +124,19 @@ HTTP 契约               → v2.0/api-contract-v2.md
 - 允许：官方控制台和文档的 Describe/List/Query、价格与续费核验、购物车预览，以及域名/备案资格、可信证书、ECS/RDS/Tair/ACR/SLS/DNS 复用边界和恢复责任盘点；所有输出必须脱敏。
 - 禁止：购买或付款、提交备案、创建/修改/删除云资源、RAM/安全组/白名单/DNS/证书变更、构建或推送镜像、migration、部署、重启、生产数据连接及秘密读取。任何外部写操作必须由主控逐项重新授权。
 
-### 当前联合账号与入口任务
+### 当前仓库清理任务（R74，本地提交收口）
+
+- 角色：主控 / A8 治理同步。工作树 `C:/Users/yhy/.codex/worktrees/repo-cleanup-batch1/人车单生态-v2`，分支 `feature/v2-repository-cleanup-batch1`。
+- 代码起点：`c523fccd7febb06ac15ea379e57e06110aa1ec69`；清理候选：`0a0b9cd53bf106e3179130e7945da077fbfa3950`；输入文档基线 R73：`d14a1d0f3057963c0804e592c89613ee0260e85d`。R74 文档 SHA / feature HEAD 以承载本版本的独立治理提交为准。本地 main 等于起点，develop 为 `8b66ca2433fa9a78873bc7fd1b4a4dae680eaa50`；正式应用 tree 相同且已包含 `781a797…`。本轮未核验远端。
+- 状态：`CLEANUP_SCOPED_ACCEPTANCE_PASS / LOCAL_COMMIT_COMPLETE`。208 删除 + 根 README/.gitignore 已在沙箱验收并形成清理提交；正式应用、现行测试、Schema/migration 不变。用户 iOS Safari 退出复测通过，地图/真实 ETA/GPS 不在范围。
+- A8 白名单：`AGENTS.md`、`docs/context/agent-common-context.md`、`docs/versions/README.md`、`docs/status/README.md`、`docs/superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md`、`docs/rcd-v2-project-map.canvas`。
+- 交接：[状态总览](../status/README.md#repository-cleanup-r74) 登记完整范围、日志与哈希。用户已单独批准本地 Git 提交，清理与治理分开追溯；后续按 feature → develop → main 晋级须另行授权，不自动推送、删分支或改服务器。
+
+### 已完成的联合账号与入口任务（Stage 6 历史）
 
 Stage 6 已按用户确认的范围及例外收口：`STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS`。当前运行来源 `781a797c3286c0a5b134a010660a0e85633216fe`、index `sha256:82ff43b17a7392b0187e281820a71c2d3557a1506fbd98dad1200ef31f530b1d`。Safari/华为/Chrome/Edge 新版入口反馈通过；人工派单与布局沿用已认可结果，注册/纯司机按用户免复测决定接受。最小只读运行 17/17、独立复核通过；完整证据与限制见 [最终记录](../status/2026-09-27-stage6-final-acceptance.md)，不得把未执行项目写成新增实测。
 
-产品默认入口见 PRD §9.1.1，HTTP 仍为 API r20，应用决策 APP-009，部署历史及当前身份见部署指南 §7.8。R73 从 R72 文档提交 `4868fe53daf37b3c0e9aa6a80a60820355831063` 同步，完整文档 SHA 以承载本入口的治理提交为准；代码 RC 不变。R72 的 main `85bcfa5…` / develop `14537dd…` 是历史核验，R73 文档本身不表示登录返修已合入主线。新 Agent 执行任务须另有代码、已提交文档和精确白名单，不能用工作区内容或代码 RC 冒充不可变文档基线。
+产品默认入口见 PRD §9.1.1，HTTP 仍为 API r20，应用决策 APP-009，部署历史及运行身份见部署指南 §7.8。R73 从 R72 文档提交 `4868fe53daf37b3c0e9aa6a80a60820355831063` 同步，实际治理提交为 `d14a1d0f3057963c0804e592c89613ee0260e85d`，代码 RC 不变。R72 的 main `85bcfa5…` / develop `14537dd…` 是历史核验；后续本地主线身份见 R74 清理任务，不能把未提交清理写成已进入主线。新 Agent 执行任务须另有代码、已提交文档和精确白名单，不能用工作区内容或代码 RC 冒充不可变文档基线。
 
 ### Gate 4 历史入口与 post-Gate-4 已部署候选
 
@@ -196,7 +204,7 @@ remote commit: 958afca537b412fb972b6e180561a9b37022834d
 
 ## 当前闸门与下一步
 
-以下 1～8 为按时序保留的历史闭环，第 9 项为当前 Stage 6 结论；历史“未部署/下一步”不能覆盖最新状态。
+以下 1～9 为按时序保留的已完成阶段，第 9 项仍是最近已接受的预生产结论，第 10 项是本轮本地清理；历史“未部署/下一步”不能覆盖最新状态。
 
 1. 权威文档内容审查、工程回归、9 个 migration 指纹和当前/上一/回退镜像追溯已经完成；`958afca…@sha256:13e0…5bff` 已进入 ACR 并在 ECS app/worker 运行，Nginx 仅刷新同一 release revision，预生产 9 个 migration 与数据库最小权限子闸门继续有效。
 2. 新候选的 Schema/migration tree 与完成一次性空 PostgreSQL 演练的旧冻结候选完全相同；原有 9 个正向 migration、最终 Schema、8 个 rollback 和五类安全护栏结论继续有效。
@@ -207,7 +215,8 @@ remote commit: 958afca537b412fb972b6e180561a9b37022834d
 7. R68 联合候选 `bf9aeef…` 完成工程、113 项隔离 HTTP 和当时的独立审计，但真实 Chrome/Edge 浏览器矩阵受控制连接故障阻塞；该历史状态已由 R69 后继候选取代。
 8. 联合候选 `40b4a0f…` 已完成受邀注册、双端退出与原始 URI 入口 P1 返修，独立专项 217/217、全量 994/7、lint/tsc/build、隔离 HTTP、Chrome/Edge 与最终独立审计通过；P0/P1=0、P2=2。其历史已进入 `develop/origin/develop @ 14537dd…` 和 `main/origin/main @ 85bcfa5…`，精确镜像通过扫描；阶段 4 配置/ACL 已关闭但尚未部署。
 
-9. Stage 6 当前结论 `STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS`，固定 `781a797…@sha256:82ff43b1…530b1d`，无剩余补测项；R73 治理提交只更新文档，不表示已推送、合并登录返修或更改外部系统。下一主线交接/正式生产任务另行冻结基线与授权。
+9. Stage 6 结论 `STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS`，固定 `781a797…@sha256:82ff43b1…530b1d`，无剩余补测项；R73 治理提交 `d14a1d0…` 单独追溯，正式生产仍另行冻结基线与授权。
+10. R74 本地清理 `CLEANUP_SCOPED_ACCEPTANCE_PASS / LOCAL_COMMIT_COMPLETE`：208 个批准旧文件删除、根入口整理、1002/7、32/32 build、HTTP 21/21 及用户限定真机范围通过。清理候选 `0a0b9cd…` 与六份治理入口分开提交，未合并或推送；不删除历史分支、不重写 Git 历史、不改服务器。
 
 状态事实和阻断项统一在[状态总览](../status/README.md)维护；状态文档不得修改领域契约。
 

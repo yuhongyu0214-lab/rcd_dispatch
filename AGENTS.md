@@ -61,7 +61,9 @@ Gate -1 基线整理（已通过，develop @ 37ee8a3）
 → 第二轮并行（Web / 司机接口 / 观测）→ 迁移与端到端验证 → Gate 4 稳定化
 ```
 
-- 每个 Gate 通过验收后才能创建下一阶段分支；不得提前建分支。
+- 当前任务（2026-09-27 / R74）：`feature/v2-repository-cleanup-batch1` 从 `c523fccd7febb06ac15ea379e57e06110aa1ec69` 清理，输入文档基线 R73 `d14a1d0f3057963c0804e592c89613ee0260e85d`。208 个批准旧快照/预览文件及根 README/.gitignore 已形成清理提交 `0a0b9cd53bf106e3179130e7945da077fbfa3950`，正式应用未改；工程 1002/7、32/32 build、HTTP 21/21 及用户限定真机范围通过，iOS Safari 退出复测通过。用户在 A8 后另行批准本地 Git 提交，状态 `CLEANUP_SCOPED_ACCEPTANCE_PASS / LOCAL_COMMIT_COMPLETE`；R74 六份治理入口独立提交，文档 SHA / feature HEAD 以承载本版本的治理提交为准。未合并、推送或操作服务器；详见 [状态总览](docs/status/README.md#repository-cleanup-r74)。
+- 当前本地 main 为 `c523fccd7febb06ac15ea379e57e06110aa1ec69`，develop 为 `8b66ca2433fa9a78873bc7fd1b4a4dae680eaa50`，正式应用 tree 相同且已包含 `781a797…`。本轮未核验远端；清理只在 feature 提交，未进入主线。最近已接受的预生产身份仍见 [Stage 6 最终记录](docs/status/2026-09-27-stage6-final-acceptance.md)：`781a797…@sha256:82ff43b1…530b1d`，不表示本轮重新检查线上。
+- 每个 Gate 通过验收后才能创建下一阶段分支；不得提前建分支。以下带日期条目为历史快照，其中“当前/下一步”不覆盖以上 R74 状态或 Stage 6 最终记录。
 - Gate 3 历史代码/ACR/预生产候选为 `codex/v2-gate3-app-candidate @ 958afca537b412fb972b6e180561a9b37022834d` 与 index `sha256:13e0f3c4c10599867bc8a956f9332890826edcebdbc00cef9ec826fca2415bff`；更早运行/回退候选继续保留，不得使用 `latest` 或混用候选。
 - Gate 3、第二轮、3A/3B 与 Gate 4 已退出。Gate 4 证据包、R63～R65 治理以及当时的 `main @ d9cdf2bd36165ab3c3e012835c761458b455f61e` 作为历史交接证据保留。2026-09-11 的 post-Gate-4 返修候选 `b2887d3718f34bf3cc068d07b505d33065e77c7c` 与 index `sha256:c491f6a48007b86b22af2c6a4f514ba94167e33b6dc0e33f046270b52102d1ed` 仍是当前预生产运行身份；app、单 worker 和 Nginx release revision 对齐，Nginx 镜像、TLS 与端口不变，未执行 migration，HTTPS 健康/登录与 HTTP 308 通过。它不是当前 main 或新发布 RC。正式生产 T0 的 R65 基线已被 R72 主线事实取代，后续须重新冻结；任何购买、备案、生产资源、迁移或部署仍须另行授权。代码 SHA、运行 digest、证据包、主线 SHA 与治理 SHA 必须分开。
 - 2026-09-13 一号双端来源为 `feature/v2-dual-workspace-accounts @ 463c9ee44352a66ec43b25a1ccb66453ae9826ed`，功能锚点 `37d412c6510012a4ff01c773ab1cb21932e84aef`；用户批准的工作台能力以 PRD §7.4 和 API r19 为准，H5 本人任务与服务账号隔离保持。该来源已按真实 merge 拓扑进入后续联合候选，来源 worktree 不得修改或单独部署。
@@ -71,7 +73,7 @@ Gate -1 基线整理（已通过，develop @ 37ee8a3）
 
 ## 项目架构【工程铁律：继续有效】
 
-- **多 worktree 并行开发**，每个 `feature-*` 目录是一个独立的 git worktree
+- **多 worktree 并行开发**，真实工作树以 `git worktree list` 为准，不能仅凭 `feature-*` 目录名称判断；本次清理的 `feature-map-board/`、`feature-order-import/` 是旧快照，非活跃工作树
 - 正式应用代码位于 `feature-admin-workflow/`
 - 包管理器锁定 `pnpm@10.11.0`，禁止用 npm/yarn
 - API 统一响应格式：`lib/api-response.ts` 导出 `ok()` / `fail()`，含 `traceId`（V2 结构化 error 见 API 契约 V2）

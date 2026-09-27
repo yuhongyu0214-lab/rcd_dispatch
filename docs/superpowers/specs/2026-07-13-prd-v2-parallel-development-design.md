@@ -1,11 +1,11 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：Gate -1～Gate 4 等历史闸门已退出；Stage 6 现有预生产为 `STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS`，运行 `781a797…@sha256:82ff43b1…530b1d`，没有剩余补测项；正式生产另行冻结范围与授权
+> 状态：仓库第一批清理 `CLEANUP_SCOPED_ACCEPTANCE_PASS / LOCAL_COMMIT_COMPLETE`，R74 独立获批提交；Stage 6 最近已接受的预生产仍为 `781a797…@sha256:82ff43b1…530b1d`，本轮不操作线上
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
-> 最新任务：2026-09-27 R73 按 A8 同步最终验收、登录默认目标和用户例外；代码/镜像/证据与文档基线分开，R73 完整文档 SHA 以承载本计划的治理提交为准；见 §8.4.11
+> 最新任务：2026-09-27 R74 同步后获独立 Git 提交授权；清理候选 0a0b9cd53bf106e3179130e7945da077fbfa3950，输入文档 R73 d14a1d0，R74 文档 SHA 以承载本版本的治理提交为准；见 §8.4.12，原 Stage 6 证据见 §8.4.11
 
 ## 1. 目的
 
@@ -822,6 +822,19 @@ EXTERNAL_WRITE_AUTHORIZATION=NONE
 
 完整版本、证据哈希和限制见 [最终验收记录](../../status/2026-09-27-stage6-final-acceptance.md)。此前独立授权已用于预生产实施，不自动继承到新的发布、回退、业务写入或正式生产。历史两项 P2 与外部原始证据边界继续保留。下一任务若涉及主线交接/正式生产，须重新冻结角色、代码、已提交文档、文件/资源范围及授权；只有承载 R73 的已核验完整 Git 提交 SHA 可以充当不可变文档基线。
 
+#### 8.4.12 仓库第一批清理与本地沙箱收口（R74）
+
+角色为主控 / A8 治理同步及随后独立获批的本地 Git 提交。分支 `feature/v2-repository-cleanup-batch1`，工作树 `C:/Users/yhy/.codex/worktrees/repo-cleanup-batch1/人车单生态-v2`；清理起点为 `c523fccd7febb06ac15ea379e57e06110aa1ec69`，清理候选为 `0a0b9cd53bf106e3179130e7945da077fbfa3950`，输入文档基线 R73 为 `d14a1d0f3057963c0804e592c89613ee0260e85d`。R74 文档 SHA / feature HEAD 以承载本版本的治理提交为准。当前本地 main 等于起点，develop 为 `8b66ca2433fa9a78873bc7fd1b4a4dae680eaa50`，正式应用 tree 相同；本轮未核验远端。
+
+1. 批准范围仅 `.superpowers/` 24 个、`feature-map-board/` 120 个、`feature-order-import/` 64 个旧文件，共 208 个精确路径；另补根 README 和忽略规则。不删除正式 `feature-admin-workflow/`、现行测试、Schema/migration、有效治理档案、活跃 worktree 或分支，不改写历史。
+2. 已有工程证据为全量 1002 passed / 7 expected skipped、lint、TypeScript、32/32 build、Prisma validate、制品/worker 15/15、HTTP 21/21 PASS；208 路径、正式应用零差异及 8 份工程日志哈希复核通过。本轮 A8 不重跑工程验收。
+3. 用户限定测试登录、注册、双端切换、退出、布局；用户反馈这些项目通过，并确认 iOS Safari 重新看到退出按钮且正常退出。退出观察项记 `CLOSED_BY_USER_RETEST_PASS`，不声称 Agent 亲测或已确认缓存根因；未修改应用代码。
+4. 地图、真实 ETA、GPS、云端依赖和真实派单不在本轮范围；本地模拟数据不证明真实业务联调。Stage 6 历史例外与既有 P2 保留，不用沙箱结果覆盖预生产记录。
+5. 本轮 A8 白名单为 `AGENTS.md`、`docs/context/agent-common-context.md`、`docs/versions/README.md`、`docs/status/README.md`、本计划及 `docs/rcd-v2-project-map.canvas`。仅同步这六份治理入口，不修改领域契约，不暂存、提交、合并、推送、构建镜像或操作服务器。
+6. A8 同步后用户另行批准 Git 提交，当前状态 `CLEANUP_SCOPED_ACCEPTANCE_PASS / LOCAL_COMMIT_COMPLETE`。清理候选与六份治理入口分别提交；本次提交授权不含合并或推送。之后须另行授权依 `feature → develop → main` 验证并晋级。推送前重新核验远端；变化/分叉、白名单外差异、正式应用变化或证据不一致即停止，不强推。
+
+完整身份、恢复起点和仓库外证据哈希见 [状态总览 R74](../../status/README.md#repository-cleanup-r74)。大白话：本地旧文件清理后的试用通过了，现在只整理交接材料，主线和线上并没有自动更新。
+
 ## 9. 并行开发纪律
 
 - 同时最多三条实现线，另保留一条主控线。
@@ -963,7 +976,7 @@ EXTERNAL_WRITE_AUTHORIZATION=NONE
 - 后续追加发现 ETA Top-8 仍会裁掉本轮 A 槽新生成的 delivery cursor，导致可连续进入 B 的订单误报 `ETA_UNAVAILABLE`；已恢复计划池全部 delivery→pickup 必要组合，并补 `buildEtaMatrix()` → `runDispatchV2()` A/B 串联回归。
 - G3-3 本地开发已闭环：司机类事件按受影响门店加载全部活动司机参与比较；相同逻辑计划重试不回收/重建 Assignment 或递增 `planVersion`；outbox 只有持有当前租约的 worker 才计为处理成功；锁忙、Redis 不可用降级、过期快照重算均有独立编排测试。
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
-- 当前工作阶段：Stage 6 现有预生产 `STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS`，完整结论见 §8.4.11；Gate 4 等旧阶段保留历史，不重复验收。
+- 当前工作阶段：本地清理沙箱 `CLEANUP_SCOPED_ACCEPTANCE_PASS / LOCAL_COMMIT_COMPLETE`，R74 独立治理提交收口，见 §8.4.12；Stage 6 及 Gate 4 历史结论保留，不把沙箱反馈写成新增预生产验收。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
-- 当前执行限制：运行代码 `781a797…`、起始文档 `4868fe5…`、R73 治理提交与证据包分开；本轮 A8 不产生新的推送、代码合并或外部操作授权。
-- 下一动作：本轮无剩余补测。主线交接或正式生产准备另立任务、另定不可变基线与授权；不可重跑已消费的部署/业务脚本。
+- 当前执行限制：清理起点 `c523fcc…`、清理候选 `0a0b9cd…`、输入文档 R73 `d14a1d0…`、R74 治理提交、运行代码 `781a797…` 和证据包分开；Git 提交来自独立授权，不扩展为合并、推送或外部操作权限。
+- 下一动作：另行批准后依 feature → develop → main 逐段验证与晋级，推送独立授权；不删除分支、不重写历史、不触碰服务器。

@@ -1,10 +1,14 @@
 # 人车单项目状态总览
 
-> 状态快照：2026-09-27 / R73
+> 状态快照：2026-09-27 / R74（独立获批提交；文档 SHA 以承载本版本的治理提交为准）
 > 用途：说明项目做到哪一步、还差什么
 > 非权威范围：产品行为、状态机、Schema、枚举、HTTP 契约、技术栈和生产架构
 
 ## 一句话结论
+
+仓库第一批清理为 `CLEANUP_SCOPED_ACCEPTANCE_PASS / LOCAL_COMMIT_COMPLETE`：隔离工作树删除批准的 208 个旧文件，补根入口和忽略规则，正式应用零改动；工程与约定的本地真机范围通过。用户已确认 iOS Safari 显示退出按钮且正常退出，观察项关闭。用户在 A8 同步后另行批准 Git 提交，清理候选为 `0a0b9cd53bf106e3179130e7945da077fbfa3950`，R74 六份治理入口单独提交；文档 SHA 以承载本版本的治理提交为准。未合并、推送或操作服务器。
+
+以下预生产事实沿用已接受的 Stage 6 记录，本轮没有重新查询云端，也不以本地注册/司机试用结果改写当时的验收例外。
 
 Stage 6 现有预生产验收已完成，结论为 `STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS`。当前运行代码 `781a797c3286c0a5b134a010660a0e85633216fe`、app/worker 镜像 `sha256:82ff43b17a7392b0187e281820a71c2d3557a1506fbd98dad1200ef31f530b1d`；最终只读检查 17/17 和独立复核通过。登录入口新版已获 Safari、华为、Chrome、Edge 实际通过反馈；人工派单沿用用户认可的历史结果，注册/纯司机入口按用户例外接受，布局沿用真机体验，不再重复测试。详见 [Stage 6 最终验收记录](2026-09-27-stage6-final-acceptance.md)。本轮 A8 仅同步文档；治理提交、远端推送和任何线上操作均须分别授权，正式生产不在本次结论范围。
 
@@ -12,18 +16,20 @@ Stage 6 现有预生产验收已完成，结论为 `STAGE6_FINAL_PASS_WITH_USER_
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
-| 文档治理 | `R73_A8_SYNC / GOVERNANCE_SHA_IS_COMMIT_IDENTITY` | 起始文档基线 `4868fe5…`；同步最终验收、范围例外、版本入口与角色上下文 | R73 完整 SHA 以承载本行的治理提交为准；推送状态须单独核验 |
-| 联合账号与入口候选 | `PREPROD_DEPLOYED / STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS` | 登录返修 `781a797…`，固定镜像 `sha256:82ff43b1…530b1d`；新版入口已复验 | 不把预生产部署当成已合入 develop/main 或正式生产发布 |
+| 文档治理 | `R74_A8_SYNC / LOCAL_COMMIT_COMPLETE` | 输入文档基线 R73 `d14a1d0…`；清理候选 `0a0b9cd…`，6 份治理入口独立提交 | R74 文档 SHA / feature HEAD 以承载本版本的治理提交为准；合并和推送另行授权 |
+| 仓库第一批清理 | `CLEANUP_SCOPED_ACCEPTANCE_PASS / LOCAL_COMMIT_COMPLETE` | [范围、工程与用户真机证据](#repository-cleanup-r74)；208 删除 + 根 README/.gitignore；应用零差异 | 另行授权后按 feature → develop → main 晋级；不删分支、不动服务器 |
+| 当前本地主线 | `MAIN_C523FCCD / DEVELOP_8B66CA24` | main 包含 develop 和 `781a797…`，两主线的正式应用 tree 相同 | 本轮未重新核验远端；清理只在 feature 分支，不在 main/develop 中 |
+| 联合账号与入口候选 | `PREPROD_DEPLOYED / STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS` | 登录返修 `781a797…`，固定镜像 `sha256:82ff43b1…530b1d`；新版入口已复验 | 来源已进入本地主线；不等同于本轮清理已合入或正式生产发布 |
 | 一号双端来源 | `INTEGRATED / SUPERSEDED_BY_781A797` | `37d412c… / 463c9ee…` → 联合候选 `40b4a0f…` → 登录返修 `781a797…`，来源历史保留 | 不单独部署来源分支或混用代码、文档与镜像 SHA |
 | 邀请码注册与双端退出 | `PREPROD_DEPLOYED / USER_SCOPE_EXCEPTION_RECORDED` | app 邀请配置随部署加载；退出与入口反馈保留；注册预检因历史司机停止，用户免于注册/纯司机再验收 | 没有新的成功开户声明，不重置历史档案或开放公开注册 |
 | post-Gate-4 预生产返修 | `B2887D3_HISTORICAL / SUPERSEDED` | 9/11 `b2887d3…` 的部署、回退和扫描记录保留；当前运行版本见 Stage 6 | 不再当成当前运行身份 |
-| 正式生产 T0 | `NOT_RELEASED / BASELINE_REFREEZE_REQUIRED` | Stage 6 仅现有预生产；R72 main `85bcfa5…` 为历史主线记录，未声称已包含 `781a797…` | 新任务重新冻结代码、文档、镜像和资源授权 |
+| 正式生产 T0 | `NOT_RELEASED / BASELINE_REFREEZE_REQUIRED` | Stage 6 仅现有预生产；当前本地 main `c523fcc…` 已包含 `781a797…`，不自动形成生产授权 | 新任务重新冻结代码、已提交文档、镜像和资源授权 |
 | Gate 3 历史应用候选 | `958AFCA_GATE3_ACCEPTED_DEVELOP_HANDOFF_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 只作历史与追溯，不再表述为当前预生产运行身份 |
 | 依赖安全 | `781A797_CRITICAL_0_HIGH_0_SECRET_0` | 固定 index `sha256:82ff43b1…530b1d`；19 项 SQL 与来源一致；构建证据单独保留 | 仅对该精确制品与扫描时点成立，不作持续零漏洞保证 |
 | migration 指纹 | `PREPROD_10_APPLIED / OUTBOX_CHECK_17_PASS` | 第 10 条 `20260816120000_extend_dispatch_event_outbox_types` 已应用；outbox CHECK 精确允许 17 种事件 | migration 绝对执行时间未保留且已获一次性非阻断裁决；禁止重跑、改元数据或重开 owner 补证 |
 | 数据库迁移 | `OUTBOX_CHECK_REMEDIATION_PASS_LOCAL_DEVELOP` | 两个新事件 CHECK、受保护 rollback、零漂移和全量回归通过 | 数据分支退出；API 分支重放新基线后使用该约束，禁止重复迁移 |
 | 隔离业务基础资料 | `BASE_DATA_PASS_TEST_FACTS_RETAINED` | [真实 E2E 重验进度](2026-08-10-gate3r-real-e2e-retest-progress.md) | 不重复基础资料写入；所有通过与失败样本均保留 |
-| 基础设施文档 | `HISTORICAL_GATES_RETAINED / STAGE6_RUNTIME_PASS` | 既有架构继续使用；本轮可信 IP HTTPS health/login 通过 | 预生产可信 HTTPS 不等同于正式生产域名、备案和灾备验收 |
+| 基础设施文档 | `HISTORICAL_GATES_RETAINED / STAGE6_RUNTIME_PASS` | 既有架构继续使用；Stage 6 可信 IP HTTPS health/login 通过，本轮未重验 | 预生产可信 HTTPS 不等同于正式生产域名、备案和灾备验收 |
 | ACR 镜像发布 | `781A797_IMMUTABLE_IMAGE_DEPLOYED` | index `sha256:82ff43b1…530b1d`；完整 index/amd64/config 见最终记录 | 上一 `40b4a0f…@sha256:0dc8315f…e09` 回退材料保留，禁止 latest |
 | 阿里云预生产联调 | `STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS` | 最终 17/17、单 worker、近 15 分钟 15 成功周期、outbox 全 0；四浏览器反馈与新版 SLS 采集查询通过 | 本轮无剩余补测项；既有 P2 和例外保持可追溯 |
 | 本地 Docker Desktop | `DATA_MOVED_TO_D_NTFS_BACKUP_RETAINED` | `D:\DockerDesktop\data\DockerDesktopWSL` | 镜像、版本、容器与卷核验通过；完整 VHDX 备份保留，不影响生产架构 |
@@ -41,12 +47,77 @@ Stage 6 现有预生产验收已完成，结论为 `STAGE6_FINAL_PASS_WITH_USER_
 | Gate 4 总闸门 | `PASS` | G4-1～G4-5 已通过；G4-5 含一次性主控例外 | develop/main 主线交接、main 推送和独立全量验证均已完成；仍不等于正式生产上线 |
 | Gate 4 证据与主线交接 | `EVIDENCE_FROZEN / AUDIT_WARN_ACCEPTED / DEVELOP_PUSHED / MAIN_PUSHED / MAIN_FULL_VALIDATION_PASS` | ZIP SHA-256 `988b1342…bcf0`；审计 P0/P1=0、P2=1；`main == origin/main == d9cdf2b…`；main 验证 813/7、lint、tsc、31/31 build、Prisma、制品 5/5、diff/clean PASS | 主线交接退出；正式生产必须使用独立任务卡和逐项授权 |
 
+<a id="repository-cleanup-r74"></a>
+
+## 仓库第一批清理与本地沙箱验收（R74）
+
+### 身份、范围与授权
+
+| 身份 | 核验值 |
+|---|---|
+| 本轮角色 | 主控 / A8 治理同步；非实现、非发布 |
+| 分支 / worktree | `feature/v2-repository-cleanup-batch1` / `C:/Users/yhy/.codex/worktrees/repo-cleanup-batch1/人车单生态-v2` |
+| 清理起点 / 本地 main（未变） | `c523fccd7febb06ac15ea379e57e06110aa1ec69` |
+| 已提交文档基线 R73 | `d14a1d0f3057963c0804e592c89613ee0260e85d` |
+| 本地 develop | `8b66ca2433fa9a78873bc7fd1b4a4dae680eaa50` |
+| main 双亲 | `85bcfa534e5a3525f2bf84e0628bac4942559120`、`8b66ca2433fa9a78873bc7fd1b4a4dae680eaa50` |
+| main / develop 正式应用 tree | `a2b5de446fe59119557db77b62011697a0539961`，两者一致，包含登录返修 `781a797…` |
+| 清理提交 | `0a0b9cd53bf106e3179130e7945da077fbfa3950`；210 个路径，208 删除 + README 新增 + .gitignore 修改 |
+| R74 文档提交 / feature HEAD | 以承载本版本的独立治理提交为准，父提交为上述清理候选；仅六份治理入口，不用清理 SHA 冒充文档 SHA |
+| 外部操作 | 无；本轮未 fetch、推送、构建镜像、部署或更改真实数据库/云资源 |
+
+| 已批准的清理内容 | 工作树现状 |
+|---|---|
+| `.superpowers/` | 删除 24 个历史预览/临时产物 |
+| `feature-map-board/` | 删除 120 个旧项目快照文件，不是删除活跃 worktree |
+| `feature-order-import/` | 删除 64 个旧项目快照文件，不是删除活跃 worktree |
+| 根 `README.md` / `.gitignore` | 新增项目入口；增加本地 worktree 与两处旧快照目录的忽略规则 |
+| 保留内容 | 正式 `feature-admin-workflow/` 全部 356 个跟踪文件、80 个测试、10 个正向 migration、9 个 rollback；现行权威文档、审计历史、gitlink 和其他来源工作树未清理 |
+
+208 个删除路径与批准 manifest 精确一致；历史可从起点 Git 恢复，不删除分支、不重写历史。本轮 A8 仅追加修改 `AGENTS.md`、`docs/context/agent-common-context.md`、`docs/versions/README.md`、`docs/status/README.md`、`docs/superpowers/specs/2026-07-13-prd-v2-parallel-development-design.md`、`docs/rcd-v2-project-map.canvas` 六份入口。不修改产品、API、数据或部署契约。
+
+### 验收结论与证据边界
+
+| 检查 | 结果与来源 |
+|---|---|
+| 工程全量 | 1002 passed / 7 expected skipped；lint、TypeScript（非增量，构建前后）、32/32 build、Prisma validate 均 PASS |
+| 制品与 worker 专项 | 15/15 PASS |
+| 本地隔离 HTTP 冒烟 | 21/21 PASS；本地 PostgreSQL/测试数据，不连接真实 RDS/Tair/高德 |
+| 登录、注册、双端切换、退出、布局 | `USER_REPORTED_PASS_SCOPED`，按用户约定范围的真机反馈接受 |
+| iOS Safari 司机 H5 退出 | `USER_RETEST_PASS / CLOSED_BY_USER_RETEST_PASS`：用户复测看到按钮并成功退出；应用代码未修改，根因未证实，不记为缓存修复 |
+| 边界与证据身份 | 208 路径精确匹配；8 份工程日志及 README/.gitignore 哈希复核一致，正式应用零差异，`git diff --check` PASS |
+
+本轮 A8 不重跑工程测试，复用上述已保存结果；用户手机操作不冒称 Agent 独立操作。地图、真实 ETA、GPS、真实司机派单和云端依赖不在本轮验收内，界面的模拟位置提示不是真实定位证据。Stage 6 注册/纯司机的历史例外、隐藏工具内部切换和退出失败反馈两项既有 P2 不因本地通过而被删除或改写。
+
+### 仓库外证据索引
+
+证据根目录：`C:/Users/yhy/.codex/visualizations/2026/07/13/019f5bea-ad6e-7cb3-be18-5a8b38baad21/`。仅登记脱敏文件与 SHA-256；不纳入沙箱账号密码、邀请密钥、私钥或临时指南令牌。
+
+| 相对证据路径 | SHA-256 |
+|---|---|
+| `repository-cleanup-audit/exact-cleanup-candidates.json` | `81a4c55027b7975d7fcf0b2baeed8b1d95a63c1d2f8fb1368cc60811918a1967` |
+| `repository-cleanup-batch1/final-engineering-report.md` | `49b044f04029c680d9c063d18a5643ca8a3cf3db2fba57cae0693abc74d8a509` |
+| `repository-cleanup-batch1/final-evidence.json` | `65940aa5bb6723e7dd5f6cdc4c7e2b2c8b74ccd8786fbb23cc3447b7355ae155` |
+| `cleanup-phone-sandbox/smoke-result.json` | `5496a1915e4ac44c5f5c9d3705c56bdf71eb5989b57feaffd46aa0dc4b238882` |
+| `cleanup-phone-sandbox/final-scope-acceptance.md` | `48681c6da7c9513fa13eeed979e347604f78c79078ec8647840dfe00af292ef9` |
+| `cleanup-phone-sandbox/final-scope-acceptance.json` | `eb11913eb8635eab147e0de3575f850f6c102977473106a49d380f09d57ee24b` |
+
+原始工程报告当时的“手机未开始”及退出观察记录原样保留，以最终限定范围收口记录补充，不覆盖原始证据。
+
+### 下一步
+
+本地清理沙箱验收与独立获批的 Git 提交已收口，清理和六份治理入口分成两个提交。下一步须另行批准按 `feature → develop → main` 审查、验证并晋级；推送前重新核验远端，变化或分叉即停，不强推。本轮不默认复用历史合并/推送授权，也不操作服务器或分支删除。
+
+大白话：旧文件拿掉以后，本地登录、注册、切换和退出已按约定试过；清理和项目档案已有各自的本地版本号，主线和线上服务还没有因为这次清理发生变化。
+
 ## 2026-09-27 Stage 6 最终验收
+
+> 本节是此前预生产验收记录，结论继续保留；R74 本地沙箱范围与主线身份以上节为准，不新增云端核验。
 
 - 最终结论、用户例外、完整运行身份和证据索引见 [Stage 6 最终验收记录](2026-09-27-stage6-final-acceptance.md)。
 - 最终只读报告 SHA-256：`4ff3105af777e687612cca6e036b24105fd325c975b4a4da1c9117d6a75c827e`；收口证据 ZIP SHA-256：`6268930bf969ef589aa12afa7b670710d411195dad171109d1e526a4f6c0a502`。
 - 采集器原始 `stage6FinalPass=false` 未改写；独立复核后的单独验收记录为 true。本轮结论不是新增注册、纯司机登录或人工派单实测声明。
-- 文档从 R72 `4868fe53daf37b3c0e9aa6a80a60820355831063` 进入 R73；R73 完整 SHA 以承载本节的治理提交为准。该提交不自动授权推送、代码合并或部署。以下带日期章节是当时的历史快照，不能覆盖本节当前结论。
+- 文档从 R72 `4868fe53daf37b3c0e9aa6a80a60820355831063` 进入 R73 `d14a1d0f3057963c0804e592c89613ee0260e85d`。该提交不自动授权推送、代码合并或部署。以下带日期章节是当时的历史快照；最新本地主线与清理状态见上方 R74，不覆盖本节预生产结论。
 
 ## 2026-09-17 main 提升、不可变镜像与阶段 4 配置/ACL
 
@@ -370,6 +441,8 @@ ACL 复核原始文本位于 `C:/Users/yhy/.codex/attachments/07595ab1-14f4-4ca5
 本例外只绑定上述 source/index、ECS 预生产实例与本次 9→10 migration。以后发布必须由脚本保存每阶段 UTC 时间并在窗口结束前停止新的切换；不得继承本例外。Gate 4 退出本身未自动授权主线操作；后续 develop 合入/推送、main 合入/推送和 main 全量验证均由用户分别授权完成。正式生产当前只授权 T0 只读盘点；数据库回退、故障演练、清理证据或任何生产写操作仍未授权。
 
 ## 代码、文档与迁移基线（按阶段区分）
+
+> 以下为历次阶段的累积索引，含 R72 及更早“当前/下一步”表述；R74 的本地主线、清理候选与治理提交身份以上方“仓库第一批清理与本地沙箱验收”为准，预生产身份以 Stage 6 最终记录为准。
 
 ```text
 branch: codex/v2-gate3-app-candidate
