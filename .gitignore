@@ -50,3 +50,8 @@ package-lock.json
 
 # Brainstorming artifacts
 .superpowers/
+
+# Local worktrees and retired source snapshots
+/.worktrees/
+/feature-map-board/
+/feature-order-import/
