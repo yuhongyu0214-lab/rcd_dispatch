@@ -1,31 +1,31 @@
 # 人车单项目状态总览
 
-> 状态快照：2026-09-17 / R72
+> 状态快照：2026-09-27 / R73
 > 用途：说明项目做到哪一步、还差什么
 > 非权威范围：产品行为、状态机、Schema、枚举、HTTP 契约、技术栈和生产架构
 
 ## 一句话结论
 
-联合账号与入口版本已完成 R71 推送、main 提升、不可变镜像和阶段 4 配置/ACL：`develop == origin/develop == 14537ddaf92182b2f68308e66503d262490ce1e1`，`main == origin/main == 85bcfa534e5a3525f2bf84e0628bac4942559120`，main 应用 tree 与审计候选 `40b4a0fca3c9f9b4cfd392341f89663fdbbcb418` 一致并通过全量工程验证。新镜像 index 为 `sha256:0dc8315fb56361fa5afa04cab43d9c890f9c78e882c88070afa3a764dd450e09`，固定摘要漏洞/秘密扫描均为 0。阶段 4 仅写入 app 专用 64 字符邀请密钥并增加四项冻结最小 ACL，独立核验通过；运行容器未重启、未加载新密钥且未执行 migration。预生产仍运行 `b2887d3718f34bf3cc068d07b505d33065e77c7c@sha256:c491f6a48007b86b22af2c6a4f514ba94167e33f046270b52102d1ed`。阶段 5 Nginx、阶段 6 分阶段部署和双端验收均未授权、未执行；两项既有 P2 继续非阻断登记。
+Stage 6 现有预生产验收已完成，结论为 `STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS`。当前运行代码 `781a797c3286c0a5b134a010660a0e85633216fe`、app/worker 镜像 `sha256:82ff43b17a7392b0187e281820a71c2d3557a1506fbd98dad1200ef31f530b1d`；最终只读检查 17/17 和独立复核通过。登录入口新版已获 Safari、华为、Chrome、Edge 实际通过反馈；人工派单沿用用户认可的历史结果，注册/纯司机入口按用户例外接受，布局沿用真机体验，不再重复测试。详见 [Stage 6 最终验收记录](2026-09-27-stage6-final-acceptance.md)。本轮 A8 仅同步文档；治理提交、远端推送和任何线上操作均须分别授权，正式生产不在本次结论范围。
 
 ## 当前工作流状态
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
-| 文档治理 | `R72_A8_SYNC / LOCAL_COMMIT / NOT_PUSHED` | 仅同步 R71 推送、main 提升/验证、不可变镜像和阶段 4 配置/ACL 稳定事实；代码、运行配置和外部资源零变化 | 本轮治理提交不自动推送；阶段 5 仍需单独授权 |
-| 联合账号与入口候选 | `MAIN_PROMOTED / MAIN_VALIDATION_PASS / NOT_DEPLOYED` | 候选 `40b4a0f…` 已进入 `develop/origin/develop @ 14537dd…` 与 `main/origin/main @ 85bcfa5…`；main 应用 tree `d4b38e4…` 与候选一致；全量测试、lint、tsc、32/32 build、diff check PASS | 不得把 main 提升写成预生产部署；下一运行闸门仍是阶段 5 |
-| 一号双端来源 | `INTEGRATED_INTO_40B4A0F / NOT_DEPLOYED` | 来源提交 `463c9ee44352a66ec43b25a1ccb66453ae9826ed`，功能锚点 `37d412c6510012a4ff01c773ab1cb21932e84aef`；真实合并父提交 `2d0bbdde93a390c8b1a2ecf8a8e7e09d99fb0ebf` | 不单独部署来源分支；运行候选仍须以联合代码 SHA 重新构建、扫描和授权 |
-| 邀请码注册与双端退出 | `PASS_CONFIG_AND_ACL_ONLY / STAGE4_CLOSED / NOT_DEPLOYED` | 64 字符密钥仅落 app 配置且未泄漏/未加载；四项最小 ACL 均为 true，越权、转授、owner 登录和 worker DB 权限保持关闭；4 条回退 SQL 已保存 | 注册事务、邀请码实际使用和应用加载密钥留到阶段 6 验收；阶段 5 先独立授权 |
-| post-Gate-4 预生产返修 | `PREPROD_DEPLOYED / SMOKE_PASS / REAL_DEVICE_TEST_READY` | `b2887d3…` → index `sha256:c491f6a…d1ed`；app/worker healthy，Nginx revision 对齐；health/login 200、HTTP 308 | 开展受控真机测试；自签名证书提示必须如实记录，不得写成正式可信 HTTPS |
-| 正式生产 T0 | `READONLY_INVENTORY_ONLY / BASELINE_REFREEZE_REQUIRED` | 正式主线已更新为 `main == origin/main == 85bcfa5…`；R65 的旧 `d9cdf2b…` 只作历史盘点基线 | 正式生产任务须在阶段 6 完成后重新冻结代码、文档、镜像和资源授权，不继承预生产权限 |
+| 文档治理 | `R73_A8_SYNC / GOVERNANCE_SHA_IS_COMMIT_IDENTITY` | 起始文档基线 `4868fe5…`；同步最终验收、范围例外、版本入口与角色上下文 | R73 完整 SHA 以承载本行的治理提交为准；推送状态须单独核验 |
+| 联合账号与入口候选 | `PREPROD_DEPLOYED / STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS` | 登录返修 `781a797…`，固定镜像 `sha256:82ff43b1…530b1d`；新版入口已复验 | 不把预生产部署当成已合入 develop/main 或正式生产发布 |
+| 一号双端来源 | `INTEGRATED / SUPERSEDED_BY_781A797` | `37d412c… / 463c9ee…` → 联合候选 `40b4a0f…` → 登录返修 `781a797…`，来源历史保留 | 不单独部署来源分支或混用代码、文档与镜像 SHA |
+| 邀请码注册与双端退出 | `PREPROD_DEPLOYED / USER_SCOPE_EXCEPTION_RECORDED` | app 邀请配置随部署加载；退出与入口反馈保留；注册预检因历史司机停止，用户免于注册/纯司机再验收 | 没有新的成功开户声明，不重置历史档案或开放公开注册 |
+| post-Gate-4 预生产返修 | `B2887D3_HISTORICAL / SUPERSEDED` | 9/11 `b2887d3…` 的部署、回退和扫描记录保留；当前运行版本见 Stage 6 | 不再当成当前运行身份 |
+| 正式生产 T0 | `NOT_RELEASED / BASELINE_REFREEZE_REQUIRED` | Stage 6 仅现有预生产；R72 main `85bcfa5…` 为历史主线记录，未声称已包含 `781a797…` | 新任务重新冻结代码、文档、镜像和资源授权 |
 | Gate 3 历史应用候选 | `958AFCA_GATE3_ACCEPTED_DEVELOP_HANDOFF_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | 只作历史与追溯，不再表述为当前预生产运行身份 |
-| 依赖安全 | `B2887D3_CRITICAL_0_HIGH_0_SECRET_0` | 固定 amd64 `sha256:cde35c27…e886`；19/19 SQL raw 匹配且 CR=0 | 只对已扫描固定镜像与验收时点成立；新披露、重建或 digest 变化必须重扫 |
+| 依赖安全 | `781A797_CRITICAL_0_HIGH_0_SECRET_0` | 固定 index `sha256:82ff43b1…530b1d`；19 项 SQL 与来源一致；构建证据单独保留 | 仅对该精确制品与扫描时点成立，不作持续零漏洞保证 |
 | migration 指纹 | `PREPROD_10_APPLIED / OUTBOX_CHECK_17_PASS` | 第 10 条 `20260816120000_extend_dispatch_event_outbox_types` 已应用；outbox CHECK 精确允许 17 种事件 | migration 绝对执行时间未保留且已获一次性非阻断裁决；禁止重跑、改元数据或重开 owner 补证 |
 | 数据库迁移 | `OUTBOX_CHECK_REMEDIATION_PASS_LOCAL_DEVELOP` | 两个新事件 CHECK、受保护 rollback、零漂移和全量回归通过 | 数据分支退出；API 分支重放新基线后使用该约束，禁止重复迁移 |
 | 隔离业务基础资料 | `BASE_DATA_PASS_TEST_FACTS_RETAINED` | [真实 E2E 重验进度](2026-08-10-gate3r-real-e2e-retest-progress.md) | 不重复基础资料写入；所有通过与失败样本均保留 |
-| 基础设施文档 | `GATE3_FINAL_PASS` | [最终闸门裁决](2026-08-11-gate3-final-gate-decision.md) | Gate 3-R 退出；正式可信 HTTPS 与整机/RDS 灾备仍为独立后续验收 |
-| ACR 镜像发布 | `40B4A0F_IMMUTABLE_IMAGE_PASS / NOT_DEPLOYED` | source/tag/OCI `40b4a0f…`；index `sha256:0dc8315f…e09`、amd64 `sha256:0db7e694…c8e4`、config `sha256:5283c65c…c8c5`；远端 Critical/High/Secrets=0 | 旧 `b2887d3…@sha256:c491f6a…d1ed` 仍是当前预生产；禁止覆盖 tag、使用 `latest` 或提前部署 |
-| 阿里云预生产联调 | `POST_GATE4_PATCH_SMOKE_PASS / ACCOUNT_ISSUES_REPORTED` | app → worker → Nginx 历史切换通过；9/13 用户反馈健康可达、部分账号登录成功，另有 401 和 User/Driver 关联缺口 | 真机账号问题未闭环；新双端代码未部署，不能宣布 iOS 修复完成 |
+| 基础设施文档 | `HISTORICAL_GATES_RETAINED / STAGE6_RUNTIME_PASS` | 既有架构继续使用；本轮可信 IP HTTPS health/login 通过 | 预生产可信 HTTPS 不等同于正式生产域名、备案和灾备验收 |
+| ACR 镜像发布 | `781A797_IMMUTABLE_IMAGE_DEPLOYED` | index `sha256:82ff43b1…530b1d`；完整 index/amd64/config 见最终记录 | 上一 `40b4a0f…@sha256:0dc8315f…e09` 回退材料保留，禁止 latest |
+| 阿里云预生产联调 | `STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS` | 最终 17/17、单 worker、近 15 分钟 15 成功周期、outbox 全 0；四浏览器反馈与新版 SLS 采集查询通过 | 本轮无剩余补测项；既有 P2 和例外保持可追溯 |
 | 本地 Docker Desktop | `DATA_MOVED_TO_D_NTFS_BACKUP_RETAINED` | `D:\DockerDesktop\data\DockerDesktopWSL` | 镜像、版本、容器与卷核验通过；完整 VHDX 备份保留，不影响生产架构 |
 | 既有预生产成果审查 | `RUNTIME_FINAL_CONSISTENCY_PASS` | [RDS 迁移与权限证据](2026-08-05-gate3r-rds-preprod-migration-permissions.md) | 0805 的 9 migration 与权限事实只作历史证据；当前预生产以本表 10 migration 状态为准 |
 | 真实 10 单 | `REAL10_PASS_9_COMPLETED_1_INFEASIBLE_ALERT` | [真实 E2E 重验进度](2026-08-10-gate3r-real-e2e-retest-progress.md) | 保留全部成功与失败现场，不清理 |
@@ -41,7 +41,16 @@
 | Gate 4 总闸门 | `PASS` | G4-1～G4-5 已通过；G4-5 含一次性主控例外 | develop/main 主线交接、main 推送和独立全量验证均已完成；仍不等于正式生产上线 |
 | Gate 4 证据与主线交接 | `EVIDENCE_FROZEN / AUDIT_WARN_ACCEPTED / DEVELOP_PUSHED / MAIN_PUSHED / MAIN_FULL_VALIDATION_PASS` | ZIP SHA-256 `988b1342…bcf0`；审计 P0/P1=0、P2=1；`main == origin/main == d9cdf2b…`；main 验证 813/7、lint、tsc、31/31 build、Prisma、制品 5/5、diff/clean PASS | 主线交接退出；正式生产必须使用独立任务卡和逐项授权 |
 
+## 2026-09-27 Stage 6 最终验收
+
+- 最终结论、用户例外、完整运行身份和证据索引见 [Stage 6 最终验收记录](2026-09-27-stage6-final-acceptance.md)。
+- 最终只读报告 SHA-256：`4ff3105af777e687612cca6e036b24105fd325c975b4a4da1c9117d6a75c827e`；收口证据 ZIP SHA-256：`6268930bf969ef589aa12afa7b670710d411195dad171109d1e526a4f6c0a502`。
+- 采集器原始 `stage6FinalPass=false` 未改写；独立复核后的单独验收记录为 true。本轮结论不是新增注册、纯司机登录或人工派单实测声明。
+- 文档从 R72 `4868fe53daf37b3c0e9aa6a80a60820355831063` 进入 R73；R73 完整 SHA 以承载本节的治理提交为准。该提交不自动授权推送、代码合并或部署。以下带日期章节是当时的历史快照，不能覆盖本节当前结论。
+
 ## 2026-09-17 main 提升、不可变镜像与阶段 4 配置/ACL
+
+> 历史快照：本节“当前/下一步”仅指 2026-09-17 当时；后继放行与运行身份以 R73 Stage 6 记录为准。
 
 ### 冻结身份与工程验证
 

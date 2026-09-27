@@ -1,9 +1,9 @@
 # 人车单生产部署、迁移与回退指南 V2
 
-> 文档版本：`RCD-DEPLOY-V2.0-R17-20260915`
+> 文档版本：`RCD-DEPLOY-V2.0-R18-20260927`
 >
-> 状态：post-Gate-4 返修 `b2887d3…@sha256:c491f6a…d1ed` 已分阶段部署预生产并通过入口冒烟；未执行 migration，main 与正式生产提升仍未授权
-> 新候选：联合账号/入口 `40b4a0f…` 仅本地实现、浏览器与审计完成；本节更新发布前置，不表示已构建、扫描、授权数据库或部署
+> 状态：`781a797…@sha256:82ff43b1…530b1d` 已部署现有预生产；Stage 6 为 `STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS`，本阶段未执行 migration，正式生产不在授权范围
+> 当前与回退：当前登录返修 `781a797…`，上一稳定运行 `40b4a0f…@sha256:0dc8315f…e09`；完整身份与 R1/R2/R3 记录见 §7.8，旧章节仅为对应日期历史
 >
 > 权威范围：构建、镜像、发布、迁移、启动、验证和回退顺序
 >
@@ -232,6 +232,8 @@ Compose 会在 profile 过滤前解析整份文件。对于已经证明没有 Sc
 
 ### 7.7 一号双端发布前置（尚未执行）
 
+> 保留 2026-09-15 原标题及链接，本节是当时前置快照；阶段 4 配置/ACL 与后续部署已经完成，当前运行、回退及验收以 §7.8 为准，不重新执行本节历史步骤。
+
 - 本轮代码来源必须锁定 `40b4a0fca3c9f9b4cfd392341f89663fdbbcb418`，不能使用随后仅修改治理文档的 HEAD 代替 OCI revision。最近已核验预生产仍为 §7.6 的 `b2887d3…`；新镜像/digest/扫描与运行验收尚无结果，不能复用旧扫描宣称新制品通过。
 - 无 Schema/migration 变化，但本人档案完善与受邀开户需要 app 数据库身份拥有 `Driver INSERT`、`User INSERT` 和 `User UPDATE(driverId, updatedAt)`；“无需迁移”不代表“无需检查权限”。SQL 及操作说明见[受控 ACL 交付目录](../../../feature-admin-workflow/deploy/dual-workspace-accounts/README.md)。
 - 由受控 DBA 在 `rcd_v2_preprod` 执行准备脚本，只补缺少的上述四项有效权限；确认数据库/操作者/服务地址，授权断言在 COMMIT 前完成。保持 owner NOLOGIN，不向 app 注入 DBA/owner 凭据，不给 worker 数据库权限，不授予 User DELETE、role/password UPDATE、DDL 或超出脚本列边界的通用写权限。
@@ -241,6 +243,17 @@ Compose 会在 profile 过滤前解析整份文件。对于已经证明没有 Sc
 - 应用回退使用部署前新保存并核验的 `b2887d3…` 配置/镜像；数据库回退只撤销首次脚本实际新增的权限，先回退应用再撤权。新产生的业务账号/司机资料保留，不自动删除、解绑或重置密码。
 - 真机必须用同一账号在 Safari/微信与鸿蒙对照：三种历史 role 均可进入 Web/H5；缺档案走完善，已有档案保持归属；H5 只能执行本人任务。新司机离线状态及不能冒用他人身份必须作为反例验收。
 - 受邀注册已进入本地联合候选但尚未部署；未配置合格密钥时 `/admin/register` 404、POST 注册 403。不得为了开户把 `NODE_ENV` 改成 development、开放公开注册或授予 app 全表 User 写入权限。
+
+### 7.8 2026-09-27 Stage 6 登录返修发布与收口
+
+- 当前固定来源 / app、worker OCI / 三服务 release revision：`781a797c3286c0a5b134a010660a0e85633216fe`。index `sha256:82ff43b17a7392b0187e281820a71c2d3557a1506fbd98dad1200ef31f530b1d`，amd64 `sha256:dd01f7cbd47699170ef97da0a9e1b3e420ff0ff2a23b736d9665bc2c6ad8acda`，config `sha256:c5731f40b28b7a63038561c085cb8acbd56df2214d49df460a394879eb32e800`。Nginx 仍用 `nginx:1.27-alpine` 原镜像 `sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8`。
+- R1 在 Nginx 对齐失败后触发回退，但需操作者恢复旧单 worker 与 ACME webroot；恢复后核验旧 `40b4a0f…`。R2 以 `NGINX_BOUNDARY_CHANGED` 停止并回退成功；该次新挂载原始现场不完整，不把排序差异写成已经充分证明的唯一原因。
+- R3 增加只读边界预检，完整保留原始 mounts/ports 字段再作规范化比较，不能丢弃 RW、来源、目的、绑定地址或端口来换取通过；ACME webroot 与既有 TLS/入口边界保持。app → 停旧 worker → 唯一新 worker → 15 分钟观察 → Nginx revision 对齐完成，记录时间 `2026-09-27T04:08:06.199740Z`。没有新增 migration、Schema 或通用数据库权限。
+- 最终北京时间 15:46:16—15:46:17 的只读检查：17/17、app/worker healthy、Nginx running/语法通过、workerCount=1、近 15 分钟 15 成功周期/0 失败事件、outbox 四项 0、db/redis/amap ready、可信 HTTPS health/login 200、容器 ID 稳定。该检查无业务、配置、重启或部署变更。
+- 当前版本 SLS 采集查询及四浏览器入口反馈已接受。Stage 6 最终为 `STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS`；人工派单/布局沿用已认可结果，注册/纯司机按用户免复测裁决，不能宣称全部项目均有新实测。
+- 回退材料保留上一稳定 `40b4a0fca3c9f9b4cfd392341f89663fdbbcb418` / `sha256:0dc8315fb56361fa5afa04cab43d9c890f9c78e882c88070afa3a764dd450e09`，对应受控配置与目录 `/srv/rcd-dispatch/backups/stage6-account-entry-20260917T100509Z/login-entry-release-781a797-r3`；失败尝试 `login-entry-release-781a797`、`-r2` 不删除。后续回退仍需核验当时状态与授权，不直接重跑已消费脚本。
+- 最终只读报告 SHA-256 `4ff3105af777e687612cca6e036b24105fd325c975b4a4da1c9117d6a75c827e`；验收 ZIP SHA-256 `6268930bf969ef589aa12afa7b670710d411195dad171109d1e526a4f6c0a502`。完整来源、范围与保留限制见 [Stage 6 最终验收记录](../../status/2026-09-27-stage6-final-acceptance.md)。原始采集器 false 保留，由独立最终验收记录 true 单独裁决。
+- 本节登记已发生的发布事实，不授予新操作权限；代码 RC、R73 治理提交和证据 SHA 分开，正式生产与主线合并另立任务。
 
 ## 8. Nginx、域名与 HTTPS
 
@@ -350,6 +363,7 @@ Compose 会在 profile 过滤前解析整份文件。对于已经证明没有 Sc
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V2.0-r18 | 2026-09-27 | 新增 §7.8：781a797 固定镜像 R3 预生产部署、R1/R2 失败恢复/回退、最终只读运行与用户范围例外验收；旧 §7.7 保留为历史前置，发布纪律不变 |
 | V2.0 | 2026-07-30 | Gate 3-R R7 部署与回退基线冻结 |
 | V2.0-r1 | 2026-08-02 | 冻结 ECS/Docker 权限边界与 migration → app → worker → edge 分阶段启动顺序 |
 | V2.0-r2 | 2026-08-02 | 每条受控 Compose 命令均显式携带 `--env-file` 与 `-f deploy/compose.preprod.yml`，禁止依赖命令间隐式继承 |

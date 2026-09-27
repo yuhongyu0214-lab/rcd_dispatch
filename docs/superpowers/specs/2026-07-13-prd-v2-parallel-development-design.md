@@ -1,11 +1,11 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：总体架构已批准；Gate -1～Gate 3、第二轮、P2、3A/3B 与 Gate 4 已完成。当前 `develop/origin/develop @ 14537dd…`、`main/origin/main @ 85bcfa5…`；联合版本不可变镜像已通过扫描，阶段 4 邀请密钥与最小 ACL 已关闭。post-Gate-4 返修 `b2887d3…@sha256:c491f6a…d1ed` 仍在预生产运行；阶段 5 Nginx、阶段 6 部署与真实双端验收尚未授权。正式生产 T0 必须重新冻结，不继承预生产权限。
+> 状态：Gate -1～Gate 4 等历史闸门已退出；Stage 6 现有预生产为 `STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS`，运行 `781a797…@sha256:82ff43b1…530b1d`，没有剩余补测项；正式生产另行冻结范围与授权
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
-> 最新任务：2026-09-17 联合账号/入口版本已完成 R71 推送、main 提升和不可变镜像验收；阶段 4 邀请密钥与最小 ACL 独立核验通过。当前运行预生产仍为 `b2887d3…@sha256:c491f6a…d1ed`，阶段 5 Nginx 与阶段 6 部署均未授权、未执行；R72 同步见 §8.4.10。
+> 最新任务：2026-09-27 R73 按 A8 同步最终验收、登录默认目标和用户例外；代码/镜像/证据与文档基线分开，R73 完整文档 SHA 以承载本计划的治理提交为准；见 §8.4.11
 
 ## 1. 目的
 
@@ -795,6 +795,8 @@ EXTERNAL_WRITE_AUTHORIZATION=NONE
 
 #### 8.4.10 main 提升与预生产发布前置（R72）
 
+> 本节为 2026-09-17 历史快照；当时未授权阶段的后继事实见 §8.4.11，不把旧限制误作当前未完成项。
+
 | 闸门 | 结论 | 证据与限制 |
 |---|---|---|
 | R71 远端同步 | `PASS` | `develop == origin/develop == 14537ddaf92182b2f68308e66503d262490ce1e1`；只包含已验收代码历史与治理记录，未强推 |
@@ -806,6 +808,19 @@ EXTERNAL_WRITE_AUTHORIZATION=NONE
 | 阶段 5～6 | `NOT_AUTHORIZED / NOT_EXECUTED` | 阶段 5 先单独授权 Nginx 配置；通过后才能另行授权分阶段部署与双端验收 |
 
 阶段 4 证据目录为 `/srv/rcd-dispatch/backups/stage4-account-entry-20260916T152403Z`。PostgreSQL 客户端仅作为获准工具安装，服务保持 `inactive`，无服务端进程。阶段 4 PASS 不证明注册事务、邀请码实际使用或应用已加载密钥，这三项必须留到阶段 6 真实部署后验证。两项既有 P2 继续非阻断登记：隐藏工具内部可切换旧模式、注销请求失败缺少明确反馈。
+
+#### 8.4.11 Stage 6 最终验收与 A8 同步（R73）
+
+| 项目 | 结论与边界 |
+|---|---|
+| 固定运行对象 | `781a797c3286c0a5b134a010660a0e85633216fe` / `sha256:82ff43b17a7392b0187e281820a71c2d3557a1506fbd98dad1200ef31f530b1d`；Nginx 原镜像不变，release revision 同步 |
+| 发布 | R1 失败及受控恢复、R2 回退均保留；R3 完成分阶段部署与 15 分钟观察，本阶段没有 migration |
+| 最终最小只读运行 | 北京时间 2026-09-27 15:46:16—15:46:17，17/17 与独立复核通过，单 worker、近 15 分钟 15 成功周期、outbox 全 0 |
+| 用户验收范围 | 四浏览器新版入口 / 当前版本 SLS 已接受；人工派单与布局沿用用户认可结果，注册及纯司机入口按明确例外接受，不新增实测声明 |
+| 阶段裁决 | `STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS`；本轮剩余补测项 0；原采集器 false 保留，最终裁决独立记录 true |
+| 本轮 A8 | 基于 `4868fe53daf37b3c0e9aa6a80a60820355831063` 同步 R73；治理提交、推送和合并须分别授权，本轮未操作线上或数据库 |
+
+完整版本、证据哈希和限制见 [最终验收记录](../../status/2026-09-27-stage6-final-acceptance.md)。此前独立授权已用于预生产实施，不自动继承到新的发布、回退、业务写入或正式生产。历史两项 P2 与外部原始证据边界继续保留。下一任务若涉及主线交接/正式生产，须重新冻结角色、代码、已提交文档、文件/资源范围及授权；只有承载 R73 的已核验完整 Git 提交 SHA 可以充当不可变文档基线。
 
 ## 9. 并行开发纪律
 
@@ -948,7 +963,7 @@ EXTERNAL_WRITE_AUTHORIZATION=NONE
 - 后续追加发现 ETA Top-8 仍会裁掉本轮 A 槽新生成的 delivery cursor，导致可连续进入 B 的订单误报 `ETA_UNAVAILABLE`；已恢复计划池全部 delivery→pickup 必要组合，并补 `buildEtaMatrix()` → `runDispatchV2()` A/B 串联回归。
 - G3-3 本地开发已闭环：司机类事件按受影响门店加载全部活动司机参与比较；相同逻辑计划重试不回收/重建 Assignment 或递增 `planVersion`；outbox 只有持有当前租约的 worker 才计为处理成功；锁忙、Redis 不可用降级、过期快照重算均有独立编排测试。
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
-- 当前工作阶段：Gate 4 `PASS`。G4-1～G4-4 已通过；G4-5 已部署 `4d370d6…@sha256:508dea…453d`，完成 9→10 migration、真实依赖/业务/观测与 T6 审计，并以一次性维护窗口例外裁决 `FINAL_PASS_WITH_CONTROLLER_EXCEPTION`。三个旧 RC 继续拒绝。
+- 当前工作阶段：Stage 6 现有预生产 `STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS`，完整结论见 §8.4.11；Gate 4 等旧阶段保留历史，不重复验收。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
-- 当前执行限制：联合版本已进入 `develop/origin/develop @ 14537dd…` 和 `main/origin/main @ 85bcfa5…`，精确不可变镜像已通过扫描但未部署；阶段 4 邀请密钥与四项最小 ACL 已通过独立核验，运行 app/worker 尚未加载密钥，当前预生产仍为 `b2887d3…@sha256:c491f6a…d1ed`。阶段 5、6 未授权、未执行，正式生产 T0 不继承任何预生产权限。
-- 下一动作：先以独立授权完成阶段 5 Nginx 原始 URI 配置、校验和回退证据；阶段 5 通过后，再以独立授权按冻结顺序部署并验收邀请注册、角色分流、双端退出、V2 默认入口和隐藏工具边界。任一 P0/P1 立即停止并回退。
+- 当前执行限制：运行代码 `781a797…`、起始文档 `4868fe5…`、R73 治理提交与证据包分开；本轮 A8 不产生新的推送、代码合并或外部操作授权。
+- 下一动作：本轮无剩余补测。主线交接或正式生产准备另立任务、另定不可变基线与授权；不可重跑已消费的部署/业务脚本。
