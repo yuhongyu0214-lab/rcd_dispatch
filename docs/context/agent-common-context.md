@@ -1,7 +1,7 @@
 # 人车单 V2 Agent 公共上下文（Layer 0）
 
 > 文档类型：`DERIVED / LAYER_0`
-> 上下文版本：`RCD-AGENT-CONTEXT-20260927-R74`（独立获批提交；文档 SHA 以承载本版本的治理提交为准）
+> 上下文版本：`RCD-AGENT-CONTEXT-20260928-R75`（A8 后已获独立 Git 提交授权；文档 SHA 以承载 R75 的本次提交为准，未推送）
 > 适用范围：所有新建或重新启动的 Agent；权威范围：仅提供项目目标、当前阶段、公共纪律、模块边界和命令入口
 > 非权威范围：产品行为、Schema、HTTP DTO、枚举、基础设施细节和任务验收标准
 > 冲突处理：以 [文档版本总入口](../versions/README.md) 登记的领域权威为准；无法裁决时立即停止
@@ -13,9 +13,9 @@
 
 Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。Stage 6 现有预生产最终结论为 `STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS`：运行 `781a797…@sha256:82ff43b1…530b1d`，最小只读检查 17/17、独立复核通过。Safari/华为/Chrome/Edge 登录入口反馈通过；人工派单与布局沿用用户认可的历史/真机结果，注册和纯司机入口按明确用户例外接受。本轮没有剩余补测项，也没有新增成功注册或纯司机实测声明。
 
-本轮是仓库第一批清理收口：`feature/v2-repository-cleanup-batch1 @ c523fccd7febb06ac15ea379e57e06110aa1ec69`，已提交文档基线 R73 `d14a1d0f3057963c0804e592c89613ee0260e85d`。208 个批准旧文件仅在隔离工作树删除，另补根 README 与忽略规则；正式应用、80 个测试、10 个正向 migration 和 9 个 rollback 均保留。工程 1002/7、32/32 build、HTTP 21/21 通过；用户确认登录、注册、双端切换、退出、布局通过，iOS Safari 退出复测关闭观察项。地图/真实 ETA/GPS 不在本轮范围。
+仓库第一批清理已完成：批准删除 208 个旧快照/预览文件，补根 README 与忽略规则；正式应用、80 个测试、10 个正向 migration 和 9 个 rollback 均保留。原限定真机范围与 iOS Safari 退出复测通过，地图/真实 ETA/GPS 不在本地验收范围。
 
-用户另行批准 Git 提交后，清理候选已形成为 `0a0b9cd53bf106e3179130e7945da077fbfa3950`；R74 六份治理入口单独提交，文档 SHA 以承载本版本的治理提交为准。状态 `CLEANUP_SCOPED_ACCEPTANCE_PASS / LOCAL_COMMIT_COMPLETE`；未合并、推送或操作服务器，未重新查询远端/云端。本地 main 仍为 `c523fcc…`、develop 为 `8b66ca2…`；清理只在 feature 分支，未进入主线。完整边界见 [状态总览](../status/README.md#repository-cleanup-r74)，Stage 6 运行结论沿用原记录。
+清理提交 `0a0b9cd53bf106e3179130e7945da077fbfa3950`、R74 文档及独立测试候选 `279cc1e6d992a6bc6612a627c0f72bb70bf49988` 已合入并推送 develop。状态 `DEVELOP_MERGED_AND_PUSHED / MAIN_HANDOFF_PENDING`。独立工程与隔离运行通过：1002/7、lint/tsc、32/32 build、Prisma、HTTP 42/42 和入口代理 6/6；未新增真实浏览器/云依赖/生产容器验收。完整证据、未覆盖项、两项 P2 及推送结果见 [R75 状态总览](../status/README.md#repository-cleanup-r75)。本轮 A8 后获独立授权提交六份治理文档，不重跑业务测试、不推送，不操作 main 或服务器。
 
 ## 2. 当前版本与闸门
 
@@ -23,7 +23,7 @@ Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。Stage 6 现有预生产�
 |---|---|
 | 联合账号与入口代码 | 已部署验收 `781a797c3286c0a5b134a010660a0e85633216fe`；来源 `feature/v2-login-workspace-selection`，与治理 SHA 分开；当前文档工作树的基底不是运行代码 SHA |
 | 一号双端本地代码 | 历史来源 `37d412c… / 463c9ee…` 已融入 `40b4a0f…`，后继登录返修为 `781a797…`；来源分支不单独部署 |
-| 本轮治理与后续 | 清理候选 `0a0b9cd53bf106e3179130e7945da077fbfa3950`；R74 的文档 SHA / feature HEAD 以承载本版本的独立治理提交为准；输入文档 R73 `d14a1d0…`。合并和推送另行授权 |
+| 本轮治理与后续 | 代码/已提交文档起点 `279cc1e6d992a6bc6612a627c0f72bb70bf49988`（R74）；R75 六份治理入口已获独立提交授权；本地 develop / 文档 SHA 以承载本版本的提交为准，origin/develop 仍为 R74 起点。推送及 main 交接另行授权 |
 | Gate 3 历史代码候选 | `codex/v2-gate3-app-candidate` |
 | Gate 3 历史本地 SHA | `958afca537b412fb972b6e180561a9b37022834d` |
 | Gate 3 历史远程 SHA | `958afca537b412fb972b6e180561a9b37022834d`，已完成普通快进推送与远端核验 |
@@ -39,7 +39,7 @@ Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。Stage 6 现有预生产�
 | Gate 4 子闸门 | `G4_1_TO_G4_4_PASS / G4_5_FINAL_PASS_WITH_CONTROLLER_EXCEPTION`；Gate 4 总闸门 `PASS` |
 | Gate 4 镜像 | 已验收远端 index `sha256:508dea2dfa25da76581adc89b33d2ccf73eb91a21af26fa8f54e08fd94fe453d`；完整 amd64/config 与扫描证据见状态总览；三个旧 RC `4102ee1… / a0c8bbd… / 857705e…` 继续 `REJECTED_DO_NOT_DEPLOY` |
 | post-Gate-4 预生产返修 | `b2887d3…` 为历史部署；当前 `781a797…@sha256:82ff43b1…530b1d`，app/worker healthy、单 worker、Nginx running，Stage 6 未执行 migration |
-| 主线与下一步 | 本地 main `c523fccd7febb06ac15ea379e57e06110aa1ec69`、develop `8b66ca2433fa9a78873bc7fd1b4a4dae680eaa50`；正式应用 tree 相同。清理已在 feature 提交，晋级待授权，按 feature → develop → main，不删分支、不重写历史、不改服务器 |
+| 主线与下一步 | 本地 develop 为承载 R75 的本次文档提交，已推送 origin/develop `279cc1e6d992a6bc6612a627c0f72bb70bf49988`；main/origin/main `c523fccd7febb06ac15ea379e57e06110aa1ec69`（远端确认时间 2026-09-28T01:00:00.5484224Z）。正式应用 tree 同为 `a2b5de446fe59119557db77b62011697a0539961`，亦与运行源码 781a797 一致。main 清理晋级待办，不删分支、不重写历史、不改服务器 |
 | Railway | 仅历史 Demo 证据，不是生产基线 |
 
 状态变化只认 [项目状态总览](../status/README.md)，领域与角色入口只认 [文档版本总入口](../versions/README.md)。上述 Gate 3/Gate 4 表项均为历史记录，不能当成当前运行身份；最新运行/例外详见 [Stage 6 最终验收记录](../status/2026-09-27-stage6-final-acceptance.md)。
@@ -48,7 +48,7 @@ Gate 3、第二轮、P2、3A/3B 与 Gate 4 已退出。Stage 6 现有预生产�
 
 正式生产 T0 的旧 R72 任务卡已经是历史输入，不能直接启动新执行。未来任务须重新冻结代码、文档、镜像与范围；购买、备案提交、云资源/配置、migration、部署和生产数据访问需另行授权。生产 RDS、Tair、账号、秘密与数据不复用预生产。
 
-大白话：本地试用通过的清理和交接资料已分别存档；还没并入主线或上传远端，线上版本没有变化。
+大白话：清理版已上传 GitHub 的 develop，main 还没纳入这次清理；项目档案独立提交留在本地，线上应用没有变化。
 
 ## 3. 公共模块边界
 

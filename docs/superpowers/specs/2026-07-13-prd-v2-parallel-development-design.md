@@ -1,11 +1,11 @@
 # PRD V2 并行开发与分阶段验收设计
 
 > 文档版本：`RCD-V2-PARALLEL-DESIGN-20260713`
-> 状态：仓库第一批清理 `CLEANUP_SCOPED_ACCEPTANCE_PASS / LOCAL_COMMIT_COMPLETE`，R74 独立获批提交；Stage 6 最近已接受的预生产仍为 `781a797…@sha256:82ff43b1…530b1d`，本轮不操作线上
+> 状态：清理版 `DEVELOP_MERGED_AND_PUSHED / MAIN_HANDOFF_PENDING`；R75 独立获批本地提交，未推送，Stage 6 运行身份与验收例外不变
 > 产品主线：`docs/versions/v2.0/prd-v2.md`
 > 数据主线：`docs/versions/v2.0/data-architecture-v2.md`
 > 规则主线：`docs/versions/v2.0/project-rules-v2.md`
-> 最新任务：2026-09-27 R74 同步后获独立 Git 提交授权；清理候选 0a0b9cd53bf106e3179130e7945da077fbfa3950，输入文档 R73 d14a1d0，R74 文档 SHA 以承载本版本的治理提交为准；见 §8.4.12，原 Stage 6 证据见 §8.4.11
+> 最新任务：2026-09-28 R75 A8 登记 develop 合入、独立复验和推送；代码/已提交文档起点 279cc1e6d992a6bc6612a627c0f72bb70bf49988。R75 文档 SHA 以承载本版本的本地提交为准；见 §8.4.13，清理历史见 §8.4.12
 
 ## 1. 目的
 
@@ -822,7 +822,9 @@ EXTERNAL_WRITE_AUTHORIZATION=NONE
 
 完整版本、证据哈希和限制见 [最终验收记录](../../status/2026-09-27-stage6-final-acceptance.md)。此前独立授权已用于预生产实施，不自动继承到新的发布、回退、业务写入或正式生产。历史两项 P2 与外部原始证据边界继续保留。下一任务若涉及主线交接/正式生产，须重新冻结角色、代码、已提交文档、文件/资源范围及授权；只有承载 R73 的已核验完整 Git 提交 SHA 可以充当不可变文档基线。
 
-#### 8.4.12 仓库第一批清理与本地沙箱收口（R74）
+#### 8.4.12 仓库第一批清理与本地沙箱收口（R74 历史）
+
+> 以下为提交当时快照；后续合入、推送结果以 §8.4.13 为准。
 
 角色为主控 / A8 治理同步及随后独立获批的本地 Git 提交。分支 `feature/v2-repository-cleanup-batch1`，工作树 `C:/Users/yhy/.codex/worktrees/repo-cleanup-batch1/人车单生态-v2`；清理起点为 `c523fccd7febb06ac15ea379e57e06110aa1ec69`，清理候选为 `0a0b9cd53bf106e3179130e7945da077fbfa3950`，输入文档基线 R73 为 `d14a1d0f3057963c0804e592c89613ee0260e85d`。R74 文档 SHA / feature HEAD 以承载本版本的治理提交为准。当前本地 main 等于起点，develop 为 `8b66ca2433fa9a78873bc7fd1b4a4dae680eaa50`，正式应用 tree 相同；本轮未核验远端。
 
@@ -834,6 +836,17 @@ EXTERNAL_WRITE_AUTHORIZATION=NONE
 6. A8 同步后用户另行批准 Git 提交，当前状态 `CLEANUP_SCOPED_ACCEPTANCE_PASS / LOCAL_COMMIT_COMPLETE`。清理候选与六份治理入口分别提交；本次提交授权不含合并或推送。之后须另行授权依 `feature → develop → main` 验证并晋级。推送前重新核验远端；变化/分叉、白名单外差异、正式应用变化或证据不一致即停止，不强推。
 
 完整身份、恢复起点和仓库外证据哈希见 [状态总览 R74](../../status/README.md#repository-cleanup-r74)。大白话：本地旧文件清理后的试用通过了，现在只整理交接材料，主线和线上并没有自动更新。
+
+#### 8.4.13 清理版 develop 交接与 main 准备（R75 本地提交）
+
+- 角色：主控 / A8；工作树 `.worktrees/develop-gate3-final`，分支 develop；代码/已提交文档基线为 `279cc1e6d992a6bc6612a627c0f72bb70bf49988`。
+- 已完成：清理代码 0a0b9cd + R74 文档 279cc1e 经 `--ff-only` 合入 develop，并由独立授权普通推送到 origin/develop；2026-09-28T01:00:00.5484224Z 远端核验通过，main 仍为 `c523fccd7febb06ac15ea379e57e06110aa1ec69`。
+- 独立验证：1002/7、lint/tsc、32/32 build、Prisma、HTTP 42/42、入口代理 6/6；PG 3/3 和 Redis unavailable 1/1 补跑。真实 Redis available/高德、新浏览器与生产容器未覆盖；P2 两项保留，不改写 Stage 6 例外。
+- A8 白名单：AGENTS.md、Layer 0、文档总入口、状态总览、本主计划、Canvas 共六份；只记录证据，不修改业务与领域契约，不重跑测试。本轮获独立授权仅提交这六份文档，未推送、未操作 main 或服务器；文档 SHA 以本次提交为准。
+- 下一步：完成本次获批文档提交后，按独立任务隔离准备 main 候选并验证后报告精确 SHA，main 合入与普通推送另批。执行前远端有变化或分叉立即停止，不强推。
+- develop、main、781a797 的正式应用 tree 同为 `a2b5de446fe59119557db77b62011697a0539961`。本次清理不要求重新构建、部署或 migration；生产资源/域名/备案/证书/备份回退/维护窗口仍独立准备授权。
+
+完整 SHA、推送范围、证据哈希与覆盖限制见 [R75 状态总览](../../status/README.md#repository-cleanup-r75)。
 
 ## 9. 并行开发纪律
 
@@ -976,7 +989,7 @@ EXTERNAL_WRITE_AUTHORIZATION=NONE
 - 后续追加发现 ETA Top-8 仍会裁掉本轮 A 槽新生成的 delivery cursor，导致可连续进入 B 的订单误报 `ETA_UNAVAILABLE`；已恢复计划池全部 delivery→pickup 必要组合，并补 `buildEtaMatrix()` → `runDispatchV2()` A/B 串联回归。
 - G3-3 本地开发已闭环：司机类事件按受影响门店加载全部活动司机参与比较；相同逻辑计划重试不回收/重建 Assignment 或递增 `planVersion`；outbox 只有持有当前租约的 worker 才计为处理成功；锁忙、Redis 不可用降级、过期快照重算均有独立编排测试。
 - Gate 3 阶段交接已闭环：`feature/v2-gate3-develop-handoff @ b853a7af245942758de1cd46c9a25c384c08ec62` 通过 517 tests、lint、29 页面 build、9 项正向 migration 指纹与五轴审查，并合入、推送至 `develop @ 51ddb5ff7e7972032fd7ae9c0221b1937fb38a4e`；代码树保持 `958afca…`，文档树保持最终 PASS 基线。
-- 当前工作阶段：本地清理沙箱 `CLEANUP_SCOPED_ACCEPTANCE_PASS / LOCAL_COMMIT_COMPLETE`，R74 独立治理提交收口，见 §8.4.12；Stage 6 及 Gate 4 历史结论保留，不把沙箱反馈写成新增预生产验收。
+- 当前工作阶段：清理版 `DEVELOP_MERGED_AND_PUSHED / MAIN_HANDOFF_PENDING`，R75 独立获批本地提交，见 §8.4.13；Stage 6 与 Gate 4 历史结论保留。
 - 返修范围、迁移安全和验证证据见 [2026-07-26 Gate 3 审查返修记录](2026-07-26-gate3-review-remediation.md)。
-- 当前执行限制：清理起点 `c523fcc…`、清理候选 `0a0b9cd…`、输入文档 R73 `d14a1d0…`、R74 治理提交、运行代码 `781a797…` 和证据包分开；Git 提交来自独立授权，不扩展为合并、推送或外部操作权限。
-- 下一动作：另行批准后依 feature → develop → main 逐段验证与晋级，推送独立授权；不删除分支、不重写历史、不触碰服务器。
+- 当前执行限制：清理代码 0a0b9cd、R74 文档/验收/develop 279cc1e、main c523fcc、本地提交 R75 与运行代码 781a797 分开；本轮仅六文档同步及独立获批提交，不继承已消费的合并、推送或外部操作授权。
+- 下一动作：R75 本地提交完成后，按独立任务准备 main 候选及验证，再由用户授权精确 main 合入/推送；不删分支、不重写历史、不触碰服务器。

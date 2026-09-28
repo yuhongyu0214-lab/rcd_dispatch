@@ -1,12 +1,12 @@
 # 人车单项目状态总览
 
-> 状态快照：2026-09-27 / R74（独立获批提交；文档 SHA 以承载本版本的治理提交为准）
+> 状态快照：2026-09-28 / R75（A8 后已获独立 Git 提交授权；文档 SHA 以承载 R75 的本次提交为准，未推送）
 > 用途：说明项目做到哪一步、还差什么
 > 非权威范围：产品行为、状态机、Schema、枚举、HTTP 契约、技术栈和生产架构
 
 ## 一句话结论
 
-仓库第一批清理为 `CLEANUP_SCOPED_ACCEPTANCE_PASS / LOCAL_COMMIT_COMPLETE`：隔离工作树删除批准的 208 个旧文件，补根入口和忽略规则，正式应用零改动；工程与约定的本地真机范围通过。用户已确认 iOS Safari 显示退出按钮且正常退出，观察项关闭。用户在 A8 同步后另行批准 Git 提交，清理候选为 `0a0b9cd53bf106e3179130e7945da077fbfa3950`，R74 六份治理入口单独提交；文档 SHA 以承载本版本的治理提交为准。未合并、推送或操作服务器。
+仓库第一批清理已完成 develop 交接：`DEVELOP_MERGED_AND_PUSHED / MAIN_HANDOFF_PENDING`。清理推送完成时 `develop == origin/develop == 279cc1e6d992a6bc6612a627c0f72bb70bf49988`；本次文档提交后本地 develop 为 R75 提交，远端仍为 279cc1e；main 保持 `c523fccd7febb06ac15ea379e57e06110aa1ec69`。独立工程与隔离运行通过，完整真实环境/新浏览器覆盖仍有限制；不是新的预生产验收。R75 仅同步六份治理入口，已获独立本地 Git 提交授权，完整文档 SHA 以承载本版本的提交为准；未推送。
 
 以下预生产事实沿用已接受的 Stage 6 记录，本轮没有重新查询云端，也不以本地注册/司机试用结果改写当时的验收例外。
 
@@ -16,9 +16,9 @@ Stage 6 现有预生产验收已完成，结论为 `STAGE6_FINAL_PASS_WITH_USER_
 
 | 工作流 | 状态 | 证据/入口 | 下一闸门 |
 |---|---|---|---|
-| 文档治理 | `R74_A8_SYNC / LOCAL_COMMIT_COMPLETE` | 输入文档基线 R73 `d14a1d0…`；清理候选 `0a0b9cd…`，6 份治理入口独立提交 | R74 文档 SHA / feature HEAD 以承载本版本的治理提交为准；合并和推送另行授权 |
-| 仓库第一批清理 | `CLEANUP_SCOPED_ACCEPTANCE_PASS / LOCAL_COMMIT_COMPLETE` | [范围、工程与用户真机证据](#repository-cleanup-r74)；208 删除 + 根 README/.gitignore；应用零差异 | 另行授权后按 feature → develop → main 晋级；不删分支、不动服务器 |
-| 当前本地主线 | `MAIN_C523FCCD / DEVELOP_8B66CA24` | main 包含 develop 和 `781a797…`，两主线的正式应用 tree 相同 | 本轮未重新核验远端；清理只在 feature 分支，不在 main/develop 中 |
+| 文档治理 | `R75_LOCAL_DOCUMENT_COMMIT / NOT_PUSHED` | 已提交代码/文档起点 R74 `279cc1e6…`；本轮登记合入、复验及推送结果 | 已获独立本地提交授权；R75 文档 SHA 以承载本版本的本地提交为准 |
+| 仓库第一批清理 | `DEVELOP_MERGED_AND_PUSHED / MAIN_HANDOFF_PENDING` | [R75 交接证据](#repository-cleanup-r75)；208 删除，应用零差异；独立工程与隔离运行 PASS | 准备 main 候选及验证须单独任务，不删分支、不动服务器 |
+| 当前主线 | `DEVELOP_R75_LOCAL / ORIGIN_DEVELOP_279CC1E6 / MAIN_C523FCCD` | 2026-09-28T01:00:00.5484224Z 远端核验：develop 279cc1e、main c523fcc | 本地 develop 随 R75 文档提交前进，main 与远端跟踪引用未变；本轮未重新查询远端 |
 | 联合账号与入口候选 | `PREPROD_DEPLOYED / STAGE6_FINAL_PASS_WITH_USER_ACCEPTANCE_EXCEPTIONS` | 登录返修 `781a797…`，固定镜像 `sha256:82ff43b1…530b1d`；新版入口已复验 | 来源已进入本地主线；不等同于本轮清理已合入或正式生产发布 |
 | 一号双端来源 | `INTEGRATED / SUPERSEDED_BY_781A797` | `37d412c… / 463c9ee…` → 联合候选 `40b4a0f…` → 登录返修 `781a797…`，来源历史保留 | 不单独部署来源分支或混用代码、文档与镜像 SHA |
 | 邀请码注册与双端退出 | `PREPROD_DEPLOYED / USER_SCOPE_EXCEPTION_RECORDED` | app 邀请配置随部署加载；退出与入口反馈保留；注册预检因历史司机停止，用户免于注册/纯司机再验收 | 没有新的成功开户声明，不重置历史档案或开放公开注册 |
@@ -47,9 +47,63 @@ Stage 6 现有预生产验收已完成，结论为 `STAGE6_FINAL_PASS_WITH_USER_
 | Gate 4 总闸门 | `PASS` | G4-1～G4-5 已通过；G4-5 含一次性主控例外 | develop/main 主线交接、main 推送和独立全量验证均已完成；仍不等于正式生产上线 |
 | Gate 4 证据与主线交接 | `EVIDENCE_FROZEN / AUDIT_WARN_ACCEPTED / DEVELOP_PUSHED / MAIN_PUSHED / MAIN_FULL_VALIDATION_PASS` | ZIP SHA-256 `988b1342…bcf0`；审计 P0/P1=0、P2=1；`main == origin/main == d9cdf2b…`；main 验证 813/7、lint、tsc、31/31 build、Prisma、制品 5/5、diff/clean PASS | 主线交接退出；正式生产必须使用独立任务卡和逐项授权 |
 
+<a id="repository-cleanup-r75"></a>
+
+## develop 合入、独立复验与远端推送（2026-09-28 / R75）
+
+### 固定身份与已完成动作
+
+| 对象 | 固定值 / 结果 |
+|---|---|
+| 清理代码提交 | `0a0b9cd53bf106e3179130e7945da077fbfa3950` |
+| R74 文档提交 / 独立验收候选 / 本轮 A8 起点 | `279cc1e6d992a6bc6612a627c0f72bb70bf49988` |
+| develop 合入 | 从 `8b66ca2433fa9a78873bc7fd1b4a4dae680eaa50` 以 `--ff-only` 到 279cc1e；没有新合并提交 |
+| GitHub 推送 | 现有 origin `yuhongyu0214-lab/rcd_dispatch`；仅精确候选 → refs/heads/develop，普通快进，不强推 |
+| 推送前核验 | 重新 fetch / ls-remote；远端 develop 仍为 8b66ca2，无分叉，behind 0 / ahead 4，工作区干净 |
+| 推送后核验 | 2026-09-28T01:00:00.5484224Z（北京时间 09:00）：HEAD / develop / origin/develop 均为 279cc1e；工作区干净 |
+| main / origin/main | `c523fccd7febb06ac15ea379e57e06110aa1ec69`，推送后核验未变；本轮未合入清理 |
+| 正式应用 tree | `a2b5de446fe59119557db77b62011697a0539961`；develop、main 与已验收运行源码 781a797 的 feature-admin-workflow 完全一致 |
+| 推送范围 | 相对原远端可达提交新增 4 个：两次历史 main 合并 + 清理代码 + R74 文档；净 216 路径，208 删除 + README/.gitignore + 六份治理入口 |
+| R75 | 六份治理文档获独立本地提交授权；本地 develop / R75 文档 SHA 以承载本版本的提交为准；origin/develop 仍为 279cc1e，未推送 |
+
+### 独立复验结果及限制
+
+验收对象固定为 279cc1e。工程与隔离运行结论 `PASS_ENGINEERING_AND_ISOLATED_RUNTIME_WITH_COVERAGE_LIMITATIONS`，新发现产品 P0/P1 为 0；完整真实环境/新浏览器覆盖为 WARN（未执行），不是业务缺陷已证实。
+
+- 全量 1002 passed / 7 skipped / 0 failed；lint、构建前后非增量 TypeScript、32/32 build、Prisma validate 和 diff check 通过。制品/worker 15/15 已包含在 1002 中，不重复计数。
+- 原 7 个跳过中，隔离 PostgreSQL outbox 3/3、Redis unavailable 1/1 已补跑；Redis available 1 项及真实高德 2 项未执行。
+- 实际构建 + 一次性最小权限 PostgreSQL + 入口代理：HTTP 42/42、冻结入口等价检查 6/6；注册原子性与权限边界通过。代理不等于实际 Nginx / TLS 验收。
+- 本地 Node 24.14.0、PostgreSQL 18.3；不是生产 Node 22 容器复验，未构建/扫描镜像。未访问真实 RDS/Tair/高德/GPS/ETA 或预生产。
+- 浏览器控制连接失败，无新增 Chrome/Edge/Safari/鸿蒙实点；原用户限定真机 PASS 保留，不充当本次新增浏览器证据。
+- 首轮尾斜杠失败来自仓库外代理遗漏冻结 Nginx 307 规则，补齐测试代理后通过；原失败输出保留，交付代码未修改。
+- 验证用 3087/3088/55457 已释放，一次性库已清理；既有手机沙箱未被修改。44 项证据哈希由主控复核通过。
+- 两项既有 P2 继续保留：隐藏兼容工具内部可切换旧模式；退出请求失败反馈不足。Stage 6 的范围例外不被本地测试改写。
+
+### 仓库外证据
+
+以下相对路径基于 R74 同一证据根目录 `C:/Users/yhy/.codex/visualizations/2026/07/13/019f5bea-ad6e-7cb3-be18-5a8b38baad21/`。本轮核对摘要及哈希，不重跑业务测试，不纳入秘密或沙箱私有配置。
+
+| 证据路径 | SHA-256 |
+|---|---|
+| `cleanup-phone-sandbox/r74-develop-merge-result.json` | `700da192106a4708d275ccdd1180c86eb54c4911b4c62e134bfb7d24626cf5dd` |
+| `cleanup-independent-validation-20260928/independent-final-report.md` | `94fda245a06dcd9d6335afa6195983bcec3f5b8a8439edd12c0a398f8baf0d7d` |
+| `cleanup-independent-validation-20260928/final-summary.json` | `989766e1c1135f685772676d3422748496235a5955cfa2a3a5970b0ab54122ba` |
+| `cleanup-phone-sandbox/r74-develop-push-result.json` | `2f95bbcb392193c26992b986913baa6f5e23f7f676d8a92362db46dc5c2796f4` |
+
+### 下一步与权限边界
+
+1. 本轮 A8 修改六份治理入口，随后用户独立批准 Git 提交且明确不推送；本地 develop / R75 文档 SHA 由本次真实提交冻结，不预填自身 SHA。
+2. 本次文档提交形成真实 SHA 后，再按独立任务在隔离环境准备 main 候选、验证并报告精确 SHA；main 合入及推送另行批准，操作前重查远端，变化或分叉即停。
+3. 正式应用未改变，不为这批旧目录清理重建镜像、重启服务或执行 migration。预生产继续沿用 Stage 6 的 781a797 / 82ff43b1 运行证据；本轮不声明实时健康复验。
+4. 正式生产仍需重新冻结任务：域名/备案/证书、独立生产 RDS/Tair/账号/秘密/数据、制品与扫描、恢复回退、告警责任及维护窗口；不能仅完成域名备案便视为生产放行。
+
+大白话：清理版已经上传 develop；现在补档案，main 还没更新，服务器不必因删除旧目录再部署。
+
 <a id="repository-cleanup-r74"></a>
 
-## 仓库第一批清理与本地沙箱验收（R74）
+## 仓库第一批清理与本地沙箱验收（R74 历史快照）
+
+> 本节保留提交当时事实；其中“未合并/未推送/下一步”已由上方 R75 交接结果接续，不表示当前状态。
 
 ### 身份、范围与授权
 
@@ -112,12 +166,12 @@ Stage 6 现有预生产验收已完成，结论为 `STAGE6_FINAL_PASS_WITH_USER_
 
 ## 2026-09-27 Stage 6 最终验收
 
-> 本节是此前预生产验收记录，结论继续保留；R74 本地沙箱范围与主线身份以上节为准，不新增云端核验。
+> 本节是此前预生产验收记录，结论继续保留；本地沙箱范围见 R74 历史节，最新主线身份见 R75，不新增云端核验。
 
 - 最终结论、用户例外、完整运行身份和证据索引见 [Stage 6 最终验收记录](2026-09-27-stage6-final-acceptance.md)。
 - 最终只读报告 SHA-256：`4ff3105af777e687612cca6e036b24105fd325c975b4a4da1c9117d6a75c827e`；收口证据 ZIP SHA-256：`6268930bf969ef589aa12afa7b670710d411195dad171109d1e526a4f6c0a502`。
 - 采集器原始 `stage6FinalPass=false` 未改写；独立复核后的单独验收记录为 true。本轮结论不是新增注册、纯司机登录或人工派单实测声明。
-- 文档从 R72 `4868fe53daf37b3c0e9aa6a80a60820355831063` 进入 R73 `d14a1d0f3057963c0804e592c89613ee0260e85d`。该提交不自动授权推送、代码合并或部署。以下带日期章节是当时的历史快照；最新本地主线与清理状态见上方 R74，不覆盖本节预生产结论。
+- 文档从 R72 `4868fe53daf37b3c0e9aa6a80a60820355831063` 进入 R73 `d14a1d0f3057963c0804e592c89613ee0260e85d`。该提交不自动授权推送、代码合并或部署。以下带日期章节是当时的历史快照；最新主线与清理状态见上方 R75，不覆盖本节预生产结论。
 
 ## 2026-09-17 main 提升、不可变镜像与阶段 4 配置/ACL
 
